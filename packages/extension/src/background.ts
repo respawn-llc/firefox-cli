@@ -57,7 +57,17 @@ const controller = new FirefoxCliBackgroundController({
       await browser.tabs.reload(tabId);
       return toTabSummary(await browser.tabs.get(tabId));
     },
-    sendContentRequest: async (tabId, request) => browser.tabs.sendMessage(tabId, request),
+    sendContentRequest: async (tabId, request) => {
+      try {
+        return await browser.tabs.sendMessage(tabId, request);
+      } catch {
+        await browser.scripting.executeScript({
+          target: { tabId, allFrames: false },
+          files: ["content.js"],
+        });
+        return browser.tabs.sendMessage(tabId, request);
+      }
+    },
   },
   connectNative: (name) => browser.runtime.connectNative(name),
   productVersion: manifest.version,

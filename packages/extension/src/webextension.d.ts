@@ -61,6 +61,15 @@ declare const browser: {
     reload(tabId: number): Promise<void>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
   };
+  readonly scripting: {
+    executeScript(options: {
+      readonly target: {
+        readonly tabId: number;
+        readonly allFrames?: boolean;
+      };
+      readonly files: readonly string[];
+    }): Promise<readonly unknown[]>;
+  };
   readonly storage: {
     readonly local: {
       get(key: string): Promise<Record<string, unknown>>;
