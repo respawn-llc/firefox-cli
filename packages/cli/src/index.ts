@@ -13,6 +13,7 @@ import {
   createRequest,
   type ActionResult,
   type CommandId,
+  type EvalResult,
   type ProtocolError,
   type RequestEnvelope,
   type ResponseEnvelope,
@@ -47,6 +48,7 @@ export type CliDependencies = {
   readonly binaryPath?: string;
   readonly extensionPath?: string;
   sendRequest?(request: RequestEnvelope): Promise<ResponseEnvelope>;
+  readStdin?(): Promise<string>;
   clearPairState?(): Promise<void>;
 };
 
@@ -126,6 +128,10 @@ async function runCliOrThrow(
     return wait(args.slice(1), dependencies);
   }
 
+  if (args[0] === "eval") {
+    return evalCommand(args.slice(1), dependencies);
+  }
+
   if (isElementActionCommand(args[0])) {
     return elementAction(args[0], args.slice(1), dependencies);
   }
@@ -180,6 +186,7 @@ export function renderHelp(): string {
     "  firefox-cli is visible|enabled|checked <selector|@ref> [--generation id] [--json]",
     "  firefox-cli wait <ms|selector|@ref> [--state visible|hidden|attached] [--json]",
     "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
+    "  firefox-cli eval <js> | --stdin | -b base64 [--json]",
     "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
     "  firefox-cli fill|type <selector|@ref> <text> [--json]",
     "  firefox-cli keyboard type|inserttext <text> [--json]",
@@ -699,6 +706,36 @@ async function wait(args: readonly string[], dependencies: CliDependencies): Pro
     : ok(`${formatWaitResult(response.result)}\n`);
 }
 
+async function evalCommand(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parseEvalArguments(args);
+  const script = await readEvalScript(parsedArgs, dependencies);
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("eval", {
+      script,
+      source: parsedArgs.source,
+      ...(parsedArgs.timeout === undefined
+        ? {}
+        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+      ...(parsedArgs.maxResultBytes === undefined
+        ? {}
+        : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return parsedArgs.json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatEvalResult(response.result)}\n`);
+}
+
 async function elementAction(
   command: "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview",
   args: readonly string[],
@@ -1080,6 +1117,123 @@ type ParsedWaitArguments = {
   readonly interval?: string;
 };
 
+type ParsedEvalArguments = {
+  readonly optionArgs: readonly string[];
+  readonly source: "argv" | "stdin" | "base64";
+  readonly script?: string;
+  readonly base64?: string;
+  readonly timeout?: string;
+  readonly maxResultBytes?: string;
+  readonly json: boolean;
+};
+
+function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
+  const optionArgs: string[] = [];
+  const scriptParts: string[] = [];
+  const sourceFlags: ("stdin" | "base64")[] = [];
+  const parsed: {
+    source?: "stdin" | "base64";
+    base64?: string;
+    timeout?: string;
+    maxResultBytes?: string;
+    json: boolean;
+  } = { json: false };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) {
+      continue;
+    }
+
+    if (arg === "--") {
+      scriptParts.push(...args.slice(index + 1));
+      break;
+    }
+
+    switch (arg) {
+      case "--json":
+        parsed.json = true;
+        optionArgs.push(arg);
+        break;
+      case "--stdin":
+        parsed.source = "stdin";
+        sourceFlags.push("stdin");
+        break;
+      case "-b":
+      case "--base64":
+        parsed.source = "base64";
+        sourceFlags.push("base64");
+        parsed.base64 = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--timeout":
+        parsed.timeout = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--max-output":
+        parsed.maxResultBytes = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--window":
+      case "--tab": {
+        const value = readFlagValue(args, index, arg);
+        optionArgs.push(arg, value);
+        index += 1;
+        break;
+      }
+      default:
+        if (arg.startsWith("-")) {
+          throw new CliUsageError(`Unsupported eval option: ${arg}`);
+        }
+        scriptParts.push(arg);
+        break;
+    }
+  }
+
+  const script = scriptParts.length === 0 ? undefined : scriptParts.join(" ");
+  const sourceCount = (script === undefined ? 0 : 1) + sourceFlags.length;
+  if (sourceCount !== 1) {
+    throw new CliUsageError("Specify exactly one eval source.");
+  }
+
+  return {
+    optionArgs,
+    source: parsed.source ?? "argv",
+    ...(script === undefined ? {} : { script }),
+    ...(parsed.base64 === undefined ? {} : { base64: parsed.base64 }),
+    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
+    ...(parsed.maxResultBytes === undefined ? {} : { maxResultBytes: parsed.maxResultBytes }),
+    json: parsed.json,
+  };
+}
+
+async function readEvalScript(
+  args: ParsedEvalArguments,
+  dependencies: CliDependencies,
+): Promise<string> {
+  const script =
+    args.source === "stdin"
+      ? await (dependencies.readStdin?.() ?? readProcessStdin())
+      : args.source === "base64"
+        ? decodeBase64(args.base64 ?? "")
+        : (args.script ?? "");
+
+  if (script.length === 0) {
+    throw new CliUsageError("Eval script is empty.");
+  }
+
+  return script;
+}
+
+function decodeBase64(value: string): string {
+  const normalized = value.trim();
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(normalized)) {
+    throw new CliUsageError("Invalid base64 eval script.");
+  }
+
+  return Buffer.from(normalized, "base64").toString("utf8");
+}
+
 function parseWaitParams(waitArgs: ParsedWaitArguments): {
   readonly kind: "ms" | "element" | "text" | "url" | "function" | "load-state";
   readonly durationMs?: number;
@@ -1282,6 +1436,14 @@ function formatWaitResult(result: WaitResult): string {
   }
 
   return `matched ${suffix}`;
+}
+
+function formatEvalResult(result: EvalResult): string {
+  if (result.value.type === "undefined") {
+    return "undefined";
+  }
+
+  return formatGetValue(result.value.value);
 }
 
 function formatActionResult(result: ActionResult): string {
@@ -1660,6 +1822,18 @@ function getUserStateRoot(
 
 function optionalAppDataDir(appDataDir: string | undefined): { readonly appDataDir?: string } {
   return appDataDir === undefined ? {} : { appDataDir };
+}
+
+function readProcessStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let content = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      content += chunk;
+    });
+    process.stdin.once("end", () => resolve(content));
+    process.stdin.once("error", reject);
+  });
 }
 
 function ok(stdout: string): CliResult {

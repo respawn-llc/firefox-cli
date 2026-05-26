@@ -69,6 +69,20 @@ declare const browser: {
       };
       readonly files: readonly string[];
     }): Promise<readonly unknown[]>;
+    executeScript<TArgs extends readonly unknown[], TResult>(options: {
+      readonly target: {
+        readonly tabId: number;
+        readonly allFrames?: boolean;
+      };
+      readonly world?: "ISOLATED" | "MAIN";
+      readonly func: (...args: TArgs) => TResult | Promise<TResult>;
+      readonly args: TArgs;
+    }): Promise<
+      readonly {
+        readonly result?: Awaited<TResult>;
+        readonly error?: { readonly message?: string };
+      }[]
+    >;
   };
   readonly storage: {
     readonly local: {

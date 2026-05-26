@@ -1,4 +1,5 @@
 import { FirefoxCliBackgroundController } from "./background-controller.js";
+import { executeEvalInPage } from "./eval-executor.js";
 import manifest from "./manifest.json" with { type: "json" };
 
 const controller = new FirefoxCliBackgroundController({
@@ -67,6 +68,24 @@ const controller = new FirefoxCliBackgroundController({
         });
         return browser.tabs.sendMessage(tabId, request);
       }
+    },
+    executeEval: async (tabId, payload) => {
+      const [result] = await browser.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        world: "MAIN",
+        func: executeEvalInPage,
+        args: [payload],
+      });
+      if (result === undefined) {
+        throw new Error("Firefox did not return an eval result.");
+      }
+      if (result.error !== undefined) {
+        throw new Error(result.error.message);
+      }
+      if (result.result === undefined) {
+        throw new Error("Firefox did not return an eval payload.");
+      }
+      return result.result;
     },
   },
   connectNative: (name) => browser.runtime.connectNative(name),

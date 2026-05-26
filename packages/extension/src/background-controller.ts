@@ -114,6 +114,9 @@ export class FirefoxCliBackgroundController {
       sendContentRequest: async () => {
         throw new Error("Browser adapter is not configured.");
       },
+      executeEval: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
     };
     this.#storageAdapter = options.storageAdapter ?? {
       getPairToken: async () => null,

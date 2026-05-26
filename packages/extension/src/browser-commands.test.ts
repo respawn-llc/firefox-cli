@@ -5,6 +5,7 @@ import {
   type ActionKind,
   type RequestEnvelope,
 } from "@firefox-cli/protocol";
+import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js";
 import { describe, expect, it } from "vitest";
 import { ACTION_COMMANDS, isActionCommand } from "./action-commands.js";
 import {
@@ -351,6 +352,83 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "wait" }]);
   });
 
+  it("runs eval in the resolved tab main world and adds target metadata", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("eval", { script: "document.title", source: "argv" }, "eval-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        value: {
+          type: "json",
+          value: "Eval result",
+        },
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.evalRequests).toEqual([
+      {
+        tabId: 101,
+        payload: {
+          script: "document.title",
+          timeoutMs: 30_000,
+          maxResultBytes: 900_000,
+        },
+      },
+    ]);
+    expect(adapter.contentRequests).toEqual([]);
+  });
+
+  it("rejects private-window eval before script execution", async () => {
+    const adapter = new FakeBrowserAdapter([
+      {
+        ...windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { private: true })]),
+        private: true,
+      },
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("eval", { script: "1", source: "argv" }, "eval-private-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "UNSUPPORTED_CAPABILITY",
+      },
+    });
+    expect(adapter.evalRequests).toEqual([]);
+  });
+
+  it("maps eval injection failures to actionable errors", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.evalFailure = new Error("Missing host permission for the tab");
+
+    const response = await handleBrowserRequest(
+      createRequest("eval", { script: "1", source: "argv" }, "eval-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "SCRIPT_INJECTION_FAILED",
+      },
+    });
+    expect(response.ok ? "" : response.error.message).toContain("Open a normal web page");
+  });
+
   it("routes interactions to content script and adds target metadata", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -474,7 +552,9 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   readonly selectedTabs: number[] = [];
   readonly navigations: { readonly tabId: number; readonly url: string }[] = [];
   readonly contentRequests: { readonly tabId: number; readonly command: string }[] = [];
+  readonly evalRequests: { readonly tabId: number; readonly payload: EvalExecutorPayload }[] = [];
   contentFailure: Error | undefined;
+  evalFailure: Error | undefined;
   #windows: BrowserWindowSnapshot[];
   #nextTabId = 102;
 
@@ -632,6 +712,22 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       truncated: false,
       frames: [],
     });
+  }
+
+  async executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult> {
+    this.evalRequests.push({ tabId, payload });
+    if (this.evalFailure !== undefined) {
+      throw this.evalFailure;
+    }
+
+    return {
+      ok: true,
+      value: {
+        type: "json",
+        value: "Eval result",
+      },
+      elapsedMs: 4,
+    };
   }
 
   #navigationNoop(tabId: number): BrowserWindowSnapshot["tabs"][number] {

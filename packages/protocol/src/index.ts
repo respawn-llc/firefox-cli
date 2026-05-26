@@ -4,6 +4,8 @@ export const PRODUCT_NAME = "firefox-cli";
 export const NATIVE_HOST_NAME = "firefox_cli";
 export const FIREFOX_CLI_EXTENSION_ID = "firefox-cli@example.invalid";
 export const PROTOCOL_VERSION = 1;
+export const MAX_EVAL_SCRIPT_BYTES = 100_000;
+export const MAX_EVAL_RESULT_BYTES = 900_000;
 
 export const componentSchema = z.enum(["cli", "native-host", "extension", "content-script"]);
 export type Component = z.infer<typeof componentSchema>;
@@ -46,6 +48,10 @@ export const errorCodeSchema = z.enum([
   "NO_FOCUSED_ELEMENT",
   "INVALID_KEY",
   "OPTION_NOT_FOUND",
+  "EVAL_ERROR",
+  "SERIALIZATION_FAILED",
+  "UNSUPPORTED_EXECUTION_WORLD",
+  "RESULT_TOO_LARGE",
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
@@ -874,6 +880,65 @@ export const actionResultSchema = z.union([
 ]);
 export type ActionResult = z.infer<typeof actionResultSchema>;
 
+export const evalSourceSchema = z.enum(["argv", "stdin", "base64"]);
+export type EvalSource = z.infer<typeof evalSourceSchema>;
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+export const evalParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    script: z.string().min(1),
+    source: evalSourceSchema,
+    timeoutMs: z.number().int().positive().max(600_000).optional(),
+    maxResultBytes: z.number().int().positive().max(MAX_EVAL_RESULT_BYTES).optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if (encodedByteLength(params.script) > MAX_EVAL_SCRIPT_BYTES) {
+      context.addIssue({
+        code: z.ZodIssueCode.too_big,
+        maximum: MAX_EVAL_SCRIPT_BYTES,
+        origin: "string",
+        inclusive: true,
+        message: `Eval scripts must be at most ${MAX_EVAL_SCRIPT_BYTES} bytes.`,
+        path: ["script"],
+      });
+    }
+  });
+export type EvalParams = z.infer<typeof evalParamsSchema>;
+
+export const evalSerializedValueSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("undefined") }).strict(),
+  z.object({ type: z.literal("json"), value: jsonValueSchema }).strict(),
+]);
+export type EvalSerializedValue = z.infer<typeof evalSerializedValueSchema>;
+
+export const evalResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    value: evalSerializedValueSchema,
+    elapsedMs: z.number().int().nonnegative(),
+  })
+  .strict();
+export type EvalResult = z.infer<typeof evalResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -989,6 +1054,11 @@ export const commandSchemas = {
   wait: {
     params: waitParamsSchema,
     result: waitResultSchema,
+    status: "mvp",
+  },
+  eval: {
+    params: evalParamsSchema,
+    result: evalResultSchema,
     status: "mvp",
   },
   click: {
@@ -1328,4 +1398,8 @@ function failure(
 
 function isCommandId(command: string): command is CommandId {
   return command in commandSchemas;
+}
+
+function encodedByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }

@@ -152,6 +152,11 @@ describe("parseBoundaryRequest", () => {
       createRequest("wait", { kind: "ms", durationMs: 50 }, "wait-ms-1"),
       createRequest("wait", { kind: "element", selector: "#main", state: "visible" }, "wait-1"),
       createRequest("wait", { kind: "url", urlGlob: "https://example.test/*" }, "wait-url-1"),
+      createRequest(
+        "eval",
+        { script: "document.title", source: "argv", timeoutMs: 1000, maxResultBytes: 1000 },
+        "eval-1",
+      ),
       createRequest("click", { selector: "button" }, "click-1"),
       createRequest("dblclick", { ref: "@e1", generationId: "g1" }, "dblclick-1"),
       createRequest("focus", { selector: "input" }, "focus-1"),
@@ -642,6 +647,98 @@ describe("parseBoundaryResponse", () => {
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+    }
+  });
+
+  it("validates eval responses with JSON values and undefined markers", () => {
+    const json = createRequest("eval", { script: "({ ready: true })", source: "argv" }, "eval-1");
+    const undefinedValue = createRequest(
+      "eval",
+      { script: "let value = 1;", source: "stdin" },
+      "eval-2",
+    );
+
+    expect(
+      parseBoundaryResponse(
+        "host-to-extension",
+        "eval",
+        createOkResponse(json, {
+          value: {
+            type: "json",
+            value: {
+              ready: true,
+              items: [1, "two", null],
+            },
+          },
+          elapsedMs: 7,
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      parseBoundaryResponse(
+        "host-to-extension",
+        "eval",
+        createOkResponse(undefinedValue, {
+          value: { type: "undefined" },
+          elapsedMs: 1,
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rejects invalid eval params and malformed eval results", () => {
+    for (const params of [
+      { script: "", source: "argv" },
+      { script: "1", source: "file" },
+      { script: "1", source: "argv", timeoutMs: 0 },
+      { script: "1", source: "argv", maxResultBytes: 900_001 },
+      { script: "x".repeat(100_001), source: "argv" },
+    ]) {
+      const parsed = parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "eval-invalid",
+        command: "eval",
+        params,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+      }
+    }
+
+    const request = createRequest("eval", { script: "1", source: "argv" }, "eval-1");
+    for (const result of [
+      {
+        value: 1,
+        elapsedMs: 1,
+      },
+      {
+        value: { type: "json", value: undefined },
+        elapsedMs: 1,
+      },
+      {
+        value: { type: "undefined", value: null },
+        elapsedMs: 1,
+      },
+      {
+        value: { type: "json", value: Number.NaN },
+        elapsedMs: 1,
+      },
+      {
+        value: { type: "json", value: true },
+        elapsedMs: -1,
+      },
+    ]) {
+      const parsed = parseBoundaryResponse("host-to-extension", "eval", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: request.id,
+        ok: true,
+        result,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_RESPONSE");
+      }
     }
   });
 

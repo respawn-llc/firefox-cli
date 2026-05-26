@@ -1,9 +1,11 @@
 import {
+  MAX_EVAL_RESULT_BYTES,
   createErrorResponse,
   createOkResponse,
   type ActionResult,
   type ActionKind,
   type CommandId,
+  type EvalResult,
   type GetResult,
   type IsResult,
   type RefResolveResult,
@@ -18,9 +20,11 @@ import {
   parseBoundaryResponse,
 } from "@firefox-cli/protocol";
 import { isActionCommand } from "./action-commands.js";
+import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 100;
+const DEFAULT_EVAL_TIMEOUT_MS = 30_000;
 
 export type BrowserWindowSnapshot = {
   readonly id: number;
@@ -46,6 +50,7 @@ export type BackgroundBrowserAdapter = {
   goForward(tabId: number): Promise<TabSummary>;
   reload(tabId: number): Promise<TabSummary>;
   sendContentRequest(tabId: number, request: RequestEnvelope): Promise<unknown>;
+  executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult>;
 };
 
 type OrderedWindow = BrowserWindowSnapshot & {
@@ -303,6 +308,36 @@ async function handleBrowserRequestOrThrow(
 
     const result: WaitResult = {
       ...waitResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "eval") {
+    const command = request as RequestEnvelope<"eval">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    let evalResponse: EvalExecutorResult;
+    try {
+      evalResponse = await adapter.executeEval(resolved.tab.id, {
+        script: command.params.script,
+        timeoutMs: command.params.timeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS,
+        maxResultBytes: command.params.maxResultBytes ?? MAX_EVAL_RESULT_BYTES,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BrowserCommandError(
+        "SCRIPT_INJECTION_FAILED",
+        `Cannot run eval in this tab. Open a normal web page, reload the extension, or choose a different tab. Firefox reported: ${message}`,
+      );
+    }
+
+    if (!evalResponse.ok) {
+      return createErrorResponse(command.id, evalResponse.error);
+    }
+
+    const result: EvalResult = {
+      value: evalResponse.value,
+      elapsedMs: evalResponse.elapsedMs,
       target: resolved.target,
     };
     return createOkResponse(command, result);

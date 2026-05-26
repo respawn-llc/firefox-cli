@@ -355,6 +355,9 @@ function createTestBrowserAdapter(
     sendContentRequest: async () => {
       throw new Error("not implemented");
     },
+    executeEval: async () => {
+      throw new Error("not implemented");
+    },
   };
 }
 
