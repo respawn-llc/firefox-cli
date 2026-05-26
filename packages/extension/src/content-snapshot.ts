@@ -1,6 +1,7 @@
 import {
   createErrorResponse,
   createOkResponse,
+  type ActionKind,
   type ErrorCode,
   type ElementSummary,
   type GetBoxValue,
@@ -18,6 +19,8 @@ import {
   type WaitParams,
   type WaitElementSummary,
 } from "@firefox-cli/protocol";
+import { isActionCommand } from "./action-commands.js";
+import { createActionResult } from "./content-actions.js";
 import { createWaitResult } from "./content-wait.js";
 import { type ElementRefRegistry, ElementRefRegistryError } from "./element-ref-registry.js";
 export { ElementRefRegistry } from "./element-ref-registry.js";
@@ -159,6 +162,35 @@ export function handleContentScriptRequest(
     })
       .then((result) => createOkResponse(request, result))
       .catch((error: unknown) => createContentErrorResponse(request.id, error));
+  }
+
+  if (isActionCommand(request.command)) {
+    const command = request as RequestEnvelope<ActionKind>;
+    try {
+      return createOkResponse(
+        command,
+        createActionResult({
+          document: options.document,
+          command: request.command,
+          params: command.params,
+          now: options.now ?? Date.now(),
+          resolveRef: (ref, resolveOptions) =>
+            options.registry.resolveRef(ref, {
+              ...(resolveOptions.generationId === undefined
+                ? {}
+                : { generationId: resolveOptions.generationId }),
+              now: resolveOptions.now,
+            }),
+          queryElement: (selector) => queryOptionalElement(options.document, selector),
+          summarizeElement: summarizeWaitElement,
+          isVisible,
+          isDisabled,
+          createError: (code, message) => new ContentSnapshotError(code, message),
+        }),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
   }
 
   return createErrorResponse(request.id, {
@@ -904,6 +936,13 @@ export class ContentSnapshotError extends Error {
     | "OUTPUT_TOO_LARGE"
     | "UNSUPPORTED_CAPABILITY"
     | "TIMEOUT"
+    | "ELEMENT_NOT_VISIBLE"
+    | "ELEMENT_DISABLED"
+    | "NOT_EDITABLE"
+    | "ACTION_REJECTED"
+    | "NO_FOCUSED_ELEMENT"
+    | "INVALID_KEY"
+    | "OPTION_NOT_FOUND"
   >;
 
   constructor(code: ContentSnapshotError["code"], message: string) {

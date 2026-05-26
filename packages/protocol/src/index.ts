@@ -39,6 +39,13 @@ export const errorCodeSchema = z.enum([
   "REF_NOT_FOUND",
   "OUTPUT_TOO_LARGE",
   "TIMEOUT",
+  "ELEMENT_NOT_VISIBLE",
+  "ELEMENT_DISABLED",
+  "NOT_EDITABLE",
+  "ACTION_REJECTED",
+  "NO_FOCUSED_ELEMENT",
+  "INVALID_KEY",
+  "OPTION_NOT_FOUND",
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
@@ -679,6 +686,194 @@ export const waitResultSchema = z.discriminatedUnion("kind", [
 ]);
 export type WaitResult = z.infer<typeof waitResultSchema>;
 
+export const actionKindSchema = z.enum([
+  "click",
+  "dblclick",
+  "focus",
+  "hover",
+  "fill",
+  "type",
+  "press",
+  "keyboard.type",
+  "keyboard.inserttext",
+  "check",
+  "uncheck",
+  "select",
+  "scroll",
+  "scrollintoview",
+  "swipe",
+]);
+export type ActionKind = z.infer<typeof actionKindSchema>;
+
+export const scrollDirectionSchema = z.enum(["up", "down", "left", "right"]);
+export type ScrollDirection = z.infer<typeof scrollDirectionSchema>;
+
+const elementTargetRefinement = (
+  params: {
+    readonly selector?: string | undefined;
+    readonly ref?: string | undefined;
+    readonly generationId?: string | undefined;
+  },
+  context: z.RefinementCtx,
+): void => {
+  if ((params.selector === undefined) === (params.ref === undefined)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Element actions require exactly one selector or ref.",
+      path: ["selector"],
+    });
+  }
+
+  if (params.ref === undefined && params.generationId !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Generation IDs apply only to refs.",
+      path: ["generationId"],
+    });
+  }
+};
+
+export const elementActionParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine(elementTargetRefinement);
+export type ElementActionParams = z.infer<typeof elementActionParamsSchema>;
+
+export const textActionParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+    text: z.string(),
+  })
+  .strict()
+  .superRefine(elementTargetRefinement);
+export type TextActionParams = z.infer<typeof textActionParamsSchema>;
+
+export const keyboardTextActionParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    text: z.string(),
+  })
+  .strict();
+export type KeyboardTextActionParams = z.infer<typeof keyboardTextActionParamsSchema>;
+
+export const pressParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    key: z.string().min(1).max(100),
+  })
+  .strict();
+export type PressParams = z.infer<typeof pressParamsSchema>;
+
+export const selectParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+    values: z.array(z.string()).min(1),
+  })
+  .strict()
+  .superRefine(elementTargetRefinement);
+export type SelectParams = z.infer<typeof selectParamsSchema>;
+
+export const scrollParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+    direction: scrollDirectionSchema,
+    distancePx: z.number().int().positive().max(100_000).optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if (params.selector !== undefined && params.ref !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Scroll actions accept at most one selector or ref.",
+        path: ["selector"],
+      });
+    }
+
+    if (params.ref === undefined && params.generationId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Generation IDs apply only to refs.",
+        path: ["generationId"],
+      });
+    }
+  });
+export type ScrollParams = z.infer<typeof scrollParamsSchema>;
+
+const actionBaseResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    ok: z.literal(true),
+  })
+  .strict();
+
+const elementActionResultSchemaFor = <A extends ActionKind>(action: A) =>
+  actionBaseResultSchema
+    .extend({
+      action: z.literal(action),
+      element: waitElementSummarySchema,
+    })
+    .strict();
+
+const textActionResultSchemaFor = <A extends ActionKind>(action: A) =>
+  elementActionResultSchemaFor(action)
+    .extend({
+      valueLength: z.number().int().nonnegative(),
+    })
+    .strict();
+
+const selectActionResultSchema = elementActionResultSchemaFor("select")
+  .extend({
+    selectedValues: z.array(z.string()),
+  })
+  .strict();
+
+const scrollActionResultSchemaFor = <A extends ActionKind>(action: A) =>
+  actionBaseResultSchema
+    .extend({
+      action: z.literal(action),
+      element: waitElementSummarySchema.optional(),
+      scroll: z
+        .object({
+          x: z.number(),
+          y: z.number(),
+        })
+        .strict(),
+    })
+    .strict();
+
+export const actionResultSchema = z.union([
+  elementActionResultSchemaFor("click"),
+  elementActionResultSchemaFor("dblclick"),
+  elementActionResultSchemaFor("focus"),
+  elementActionResultSchemaFor("hover"),
+  textActionResultSchemaFor("fill"),
+  textActionResultSchemaFor("type"),
+  elementActionResultSchemaFor("press"),
+  textActionResultSchemaFor("keyboard.type"),
+  textActionResultSchemaFor("keyboard.inserttext"),
+  elementActionResultSchemaFor("check"),
+  elementActionResultSchemaFor("uncheck"),
+  selectActionResultSchema,
+  scrollActionResultSchemaFor("scroll"),
+  elementActionResultSchemaFor("scrollintoview"),
+  scrollActionResultSchemaFor("swipe"),
+]);
+export type ActionResult = z.infer<typeof actionResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -794,6 +989,81 @@ export const commandSchemas = {
   wait: {
     params: waitParamsSchema,
     result: waitResultSchema,
+    status: "mvp",
+  },
+  click: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("click"),
+    status: "mvp",
+  },
+  dblclick: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("dblclick"),
+    status: "mvp",
+  },
+  focus: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("focus"),
+    status: "mvp",
+  },
+  hover: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("hover"),
+    status: "mvp",
+  },
+  fill: {
+    params: textActionParamsSchema,
+    result: textActionResultSchemaFor("fill"),
+    status: "mvp",
+  },
+  type: {
+    params: textActionParamsSchema,
+    result: textActionResultSchemaFor("type"),
+    status: "mvp",
+  },
+  press: {
+    params: pressParamsSchema,
+    result: elementActionResultSchemaFor("press"),
+    status: "mvp",
+  },
+  "keyboard.type": {
+    params: keyboardTextActionParamsSchema,
+    result: textActionResultSchemaFor("keyboard.type"),
+    status: "mvp",
+  },
+  "keyboard.inserttext": {
+    params: keyboardTextActionParamsSchema,
+    result: textActionResultSchemaFor("keyboard.inserttext"),
+    status: "mvp",
+  },
+  check: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("check"),
+    status: "mvp",
+  },
+  uncheck: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("uncheck"),
+    status: "mvp",
+  },
+  select: {
+    params: selectParamsSchema,
+    result: selectActionResultSchema,
+    status: "mvp",
+  },
+  scroll: {
+    params: scrollParamsSchema,
+    result: scrollActionResultSchemaFor("scroll"),
+    status: "mvp",
+  },
+  scrollintoview: {
+    params: elementActionParamsSchema,
+    result: elementActionResultSchemaFor("scrollintoview"),
+    status: "mvp",
+  },
+  swipe: {
+    params: scrollParamsSchema,
+    result: scrollActionResultSchemaFor("swipe"),
     status: "mvp",
   },
   "pair.approve": {

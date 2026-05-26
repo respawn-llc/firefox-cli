@@ -1,5 +1,12 @@
-import { createOkResponse, createRequest, type RequestEnvelope } from "@firefox-cli/protocol";
+import {
+  PROTOCOL_VERSION,
+  createOkResponse,
+  createRequest,
+  type ActionKind,
+  type RequestEnvelope,
+} from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
+import { ACTION_COMMANDS, isActionCommand } from "./action-commands.js";
 import {
   handleBrowserRequest,
   type BackgroundBrowserAdapter,
@@ -344,6 +351,61 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "wait" }]);
   });
 
+  it("routes interactions to content script and adds target metadata", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("click", { selector: "button" }, "click-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        action: "click",
+        ok: true,
+        target: {
+          tabId: 101,
+        },
+        element: {
+          role: "button",
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "click" }]);
+  });
+
+  it("rejects private-window interactions for every action command", async () => {
+    for (const command of ACTION_COMMANDS) {
+      const adapter = new FakeBrowserAdapter([
+        {
+          ...windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { private: true })]),
+          private: true,
+        },
+      ]);
+
+      const response = await handleBrowserRequest(
+        {
+          protocolVersion: PROTOCOL_VERSION,
+          id: `${command}-private-1`,
+          command,
+          params: actionParamsFor(command),
+        } as RequestEnvelope,
+        adapter,
+      );
+
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: "UNSUPPORTED_CAPABILITY",
+        },
+      });
+      expect(adapter.contentRequests).toEqual([]);
+    }
+  });
+
   it("returns TIMEOUT for unsatisfied URL waits", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [
@@ -559,6 +621,10 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       });
     }
 
+    if (isActionCommand(request.command)) {
+      return fakeActionResponse(request.command, request.id);
+    }
+
     return createOkResponse(request as RequestEnvelope<"snapshot">, {
       generationId: "g1",
       text: '@e1 button "Submit"',
@@ -575,6 +641,51 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     }
     return match.tab;
   }
+}
+
+function fakeActionResponse(command: ActionKind, id: string): unknown {
+  const element = {
+    tagName: "button",
+    role: "button",
+    visible: true,
+    name: "Submit",
+  };
+  const base = { action: command, ok: true, element };
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    id,
+    ok: true,
+    result:
+      command === "scroll" || command === "swipe"
+        ? { action: command, ok: true, scroll: { x: 0, y: 10 } }
+        : command === "select"
+          ? { ...base, selectedValues: ["Submit"] }
+          : command === "fill" ||
+              command === "type" ||
+              command === "keyboard.type" ||
+              command === "keyboard.inserttext"
+            ? { ...base, valueLength: 6 }
+            : base,
+  };
+}
+
+function actionParamsFor(command: string): Record<string, unknown> {
+  if (command === "fill" || command === "type") {
+    return { selector: "input", text: "hello" };
+  }
+  if (command === "keyboard.type" || command === "keyboard.inserttext") {
+    return { text: "hello" };
+  }
+  if (command === "press") {
+    return { key: "Enter" };
+  }
+  if (command === "select") {
+    return { selector: "select", values: ["pro"] };
+  }
+  if (command === "scroll" || command === "swipe") {
+    return { direction: "down" };
+  }
+  return { selector: "button" };
 }
 
 function windowSnapshot(

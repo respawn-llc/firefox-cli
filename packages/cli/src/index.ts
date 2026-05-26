@@ -11,6 +11,7 @@ import {
 } from "@firefox-cli/native-host";
 import {
   createRequest,
+  type ActionResult,
   type CommandId,
   type ProtocolError,
   type RequestEnvelope,
@@ -125,6 +126,30 @@ async function runCliOrThrow(
     return wait(args.slice(1), dependencies);
   }
 
+  if (isElementActionCommand(args[0])) {
+    return elementAction(args[0], args.slice(1), dependencies);
+  }
+
+  if (args[0] === "fill" || args[0] === "type") {
+    return textElementAction(args[0], args.slice(1), dependencies);
+  }
+
+  if (args[0] === "press") {
+    return press(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "keyboard") {
+    return keyboard(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "select") {
+    return select(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "scroll" || args[0] === "swipe") {
+    return scroll(args[0], args.slice(1), dependencies);
+  }
+
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
   }
@@ -155,6 +180,12 @@ export function renderHelp(): string {
     "  firefox-cli is visible|enabled|checked <selector|@ref> [--generation id] [--json]",
     "  firefox-cli wait <ms|selector|@ref> [--state visible|hidden|attached] [--json]",
     "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
+    "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
+    "  firefox-cli fill|type <selector|@ref> <text> [--json]",
+    "  firefox-cli keyboard type|inserttext <text> [--json]",
+    "  firefox-cli press <key> [--json]",
+    "  firefox-cli select <selector|@ref> <value...> [--json]",
+    "  firefox-cli scroll|swipe up|down|left|right [px] [selector|@ref] [--json]",
     "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
     "  firefox-cli window [new|select|close] [target-or-url] [--json]",
     "",
@@ -668,6 +699,175 @@ async function wait(args: readonly string[], dependencies: CliDependencies): Pro
     : ok(`${formatWaitResult(response.result)}\n`);
 }
 
+async function elementAction(
+  command: "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview",
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parsePositionalsAndOptions(args);
+  const json = parsedArgs.optionArgs.includes("--json");
+  const elementTarget = parsedArgs.positionals[0];
+  if (elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest(command, {
+      ...parseElementTarget(elementTarget),
+      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
+async function textElementAction(
+  command: "fill" | "type",
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 2,
+  });
+  const json = parsedArgs.optionArgs.includes("--json");
+  const positional = parsedArgs.positionals;
+  const elementTarget = positional[0];
+  const text = positional[1];
+  if (elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+  if (text === undefined) {
+    return error("Missing text.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest(command, {
+      ...parseElementTarget(elementTarget),
+      text,
+      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
+async function press(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsedArgs = parsePositionalsAndOptions(args);
+  const json = parsedArgs.optionArgs.includes("--json");
+  const key = parsedArgs.positionals[0];
+  if (key === undefined) {
+    return error("Missing key.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("press", {
+      key,
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
+async function keyboard(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 2,
+  });
+  const json = parsedArgs.optionArgs.includes("--json");
+  const positional = parsedArgs.positionals;
+  const subcommand = positional[0];
+  const text = positional[1];
+  if (subcommand !== "type" && subcommand !== "inserttext") {
+    return error("Missing or invalid keyboard command.\n");
+  }
+  if (text === undefined) {
+    return error("Missing text.\n");
+  }
+
+  const command = subcommand === "type" ? "keyboard.type" : "keyboard.inserttext";
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest(command, {
+      text,
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
+async function select(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 2,
+    variadicAfterMin: true,
+  });
+  const json = parsedArgs.optionArgs.includes("--json");
+  const positional = parsedArgs.positionals;
+  const elementTarget = positional[0];
+  const values = positional.slice(1);
+  if (elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+  if (values.length === 0) {
+    return error("Missing select value.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("select", {
+      ...parseElementTarget(elementTarget),
+      values,
+      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
+async function scroll(
+  command: "scroll" | "swipe",
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parsePositionalsAndOptions(args);
+  const json = parsedArgs.optionArgs.includes("--json");
+  const positional = parsedArgs.positionals;
+  const direction = positional[0];
+  if (!isScrollDirection(direction)) {
+    return error(`Invalid direction: ${direction ?? ""}\n`);
+  }
+
+  const maybeDistance = positional[1];
+  const hasDistance = maybeDistance !== undefined && /^\d+$/u.test(maybeDistance);
+  const distancePx = hasDistance ? Number(maybeDistance) : undefined;
+  const elementTarget = hasDistance ? positional[2] : positional[1];
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest(command, {
+      direction,
+      ...(distancePx === undefined ? {} : { distancePx }),
+      ...parseElementTarget(elementTarget),
+      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  return formatActionResponse(response, json);
+}
+
 async function createManifestPlan(dependencies: CliDependencies) {
   if (dependencies.binaryPath !== undefined) {
     return planNativeMessagingManifest({
@@ -848,6 +1048,24 @@ function isGetKind(
 
 function isIsKind(value: string | undefined): value is "visible" | "enabled" | "checked" {
   return value === "visible" || value === "enabled" || value === "checked";
+}
+
+function isElementActionCommand(
+  value: string | undefined,
+): value is "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview" {
+  return (
+    value === "click" ||
+    value === "dblclick" ||
+    value === "focus" ||
+    value === "hover" ||
+    value === "check" ||
+    value === "uncheck" ||
+    value === "scrollintoview"
+  );
+}
+
+function isScrollDirection(value: string | undefined): value is "up" | "down" | "left" | "right" {
+  return value === "up" || value === "down" || value === "left" || value === "right";
 }
 
 type ParsedWaitArguments = {
@@ -1066,55 +1284,225 @@ function formatWaitResult(result: WaitResult): string {
   return `matched ${suffix}`;
 }
 
-function getPositionals(args: readonly string[]): readonly string[] {
+function formatActionResult(result: ActionResult): string {
+  const parts = [`${result.action} ok`];
+  if (result.element !== undefined) {
+    const refPrefix = result.element.ref === undefined ? "" : `${result.element.ref} `;
+    parts.push(
+      `${refPrefix}${result.element.role} ${
+        result.element.name ?? result.element.text ?? result.element.tagName
+      }`,
+    );
+  }
+  if ("valueLength" in result && result.valueLength !== undefined) {
+    parts.push(`valueLength=${result.valueLength}`);
+  }
+  if ("selectedValues" in result && result.selectedValues !== undefined) {
+    parts.push(`selected=${result.selectedValues.join(",")}`);
+  }
+  if ("scroll" in result && result.scroll !== undefined) {
+    parts.push(`scroll=${result.scroll.x},${result.scroll.y}`);
+  }
+  return parts.join(" ");
+}
+
+function formatActionResponse(
+  response: ResponseEnvelope<
+    | "click"
+    | "dblclick"
+    | "focus"
+    | "hover"
+    | "fill"
+    | "type"
+    | "press"
+    | "keyboard.type"
+    | "keyboard.inserttext"
+    | "check"
+    | "uncheck"
+    | "select"
+    | "scroll"
+    | "scrollintoview"
+    | "swipe"
+  >,
+  json: boolean,
+): CliResult {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatActionResult(response.result)}\n`);
+}
+
+function getPositionals(
+  args: readonly string[],
+  options: { readonly preserveUnknownOptions?: boolean; readonly minPositionals?: number } = {},
+): readonly string[] {
+  return parsePositionalsAndOptions(args, options).positionals;
+}
+
+function parsePositionalsAndOptions(
+  args: readonly string[],
+  options: { readonly preserveUnknownOptions?: boolean; readonly minPositionals?: number } = {},
+): { readonly positionals: readonly string[]; readonly optionArgs: readonly string[] } {
   const positionals: string[] = [];
+  const optionArgs: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === undefined) {
       continue;
     }
 
-    if (
-      arg === "--json" ||
-      arg === "--new-tab" ||
-      arg === "-i" ||
-      arg === "--interactive" ||
-      arg === "-c" ||
-      arg === "--compact" ||
-      arg === "--verbose"
-    ) {
+    if (isBooleanPositionalOption(arg)) {
+      if (shouldPreserveOptionLiteral(args, index, 1, positionals.length, options)) {
+        positionals.push(arg);
+      } else {
+        optionArgs.push(arg);
+      }
       continue;
     }
 
-    if (
-      arg === "--window" ||
-      arg === "--tab" ||
-      arg === "-d" ||
-      arg === "--depth" ||
-      arg === "-s" ||
-      arg === "--selector" ||
-      arg === "--max-output" ||
-      arg === "--generation" ||
-      arg === "--state" ||
-      arg === "--text" ||
-      arg === "--url" ||
-      arg === "--fn" ||
-      arg === "--load" ||
-      arg === "--timeout" ||
-      arg === "--interval"
-    ) {
+    if (isValuePositionalOption(arg)) {
+      if (shouldPreserveOptionLiteral(args, index, 2, positionals.length, options)) {
+        positionals.push(arg);
+        continue;
+      }
+      optionArgs.push(arg);
+      const value = args[index + 1];
+      if (value !== undefined) {
+        optionArgs.push(value);
+      }
       index += 1;
       continue;
     }
 
-    if (arg.startsWith("--")) {
+    if (arg.startsWith("--") && options.preserveUnknownOptions !== true) {
       continue;
     }
 
     positionals.push(arg);
   }
 
-  return positionals;
+  return { positionals, optionArgs };
+}
+
+function parsePayloadPositionalsAndOptions(
+  args: readonly string[],
+  options: {
+    readonly payloadStartPositionals: number;
+    readonly minPositionals: number;
+    readonly variadicAfterMin?: boolean;
+  },
+): { readonly positionals: readonly string[]; readonly optionArgs: readonly string[] } {
+  const positionals: string[] = [];
+  const optionArgs: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) {
+      continue;
+    }
+
+    if (isBooleanPositionalOption(arg)) {
+      if (shouldTreatOptionAsPayload(args, index, 1, positionals.length, options)) {
+        positionals.push(arg);
+      } else {
+        optionArgs.push(arg);
+      }
+      continue;
+    }
+
+    if (isValuePositionalOption(arg)) {
+      if (shouldTreatOptionAsPayload(args, index, 2, positionals.length, options)) {
+        positionals.push(arg);
+        continue;
+      }
+
+      optionArgs.push(arg);
+      const value = args[index + 1];
+      if (value !== undefined) {
+        optionArgs.push(value);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--") && positionals.length < options.payloadStartPositionals) {
+      continue;
+    }
+
+    positionals.push(arg);
+  }
+
+  return { positionals, optionArgs };
+}
+
+function isBooleanPositionalOption(arg: string): boolean {
+  return (
+    arg === "--json" ||
+    arg === "--new-tab" ||
+    arg === "-i" ||
+    arg === "--interactive" ||
+    arg === "-c" ||
+    arg === "--compact" ||
+    arg === "--verbose"
+  );
+}
+
+function isValuePositionalOption(arg: string): boolean {
+  return (
+    arg === "--window" ||
+    arg === "--tab" ||
+    arg === "-d" ||
+    arg === "--depth" ||
+    arg === "-s" ||
+    arg === "--selector" ||
+    arg === "--max-output" ||
+    arg === "--generation" ||
+    arg === "--state" ||
+    arg === "--text" ||
+    arg === "--url" ||
+    arg === "--fn" ||
+    arg === "--load" ||
+    arg === "--timeout" ||
+    arg === "--interval"
+  );
+}
+
+function shouldPreserveOptionLiteral(
+  args: readonly string[],
+  index: number,
+  width: number,
+  currentPositionals: number,
+  options: { readonly preserveUnknownOptions?: boolean; readonly minPositionals?: number },
+): boolean {
+  const minimum = options.minPositionals ?? 0;
+  return (
+    options.preserveUnknownOptions === true &&
+    currentPositionals + Math.max(0, args.length - index - width) < minimum
+  );
+}
+
+function shouldTreatOptionAsPayload(
+  args: readonly string[],
+  index: number,
+  width: number,
+  currentPositionals: number,
+  options: {
+    readonly payloadStartPositionals: number;
+    readonly minPositionals: number;
+    readonly variadicAfterMin?: boolean;
+  },
+): boolean {
+  if (currentPositionals < options.payloadStartPositionals) {
+    return false;
+  }
+
+  if (options.variadicAfterMin === true && currentPositionals >= options.minPositionals) {
+    return true;
+  }
+
+  return currentPositionals + Math.max(0, args.length - index - width) < options.minPositionals;
 }
 
 function parseTargetOptions(args: readonly string[]): TargetSelector {

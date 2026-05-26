@@ -1,6 +1,8 @@
 import {
   createErrorResponse,
   createOkResponse,
+  type ActionResult,
+  type ActionKind,
   type CommandId,
   type GetResult,
   type IsResult,
@@ -15,6 +17,7 @@ import {
   type WindowSummary,
   parseBoundaryResponse,
 } from "@firefox-cli/protocol";
+import { isActionCommand } from "./action-commands.js";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 100;
@@ -305,6 +308,21 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (isActionCommand(request.command)) {
+    const command = request as RequestEnvelope<ActionKind>;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const actionResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!actionResponse.ok) {
+      return createErrorResponse(command.id, actionResponse.error);
+    }
+
+    const result: ActionResult = {
+      ...actionResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported browser command: ${request.command}`,
@@ -312,7 +330,29 @@ async function handleBrowserRequestOrThrow(
 }
 
 async function sendContentCommand<
-  C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get" | "is" | "wait">,
+  C extends Extract<
+    CommandId,
+    | "snapshot"
+    | "ref.resolve"
+    | "get"
+    | "is"
+    | "wait"
+    | "click"
+    | "dblclick"
+    | "focus"
+    | "hover"
+    | "fill"
+    | "type"
+    | "press"
+    | "keyboard.type"
+    | "keyboard.inserttext"
+    | "check"
+    | "uncheck"
+    | "select"
+    | "scroll"
+    | "scrollintoview"
+    | "swipe"
+  >,
 >(
   adapter: BackgroundBrowserAdapter,
   tabId: number,

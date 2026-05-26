@@ -152,6 +152,21 @@ describe("parseBoundaryRequest", () => {
       createRequest("wait", { kind: "ms", durationMs: 50 }, "wait-ms-1"),
       createRequest("wait", { kind: "element", selector: "#main", state: "visible" }, "wait-1"),
       createRequest("wait", { kind: "url", urlGlob: "https://example.test/*" }, "wait-url-1"),
+      createRequest("click", { selector: "button" }, "click-1"),
+      createRequest("dblclick", { ref: "@e1", generationId: "g1" }, "dblclick-1"),
+      createRequest("focus", { selector: "input" }, "focus-1"),
+      createRequest("hover", { selector: "button" }, "hover-1"),
+      createRequest("fill", { selector: "input", text: "hello" }, "fill-1"),
+      createRequest("type", { selector: "textarea", text: "hello" }, "type-1"),
+      createRequest("press", { key: "Enter" }, "press-1"),
+      createRequest("keyboard.type", { text: "hello" }, "keyboard-type-1"),
+      createRequest("keyboard.inserttext", { text: "hello" }, "keyboard-insert-1"),
+      createRequest("check", { selector: "input[type=checkbox]" }, "check-1"),
+      createRequest("uncheck", { selector: "input[type=checkbox]" }, "uncheck-1"),
+      createRequest("select", { selector: "select", values: ["pro"] }, "select-1"),
+      createRequest("scroll", { direction: "down", distancePx: 400 }, "scroll-1"),
+      createRequest("scrollintoview", { selector: "#footer" }, "scrollintoview-1"),
+      createRequest("swipe", { direction: "left", distancePx: 300 }, "swipe-1"),
     ];
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
@@ -627,6 +642,107 @@ describe("parseBoundaryResponse", () => {
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+    }
+  });
+
+  it("validates interaction responses and rejects malformed action contracts", () => {
+    const click = createRequest("click", { selector: "button" }, "click-1");
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "click",
+        createOkResponse(click, {
+          action: "click",
+          ok: true,
+          element: {
+            tagName: "button",
+            role: "button",
+            visible: true,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+
+    for (const response of [
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: click.id,
+        ok: true,
+        result: {
+          action: "fill",
+          ok: true,
+        },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: click.id,
+        ok: true,
+        result: {
+          action: "click",
+          ok: true,
+          selectedValues: ["wrong"],
+          element: {
+            tagName: "button",
+            role: "button",
+            visible: true,
+          },
+        },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: click.id,
+        ok: true,
+        result: {
+          action: "click",
+          ok: true,
+        },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: click.id,
+        ok: true,
+        result: {
+          action: "click",
+          ok: true,
+          element: {
+            ref: "@e1",
+            tagName: "button",
+            role: "button",
+            visible: true,
+          },
+        },
+      },
+    ]) {
+      const parsed = parseBoundaryResponse("extension-to-content-script", "click", response);
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_RESPONSE");
+      }
+    }
+  });
+
+  it("rejects invalid interaction params", () => {
+    for (const [command, params] of [
+      ["click", {}],
+      ["click", { selector: "button", ref: "@e1" }],
+      ["click", { selector: "button", generationId: "g1" }],
+      ["fill", { selector: "input" }],
+      ["press", { key: "" }],
+      ["select", { selector: "select", values: [] }],
+      ["scroll", { direction: "north" }],
+      ["scroll", { selector: "#feed", ref: "@e1", direction: "down" }],
+      ["scroll", { direction: "down", generationId: "g1" }],
+    ] as const) {
+      const parsed = parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: `${command}-invalid`,
+        command,
+        params,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+      }
     }
   });
 

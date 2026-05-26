@@ -876,6 +876,275 @@ describe("runCli", () => {
     });
   });
 
+  it("runs element actions by selector and ref", async () => {
+    const output = await runCli(["click", "button.primary"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "click",
+          params: {
+            selector: "button.primary",
+          },
+        });
+        return createOkResponse(request, {
+          action: "click",
+          ok: true,
+          element: {
+            tagName: "button",
+            role: "button",
+            visible: true,
+            name: "Save",
+          },
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "click ok button Save\n",
+      stderr: "",
+    });
+
+    const checked = await runCli(["check", "@e1", "--generation", "g1", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "check",
+          params: {
+            ref: "@e1",
+            generationId: "g1",
+          },
+        });
+        return createOkResponse(request, {
+          action: "check",
+          ok: true,
+          element: actionElement("checkbox", "Accept terms"),
+        });
+      },
+    });
+
+    expect(checked.exitCode).toBe(0);
+    expect(JSON.parse(checked.stdout)).toEqual({
+      action: "check",
+      ok: true,
+      element: actionElement("checkbox", "Accept terms"),
+    });
+  });
+
+  it("runs text, keyboard, selection, and scroll interactions", async () => {
+    const cases: readonly {
+      readonly args: readonly string[];
+      readonly command: string;
+      readonly params: Record<string, unknown>;
+      readonly result: Record<string, unknown>;
+      readonly stdout: string;
+    }[] = [
+      {
+        args: ["fill", "#email", "user@example.test"],
+        command: "fill",
+        params: { selector: "#email", text: "user@example.test" },
+        result: {
+          action: "fill",
+          ok: true,
+          element: actionElement("textbox", "Email"),
+          valueLength: 17,
+        },
+        stdout: "fill ok textbox Email valueLength=17\n",
+      },
+      {
+        args: ["fill", "#token", "--abc"],
+        command: "fill",
+        params: { selector: "#token", text: "--abc" },
+        result: {
+          action: "fill",
+          ok: true,
+          element: actionElement("textbox", "Token"),
+          valueLength: 5,
+        },
+        stdout: "fill ok textbox Token valueLength=5\n",
+      },
+      {
+        args: ["fill", "#token", "--window"],
+        command: "fill",
+        params: { selector: "#token", text: "--window" },
+        result: {
+          action: "fill",
+          ok: true,
+          element: actionElement("textbox", "Token"),
+          valueLength: 8,
+        },
+        stdout: "fill ok textbox Token valueLength=8\n",
+      },
+      {
+        args: ["type", "#name", "Nikita"],
+        command: "type",
+        params: { selector: "#name", text: "Nikita" },
+        result: {
+          action: "type",
+          ok: true,
+          element: actionElement("textbox", "Name"),
+          valueLength: 6,
+        },
+        stdout: "type ok textbox Name valueLength=6\n",
+      },
+      {
+        args: ["keyboard", "type", "hello"],
+        command: "keyboard.type",
+        params: { text: "hello" },
+        result: {
+          action: "keyboard.type",
+          ok: true,
+          element: actionElement("textbox", "Active"),
+          valueLength: 5,
+        },
+        stdout: "keyboard.type ok textbox Active valueLength=5\n",
+      },
+      {
+        args: ["keyboard", "type", "--abc"],
+        command: "keyboard.type",
+        params: { text: "--abc" },
+        result: {
+          action: "keyboard.type",
+          ok: true,
+          element: actionElement("textbox", "Active"),
+          valueLength: 5,
+        },
+        stdout: "keyboard.type ok textbox Active valueLength=5\n",
+      },
+      {
+        args: ["keyboard", "type", "--tab"],
+        command: "keyboard.type",
+        params: { text: "--tab" },
+        result: {
+          action: "keyboard.type",
+          ok: true,
+          element: actionElement("textbox", "Active"),
+          valueLength: 5,
+        },
+        stdout: "keyboard.type ok textbox Active valueLength=5\n",
+      },
+      {
+        args: ["press", "Enter"],
+        command: "press",
+        params: { key: "Enter" },
+        result: { action: "press", ok: true, element: actionElement("button", "Save") },
+        stdout: "press ok button Save\n",
+      },
+      {
+        args: ["select", "select", "pro", "team"],
+        command: "select",
+        params: { selector: "select", values: ["pro", "team"] },
+        result: {
+          action: "select",
+          ok: true,
+          element: actionElement("combobox", "Plan"),
+          selectedValues: ["pro", "team"],
+        },
+        stdout: "select ok combobox Plan selected=pro,team\n",
+      },
+      {
+        args: ["select", "select", "--pro"],
+        command: "select",
+        params: { selector: "select", values: ["--pro"] },
+        result: {
+          action: "select",
+          ok: true,
+          element: actionElement("combobox", "Plan"),
+          selectedValues: ["--pro"],
+        },
+        stdout: "select ok combobox Plan selected=--pro\n",
+      },
+      {
+        args: ["select", "select", "--generation"],
+        command: "select",
+        params: { selector: "select", values: ["--generation"] },
+        result: {
+          action: "select",
+          ok: true,
+          element: actionElement("combobox", "Plan"),
+          selectedValues: ["--generation"],
+        },
+        stdout: "select ok combobox Plan selected=--generation\n",
+      },
+      {
+        args: ["select", "select", "pro", "--generation"],
+        command: "select",
+        params: { selector: "select", values: ["pro", "--generation"] },
+        result: {
+          action: "select",
+          ok: true,
+          element: actionElement("combobox", "Plan"),
+          selectedValues: ["pro", "--generation"],
+        },
+        stdout: "select ok combobox Plan selected=pro,--generation\n",
+      },
+      {
+        args: ["scroll", "down", "300", "#feed"],
+        command: "scroll",
+        params: { direction: "down", distancePx: 300, selector: "#feed" },
+        result: { action: "scroll", ok: true, scroll: { x: 0, y: 300 } },
+        stdout: "scroll ok scroll=0,300\n",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const output = await runCli(testCase.args, {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({
+            command: testCase.command,
+            params: testCase.params,
+          });
+          return createOkResponse(request, testCase.result as never);
+        },
+      });
+
+      expect(output).toEqual({
+        exitCode: 0,
+        stdout: testCase.stdout,
+        stderr: "",
+      });
+    }
+  });
+
+  it("rejects malformed interaction arguments at the CLI boundary", async () => {
+    await expect(runCli(["click"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing selector or ref.\n",
+    });
+    await expect(runCli(["fill", "#email"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing text.\n",
+    });
+    await expect(runCli(["keyboard", "type"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing text.\n",
+    });
+    await expect(runCli(["scroll", "north"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid direction: north\n",
+    });
+    await expect(runCli(["click", "@e0"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid ref: @e0\n",
+    });
+    await expect(runCli(["click", "--json"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing selector or ref.\n",
+    });
+    await expect(runCli(["click", "--window", "2"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing selector or ref.\n",
+    });
+  });
+
   it("prints help for unknown commands", async () => {
     const output = await runCli(["missing"], baseDependencies());
 
@@ -899,6 +1168,15 @@ function baseDependencies(): CliDependencies {
         message: "firefox-cli native host is not running.",
       }),
     clearPairState: async () => undefined,
+  };
+}
+
+function actionElement(role: string, name: string) {
+  return {
+    tagName: role === "button" ? "button" : "input",
+    role,
+    visible: true,
+    name,
   };
 }
 
