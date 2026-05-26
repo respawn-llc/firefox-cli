@@ -116,6 +116,10 @@ async function runCliOrThrow(
     return get(args.slice(1), dependencies);
   }
 
+  if (args[0] === "is") {
+    return is(args.slice(1), dependencies);
+  }
+
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
   }
@@ -143,6 +147,7 @@ export function renderHelp(): string {
     "  firefox-cli ref <@ref> [--generation id] [--json]",
     "  firefox-cli get text|html|value|attr|count|box|styles <selector|@ref> [--json]",
     "  firefox-cli get title|url [--json]",
+    "  firefox-cli is visible|enabled|checked <selector|@ref> [--generation id] [--json]",
     "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
     "  firefox-cli window [new|select|close] [target-or-url] [--json]",
     "",
@@ -580,7 +585,7 @@ async function get(args: readonly string[], dependencies: CliDependencies): Prom
     dependencies,
     createRequest("get", {
       kind,
-      ...parseGetElementTarget(elementTarget),
+      ...parseElementTarget(elementTarget),
       ...(kind === "attr" && attribute !== undefined ? { attribute } : {}),
       ...optionalStringOption(args, ["--generation"], "generationId"),
       ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
@@ -595,6 +600,38 @@ async function get(args: readonly string[], dependencies: CliDependencies): Prom
   return json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
     : ok(`${formatGetValue(response.result.value)}\n`);
+}
+
+async function is(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const positional = getPositionals(args);
+  const kind = positional[0];
+  if (!isIsKind(kind)) {
+    return error("Missing or invalid is kind.\n");
+  }
+
+  const elementTarget = positional[1];
+  if (elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("is", {
+      kind,
+      ...parseElementTarget(elementTarget),
+      ...optionalStringOption(args, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(args)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${response.result.value}\n`);
 }
 
 async function createManifestPlan(dependencies: CliDependencies) {
@@ -775,7 +812,11 @@ function isGetKind(
   );
 }
 
-function parseGetElementTarget(value: string | undefined): {
+function isIsKind(value: string | undefined): value is "visible" | "enabled" | "checked" {
+  return value === "visible" || value === "enabled" || value === "checked";
+}
+
+function parseElementTarget(value: string | undefined): {
   readonly selector?: string;
   readonly ref?: string;
 } {

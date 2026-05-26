@@ -147,6 +147,8 @@ describe("parseBoundaryRequest", () => {
         "get-2",
       ),
       createRequest("get", { kind: "title" }, "get-title-1"),
+      createRequest("is", { kind: "visible", selector: "#main" }, "is-1"),
+      createRequest("is", { kind: "checked", ref: "@e1", generationId: "g1" }, "is-2"),
     ];
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
@@ -404,6 +406,65 @@ describe("parseBoundaryResponse", () => {
       if (!parsed.ok) {
         expect(parsed.error.code).toBe("INVALID_RESPONSE");
       }
+    }
+  });
+
+  it("validates is responses with boolean values", () => {
+    const request = createRequest("is", { kind: "enabled", selector: "button" }, "is-1");
+    const response = createOkResponse(request, {
+      kind: "enabled",
+      value: true,
+      element: {
+        ref: "@e1",
+        generationId: "g1",
+        tagName: "button",
+        role: "button",
+        visible: true,
+      },
+    });
+
+    expect(parseBoundaryResponse("extension-to-content-script", "is", response)).toEqual({
+      ok: true,
+      value: response,
+    });
+  });
+
+  it("rejects invalid is params and non-boolean is results", () => {
+    for (const params of [
+      {
+        kind: "visible",
+      },
+      {
+        kind: "visible",
+        selector: "#main",
+        generationId: "g1",
+      },
+    ]) {
+      const invalidParams = parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "is-1",
+        command: "is",
+        params,
+      });
+      expect(invalidParams.ok).toBe(false);
+      if (!invalidParams.ok) {
+        expect(invalidParams.error.code).toBe("INVALID_ENVELOPE");
+      }
+    }
+
+    const request = createRequest("is", { kind: "visible", selector: "#main" }, "is-2");
+    const invalidResult = parseBoundaryResponse("extension-to-content-script", "is", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: request.id,
+      ok: true,
+      result: {
+        kind: "visible",
+        value: "true",
+      },
+    });
+    expect(invalidResult.ok).toBe(false);
+    if (!invalidResult.ok) {
+      expect(invalidResult.error.code).toBe("INVALID_RESPONSE");
     }
   });
 

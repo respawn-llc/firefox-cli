@@ -438,6 +438,47 @@ export const getResultSchema = z.discriminatedUnion("kind", [
 ]);
 export type GetResult = z.infer<typeof getResultSchema>;
 
+export const isKindSchema = z.enum(["visible", "enabled", "checked"]);
+export type IsKind = z.infer<typeof isKindSchema>;
+
+export const isParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    kind: isKindSchema,
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if ((params.selector === undefined) === (params.ref === undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "State checks require exactly one selector or ref.",
+        path: ["selector"],
+      });
+    }
+
+    if (params.ref === undefined && params.generationId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Generation IDs apply only to refs.",
+        path: ["generationId"],
+      });
+    }
+  });
+export type IsParams = z.infer<typeof isParamsSchema>;
+
+export const isResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    kind: isKindSchema,
+    value: z.boolean(),
+    element: elementSummarySchema.optional(),
+  })
+  .strict();
+export type IsResult = z.infer<typeof isResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -543,6 +584,11 @@ export const commandSchemas = {
   get: {
     params: getParamsSchema,
     result: getResultSchema,
+    status: "mvp",
+  },
+  is: {
+    params: isParamsSchema,
+    result: isResultSchema,
     status: "mvp",
   },
   "pair.approve": {

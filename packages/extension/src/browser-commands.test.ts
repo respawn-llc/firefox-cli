@@ -250,6 +250,29 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "get" }]);
   });
 
+  it("routes element state checks to the resolved tab content script and adds target metadata", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("is", { kind: "visible", selector: "#main" }, "is-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "visible",
+        value: true,
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "is" }]);
+  });
+
   it("maps restricted-page getter injection failures to actionable errors", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -257,7 +280,7 @@ describe("browser command handling", () => {
     adapter.contentFailure = new Error("Cannot access a restricted Firefox page");
 
     const response = await handleBrowserRequest(
-      createRequest("get", { kind: "text", selector: "body" }, "get-1"),
+      createRequest("is", { kind: "visible", selector: "body" }, "is-1"),
       adapter,
     );
 
@@ -422,6 +445,13 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
         kind: "text",
         value: "Submit",
         truncated: false,
+      });
+    }
+
+    if (request.command === "is") {
+      return createOkResponse(request as RequestEnvelope<"is">, {
+        kind: "visible",
+        value: true,
       });
     }
 

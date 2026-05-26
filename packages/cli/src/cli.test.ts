@@ -625,6 +625,70 @@ describe("runCli", () => {
     });
   });
 
+  it("checks element state by selector and prints booleans", async () => {
+    const output = await runCli(["is", "visible", "#main"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "is",
+          params: {
+            kind: "visible",
+            selector: "#main",
+          },
+        });
+        return createOkResponse(request, {
+          kind: "visible",
+          value: true,
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "true\n",
+      stderr: "",
+    });
+  });
+
+  it("checks element state by ref with optional generation IDs", async () => {
+    const output = await runCli(["is", "checked", "@e1", "--generation", "g1", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "is",
+          params: {
+            kind: "checked",
+            ref: "@e1",
+            generationId: "g1",
+          },
+        });
+        return createOkResponse(request, {
+          kind: "checked",
+          value: false,
+        });
+      },
+    });
+
+    expect(output.exitCode).toBe(0);
+    expect(JSON.parse(output.stdout)).toEqual({
+      kind: "checked",
+      value: false,
+    });
+  });
+
+  it("rejects invalid is kinds and malformed refs at the CLI boundary", async () => {
+    await expect(runCli(["is", "editable", "#main"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing or invalid is kind.\n",
+    });
+    await expect(runCli(["is", "visible", "@e0"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid ref: @e0\n",
+    });
+  });
+
   it("prints help for unknown commands", async () => {
     const output = await runCli(["missing"], baseDependencies());
 

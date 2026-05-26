@@ -354,6 +354,142 @@ describe("content snapshot", () => {
     });
   });
 
+  it("checks visible, enabled, and checked state by selector or ref", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="save">Save</button>
+        <button id="disabled" disabled>Disabled</button>
+        <div style="display: none"><button id="hidden">Hidden</button></div>
+        <fieldset disabled>
+          <legend><button id="legend-button">Legend action</button></legend>
+          <input id="fieldset-input">
+        </fieldset>
+        <select><optgroup disabled><option id="disabled-option">Option</option></optgroup></select>
+        <label><input id="agree" type="checkbox" checked> Agree</label>
+        <div id="aria-check" role="checkbox" aria-checked="true">Aria checked</div>
+      </main>`,
+      { url: "https://example.test/" },
+    );
+    const registry = new ElementRefRegistry<Element>();
+    const snapshot = handleContentScriptRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+      { document: window.document, registry, now: 1000 },
+    ) as ResponseEnvelope<"snapshot">;
+    if (!snapshot.ok) {
+      throw new Error("snapshot failed");
+    }
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "visible", selector: "#save" }, "i1"),
+        {
+          document: window.document,
+          registry,
+          now: 1001,
+        },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "visible", value: true } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "visible", selector: "#hidden" }, "i2"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "visible", value: false } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "enabled", selector: "#disabled" }, "i3"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "enabled", value: false } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "enabled", selector: "#fieldset-input" }, "i4"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "enabled", value: false } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "enabled", selector: "#legend-button" }, "i4b"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "enabled", value: true } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "enabled", selector: "#disabled-option" }, "i4c"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "enabled", value: false } });
+    expect(
+      handleContentScriptRequest(
+        createRequest(
+          "is",
+          {
+            kind: "checked",
+            selector: "#agree",
+          },
+          "i5",
+        ),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "checked", value: true } });
+    expect(snapshot.result.generationId).toMatch(/^g/u);
+    expect(
+      handleContentScriptRequest(
+        createRequest("is", { kind: "checked", selector: "#aria-check" }, "i6"),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "checked", value: true } });
+  });
+
+  it("checks element state by ref", () => {
+    const { window } = new JSDOM(`<input id="agree" type="checkbox" checked>`, {
+      url: "https://example.test/",
+    });
+    const registry = new ElementRefRegistry<Element>();
+    const snapshot = handleContentScriptRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+      { document: window.document, registry, now: 1000 },
+    ) as ResponseEnvelope<"snapshot">;
+    if (!snapshot.ok) {
+      throw new Error("snapshot failed");
+    }
+
+    expect(
+      handleContentScriptRequest(
+        createRequest(
+          "is",
+          { kind: "checked", ref: "@e1", generationId: snapshot.result.generationId },
+          "is-1",
+        ),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).toMatchObject({ ok: true, result: { kind: "checked", value: true } });
+  });
+
+  it("rejects checked state for non-checkable elements", () => {
+    const { window } = new JSDOM(`<button>Save</button><div id="bad" aria-checked="true"></div>`, {
+      url: "https://example.test/",
+    });
+
+    for (const selector of ["button", "#bad"]) {
+      const response = handleContentScriptRequest(
+        createRequest("is", { kind: "checked", selector }, "is-1"),
+        {
+          document: window.document,
+          registry: new ElementRefRegistry<Element>(),
+          now: 1000,
+        },
+      );
+
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: "UNSUPPORTED_CAPABILITY",
+        },
+      });
+    }
+  });
+
   it("truncates large get text results deterministically", () => {
     const { window } = new JSDOM(`<main>${"x".repeat(100)}</main>`, {
       url: "https://example.test/",

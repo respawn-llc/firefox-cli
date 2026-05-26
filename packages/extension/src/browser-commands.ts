@@ -3,6 +3,7 @@ import {
   createOkResponse,
   type CommandId,
   type GetResult,
+  type IsResult,
   type RefResolveResult,
   type RequestEnvelope,
   type ResponseEnvelope,
@@ -255,13 +256,30 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (request.command === "is") {
+    const command = request as RequestEnvelope<"is">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const isResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!isResponse.ok) {
+      return createErrorResponse(command.id, isResponse.error);
+    }
+
+    const result: IsResult = {
+      ...isResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported browser command: ${request.command}`,
   });
 }
 
-async function sendContentCommand<C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get">>(
+async function sendContentCommand<
+  C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get" | "is">,
+>(
   adapter: BackgroundBrowserAdapter,
   tabId: number,
   command: RequestEnvelope<C>,

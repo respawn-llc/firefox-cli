@@ -7,6 +7,8 @@ import {
   type GetParams,
   type GetResult,
   type GetStylesValue,
+  type IsParams,
+  type IsResult,
   type RequestEnvelope,
   type ResponseEnvelope,
   type RefResolveParams,
@@ -231,6 +233,17 @@ export function handleContentScriptRequest(
     }
   }
 
+  if (request.command === "is") {
+    try {
+      return createOkResponse(
+        request,
+        createIsResult(options.document, request.params as IsParams, options.registry, options.now),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported content command: ${request.command}`,
@@ -251,7 +264,7 @@ function createGetResult(
     return { kind: params.kind, value: document.location.href };
   }
 
-  const resolution = resolveElementForGet(document, params, registry, now);
+  const resolution = resolveElementForContentCommand(document, params, registry, now);
   const base = {
     ...(resolution.ref === undefined || resolution.generationId === undefined
       ? {}
@@ -304,9 +317,49 @@ function createGetResult(
   }
 }
 
-function resolveElementForGet(
+function createIsResult(
   document: Document,
-  params: GetParams,
+  params: IsParams,
+  registry: ElementRefRegistry<Element>,
+  now = Date.now(),
+): IsResult {
+  const resolution = resolveElementForContentCommand(document, params, registry, now);
+  const base = {
+    ...(resolution.ref === undefined || resolution.generationId === undefined
+      ? {}
+      : {
+          element: summarizeElement(resolution.element, {
+            ref: resolution.ref,
+            generationId: resolution.generationId,
+          }),
+        }),
+  };
+
+  switch (params.kind) {
+    case "visible":
+      return { ...base, kind: params.kind, value: isVisible(resolution.element) };
+    case "enabled":
+      return { ...base, kind: params.kind, value: !isDisabled(resolution.element) };
+    case "checked": {
+      const checked = getElementChecked(resolution.element);
+      if (checked === undefined) {
+        throw new ContentSnapshotError(
+          "UNSUPPORTED_CAPABILITY",
+          "Checked state is available only for checkable elements.",
+        );
+      }
+      return { ...base, kind: params.kind, value: checked };
+    }
+  }
+}
+
+function resolveElementForContentCommand(
+  document: Document,
+  params: {
+    readonly selector?: string | undefined;
+    readonly ref?: string | undefined;
+    readonly generationId?: string | undefined;
+  },
   registry: ElementRefRegistry<Element>,
   now: number,
 ): { readonly element: Element; readonly ref?: string; readonly generationId?: string } {
@@ -416,8 +469,7 @@ function summarizeElement(
   const text = collapseWhitespace(element.textContent ?? "").slice(0, 500);
   const value = getElementValue(element);
   const href = element.getAttribute("href");
-  const disabled =
-    element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
+  const disabled = isDisabled(element);
   const checked = getElementChecked(element);
   const name = getAccessibleName(element);
 
@@ -457,6 +509,17 @@ function getElementChecked(element: Element): boolean | undefined {
   }
 
   const ariaChecked = element.getAttribute("aria-checked");
+  const role = element.getAttribute("role");
+  const supportsAriaChecked =
+    role === "checkbox" ||
+    role === "menuitemcheckbox" ||
+    role === "menuitemradio" ||
+    role === "radio" ||
+    role === "switch";
+  if (!supportsAriaChecked) {
+    return undefined;
+  }
+
   if (ariaChecked === "true") {
     return true;
   }
@@ -465,6 +528,44 @@ function getElementChecked(element: Element): boolean | undefined {
   }
 
   return undefined;
+}
+
+function isDisabled(element: Element): boolean {
+  if (element.getAttribute("aria-disabled") === "true") {
+    return true;
+  }
+
+  try {
+    return element.matches(":disabled");
+  } catch {
+    return isNativelyDisabledFallback(element);
+  }
+}
+
+function isNativelyDisabledFallback(element: Element): boolean {
+  if (
+    !["button", "fieldset", "input", "optgroup", "option", "select", "textarea"].includes(
+      element.localName,
+    )
+  ) {
+    return false;
+  }
+
+  if (element.hasAttribute("disabled")) {
+    return true;
+  }
+
+  if (element.localName === "option" && element.closest("optgroup[disabled]") !== null) {
+    return true;
+  }
+
+  const disabledFieldset = element.closest("fieldset[disabled]");
+  return disabledFieldset === null ? false : !isDescendantOfFirstLegend(element, disabledFieldset);
+}
+
+function isDescendantOfFirstLegend(element: Element, fieldset: Element): boolean {
+  const firstLegend = Array.from(fieldset.children).find((child) => child.localName === "legend");
+  return firstLegend === undefined ? false : firstLegend.contains(element);
 }
 
 function isDetachedElement(value: unknown): boolean {
@@ -700,7 +801,7 @@ function getMetadata(element: Element, role: string): readonly string[] {
 }
 
 function isInteractive(element: Element, role: string): boolean {
-  if (element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true") {
+  if (isDisabled(element)) {
     return false;
   }
 
@@ -734,26 +835,36 @@ function isSemantic(element: Element, role: string, name: string | undefined): b
 }
 
 function isVisible(element: Element): boolean {
+  for (let current: Element | null = element; current !== null; current = current.parentElement) {
+    if (isSelfHidden(current)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSelfHidden(element: Element): boolean {
   if (
     element.hasAttribute("hidden") ||
     element.getAttribute("aria-hidden") === "true" ||
     (element.localName === "input" && element.getAttribute("type") === "hidden")
   ) {
-    return false;
+    return true;
   }
 
   const styleAttribute = element.getAttribute("style")?.toLowerCase() ?? "";
   if (styleAttribute.includes("display: none") || styleAttribute.includes("visibility: hidden")) {
-    return false;
+    return true;
   }
 
   const view = element.ownerDocument.defaultView;
   if (view !== null) {
     const style = view.getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
+    return style.display === "none" || style.visibility === "hidden";
   }
 
-  return true;
+  return false;
 }
 
 function isScrollableContainer(element: Element): boolean {
@@ -853,7 +964,11 @@ function collapseWhitespace(value: string): string {
 export class ContentSnapshotError extends Error {
   readonly code: Extract<
     ErrorCode,
-    "SCRIPT_INJECTION_FAILED" | "SELECTOR_NOT_FOUND" | "REF_NOT_FOUND" | "OUTPUT_TOO_LARGE"
+    | "SCRIPT_INJECTION_FAILED"
+    | "SELECTOR_NOT_FOUND"
+    | "REF_NOT_FOUND"
+    | "OUTPUT_TOO_LARGE"
+    | "UNSUPPORTED_CAPABILITY"
   >;
 
   constructor(code: ContentSnapshotError["code"], message: string) {
