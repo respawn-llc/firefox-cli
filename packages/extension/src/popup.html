@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>firefox-cli</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>firefox-cli</h1>
+      <p id="status">Checking connection...</p>
+      <p id="approval">Checking approval...</p>
+      <p id="error" hidden></p>
+      <div class="actions">
+        <button id="approve" type="button">Approve</button>
+        <button id="reset" type="button">Reset</button>
+        <button id="copy-diagnostics" type="button">Copy diagnostics</button>
+      </div>
+      <textarea id="diagnostics" readonly aria-label="Diagnostics"></textarea>
+      <ol>
+        <li>Install the CLI package.</li>
+        <li>Run <code>firefox-cli setup native-host</code>.</li>
+        <li>Click <strong>Approve</strong>, then run <code>firefox-cli doctor</code>.</li>
+      </ol>
+    </main>
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

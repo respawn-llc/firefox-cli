@@ -1,0 +1,13 @@
+{
+  "name": "@firefox-cli/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@firefox-cli/native-host": "workspace:*",
+    "@firefox-cli/protocol": "workspace:*"
+  }
+}
