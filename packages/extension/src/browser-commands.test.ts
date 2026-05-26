@@ -163,6 +163,39 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "snapshot" }]);
   });
 
+  it("routes ref resolution to the same tab content registry across CLI invocations", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    await handleBrowserRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+      adapter,
+    );
+    const response = await handleBrowserRequest(
+      createRequest("ref.resolve", { ref: "@e1", generationId: "g1" }, "ref-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        target: {
+          tabId: 101,
+        },
+        element: {
+          ref: "@e1",
+          generationId: "g1",
+          role: "button",
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([
+      { tabId: 101, command: "snapshot" },
+      { tabId: 101, command: "ref.resolve" },
+    ]);
+  });
+
   it("maps content-script injection failures to actionable errors", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -296,11 +329,25 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       throw this.contentFailure;
     }
     return createOkResponse(request, {
-      generationId: "g1",
-      text: '@e1 button "Submit"',
-      refs: 1,
-      truncated: false,
-      frames: [],
+      ...(request.command === "ref.resolve"
+        ? {
+            element: {
+              ref: "@e1",
+              generationId: "g1",
+              tagName: "button",
+              role: "button",
+              name: "Submit",
+              text: "Submit",
+              visible: true,
+            },
+          }
+        : {
+            generationId: "g1",
+            text: '@e1 button "Submit"',
+            refs: 1,
+            truncated: false,
+            frames: [],
+          }),
     });
   }
 

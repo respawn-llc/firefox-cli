@@ -2,8 +2,10 @@ import {
   createErrorResponse,
   createOkResponse,
   type ErrorCode,
+  type ElementSummary,
   type RequestEnvelope,
   type ResponseEnvelope,
+  type RefResolveParams,
   type SnapshotFrameDiagnostic,
   type SnapshotParams,
   type SnapshotResult,
@@ -83,19 +85,23 @@ export class ElementRefRegistry<TElement> {
     ref: string,
     options: { readonly generationId?: string; readonly now?: number } = {},
   ): TElement {
+    return this.resolveRef(ref, options).element;
+  }
+
+  resolveRef(
+    ref: string,
+    options: { readonly generationId?: string; readonly now?: number } = {},
+  ): { readonly element: TElement; readonly generationId: string } {
     const now = options.now ?? Date.now();
     this.#prune(now);
     const generationId = options.generationId ?? this.#latestGenerationId;
     const generation = generationId === undefined ? undefined : this.#generations.get(generationId);
     const element = generation?.refs.get(ref);
-    if (element === undefined) {
-      throw new ContentSnapshotError(
-        "REF_NOT_FOUND",
-        "Element ref is stale or unknown. Run `firefox-cli snapshot -i` again.",
-      );
+    if (generation === undefined || element === undefined || isDetachedElement(element)) {
+      throw new ContentSnapshotError("REF_NOT_FOUND", "Element ref is stale or unknown.");
     }
 
-    return element;
+    return { element, generationId: generation.id };
   }
 
   invalidate(): void {
@@ -171,29 +177,118 @@ export function handleContentScriptRequest(
     readonly now?: number;
   },
 ): ResponseEnvelope {
-  if (request.command !== "snapshot") {
-    return createErrorResponse(request.id, {
-      code: "UNSUPPORTED_CAPABILITY",
-      message: `Unsupported content command: ${request.command}`,
-    });
+  if (request.command === "snapshot") {
+    try {
+      return createOkResponse(
+        request,
+        createSnapshotResult(
+          options.document,
+          request.params as SnapshotParams,
+          options.registry,
+          options.now,
+        ),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
   }
 
-  try {
-    return createOkResponse(
-      request,
-      createSnapshotResult(
-        options.document,
-        request.params as SnapshotParams,
-        options.registry,
-        options.now,
-      ),
-    );
-  } catch (error) {
-    return createErrorResponse(request.id, {
-      code: error instanceof ContentSnapshotError ? error.code : "SCRIPT_INJECTION_FAILED",
-      message: error instanceof Error ? error.message : String(error),
-    });
+  if (request.command === "ref.resolve") {
+    try {
+      const params = request.params as RefResolveParams;
+      const resolved = options.registry.resolveRef(params.ref, {
+        ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
+        ...(options.now === undefined ? {} : { now: options.now }),
+      });
+      return createOkResponse(request, {
+        element: summarizeElement(resolved.element, {
+          ref: params.ref,
+          generationId: resolved.generationId,
+        }),
+      });
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
   }
+
+  return createErrorResponse(request.id, {
+    code: "UNSUPPORTED_CAPABILITY",
+    message: `Unsupported content command: ${request.command}`,
+  });
+}
+
+function createContentErrorResponse(id: string, error: unknown): ResponseEnvelope {
+  return createErrorResponse(id, {
+    code: error instanceof ContentSnapshotError ? error.code : "SCRIPT_INJECTION_FAILED",
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function summarizeElement(
+  element: Element,
+  options: { readonly ref: string; readonly generationId: string },
+): ElementSummary {
+  const text = collapseWhitespace(element.textContent ?? "").slice(0, 500);
+  const value = getElementValue(element);
+  const href = element.getAttribute("href");
+  const disabled =
+    element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
+  const checked = getElementChecked(element);
+  const name = getAccessibleName(element);
+
+  return {
+    ref: options.ref,
+    generationId: options.generationId,
+    tagName: element.localName,
+    role: getRole(element),
+    visible: isVisible(element),
+    ...(name === undefined ? {} : { name }),
+    ...(text.length === 0 ? {} : { text }),
+    ...(value === undefined ? {} : { value }),
+    ...(href === null ? {} : { href }),
+    ...(disabled ? { disabled } : {}),
+    ...(checked === undefined ? {} : { checked }),
+  };
+}
+
+function getElementValue(element: Element): string | undefined {
+  if (["input", "textarea", "select"].includes(element.localName) && "value" in element) {
+    const value = element.value;
+    return typeof value === "string" ? value : undefined;
+  }
+
+  return undefined;
+}
+
+function getElementChecked(element: Element): boolean | undefined {
+  if (element.localName === "input" && "type" in element && "checked" in element) {
+    const type = element.type;
+    const checked = element.checked;
+    return typeof type === "string" &&
+      typeof checked === "boolean" &&
+      ["checkbox", "radio"].includes(type)
+      ? checked
+      : undefined;
+  }
+
+  const ariaChecked = element.getAttribute("aria-checked");
+  if (ariaChecked === "true") {
+    return true;
+  }
+  if (ariaChecked === "false") {
+    return false;
+  }
+
+  return undefined;
+}
+
+function isDetachedElement(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "isConnected" in value &&
+    value.isConnected === false
+  );
 }
 
 function resolveScope(document: Document, selector: string | undefined): Element {

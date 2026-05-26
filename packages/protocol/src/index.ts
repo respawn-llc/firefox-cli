@@ -267,6 +267,41 @@ export const snapshotResultSchema = z.object({
 });
 export type SnapshotResult = z.infer<typeof snapshotResultSchema>;
 
+export const elementRefSchema = z.string().regex(/^@e[1-9]\d*$/u);
+export type ElementRef = z.infer<typeof elementRefSchema>;
+
+export const elementSummarySchema = z
+  .object({
+    ref: elementRefSchema,
+    generationId: z.string().min(1),
+    tagName: z.string().min(1),
+    role: z.string().min(1),
+    visible: z.boolean(),
+    name: z.string().optional(),
+    text: z.string().optional(),
+    value: z.string().optional(),
+    href: z.string().optional(),
+    disabled: z.boolean().optional(),
+    checked: z.boolean().optional(),
+  })
+  .strict();
+export type ElementSummary = z.infer<typeof elementSummarySchema>;
+
+export const refResolveParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    ref: elementRefSchema,
+    generationId: z.string().min(1).optional(),
+  })
+  .strict();
+export type RefResolveParams = z.infer<typeof refResolveParamsSchema>;
+
+export const refResolveResultSchema = z.object({
+  target: resolvedTargetSchema.optional(),
+  element: elementSummarySchema,
+});
+export type RefResolveResult = z.infer<typeof refResolveResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -362,6 +397,11 @@ export const commandSchemas = {
   snapshot: {
     params: snapshotParamsSchema,
     result: snapshotResultSchema,
+    status: "mvp",
+  },
+  "ref.resolve": {
+    params: refResolveParamsSchema,
+    result: refResolveResultSchema,
     status: "mvp",
   },
   "pair.approve": {

@@ -139,6 +139,7 @@ describe("parseBoundaryRequest", () => {
         },
         "snapshot-1",
       ),
+      createRequest("ref.resolve", { ref: "@e1", generationId: "g1" }, "ref-resolve-1"),
     ];
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
@@ -267,6 +268,42 @@ describe("parseBoundaryResponse", () => {
       ok: true,
       value: response,
     });
+  });
+
+  it("validates ref resolve responses", () => {
+    const request = createRequest("ref.resolve", { ref: "@e1" }, "ref-resolve-1");
+    const response = createOkResponse(request, {
+      element: {
+        ref: "@e1",
+        generationId: "g1",
+        tagName: "button",
+        role: "button",
+        name: "Save",
+        text: "Save",
+        visible: true,
+      },
+    });
+
+    expect(parseBoundaryResponse("extension-to-content-script", "ref.resolve", response)).toEqual({
+      ok: true,
+      value: response,
+    });
+  });
+
+  it("rejects invalid ref resolve params", () => {
+    const parsed = parseBoundaryRequest("host-to-extension", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: "ref-1",
+      command: "ref.resolve",
+      params: {
+        ref: "e1",
+      },
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+    }
   });
 
   it.each(boundaries)("rejects invalid successful result payloads across %s", (boundary) => {

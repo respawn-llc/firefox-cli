@@ -1,4 +1,4 @@
-import { createRequest, parseBoundaryResponse } from "@firefox-cli/protocol";
+import { createRequest, parseBoundaryResponse, type ResponseEnvelope } from "@firefox-cli/protocol";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
@@ -97,8 +97,114 @@ describe("content snapshot", () => {
     );
 
     expect(() => registry.resolve("@e1", { now: 1011 })).toThrow(
-      "Run `firefox-cli snapshot -i` again.",
+      "Element ref is stale or unknown.",
     );
+  });
+
+  it("resolves refs created by an earlier content request", async () => {
+    const { window } = new JSDOM(
+      `<label for="email">Email</label><input id="email" value="user@example.test">`,
+      { url: "https://example.test/" },
+    );
+    const handler = createContentMessageHandler({
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+    });
+
+    const snapshot = await handler(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+    );
+    const parsedSnapshot = parseBoundaryResponse(
+      "extension-to-content-script",
+      "snapshot",
+      snapshot,
+    );
+    if (!parsedSnapshot.ok || !parsedSnapshot.value.ok) {
+      throw new Error("snapshot failed");
+    }
+    const snapshotResponse = parsedSnapshot.value as Extract<
+      ResponseEnvelope<"snapshot">,
+      { readonly ok: true }
+    >;
+
+    const resolved = await handler(
+      createRequest(
+        "ref.resolve",
+        { ref: "@e1", generationId: snapshotResponse.result.generationId },
+        "ref-1",
+      ),
+    );
+
+    const parsedResolve = parseBoundaryResponse(
+      "extension-to-content-script",
+      "ref.resolve",
+      resolved,
+    );
+    expect(parsedResolve).toMatchObject({
+      ok: true,
+      value: {
+        ok: true,
+        result: {
+          element: {
+            ref: "@e1",
+            role: "textbox",
+            name: "Email",
+            value: "user@example.test",
+            visible: true,
+          },
+        },
+      },
+    });
+  });
+
+  it("returns REF_NOT_FOUND when resolving an unknown ref", () => {
+    const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
+
+    const response = handleContentScriptRequest(
+      createRequest("ref.resolve", { ref: "@e1" }, "ref-1"),
+      {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "REF_NOT_FOUND",
+      },
+    });
+  });
+
+  it("returns REF_NOT_FOUND when a ref element was detached from the document", () => {
+    const { window } = new JSDOM(`<button id="save">Save</button>`, {
+      url: "https://example.test/",
+    });
+    const registry = new ElementRefRegistry<Element>();
+    createSnapshotResult(
+      window.document,
+      { interactiveOnly: true, compact: true, maxDepth: 2, maxOutputBytes: 10_000 },
+      registry,
+      1000,
+    );
+    window.document.querySelector("#save")?.remove();
+
+    const response = handleContentScriptRequest(
+      createRequest("ref.resolve", { ref: "@e1" }, "ref-1"),
+      {
+        document: window.document,
+        registry,
+        now: 1001,
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "REF_NOT_FOUND",
+      },
+    });
   });
 
   it("reports iframe diagnostics without actionable iframe refs", () => {

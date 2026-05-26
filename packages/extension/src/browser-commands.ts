@@ -1,6 +1,8 @@
 import {
   createErrorResponse,
   createOkResponse,
+  type CommandId,
+  type RefResolveResult,
   type RequestEnvelope,
   type ResponseEnvelope,
   type ResolvedTarget,
@@ -201,25 +203,7 @@ async function handleBrowserRequestOrThrow(
   if (request.command === "snapshot") {
     const command = request as RequestEnvelope<"snapshot">;
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    let rawContentResponse: unknown;
-    try {
-      rawContentResponse = await adapter.sendContentRequest(resolved.tab.id, command);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new BrowserCommandError(
-        "SCRIPT_INJECTION_FAILED",
-        `Cannot inject firefox-cli into this tab. Open a normal web page, reload the extension, or choose a different tab. Firefox reported: ${message}`,
-      );
-    }
-    const contentResponse = parseBoundaryResponse(
-      "extension-to-content-script",
-      "snapshot",
-      rawContentResponse,
-    );
-    if (!contentResponse.ok) {
-      return createErrorResponse(command.id, contentResponse.error);
-    }
-    const snapshotResponse = contentResponse.value as ResponseEnvelope<"snapshot">;
+    const snapshotResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!snapshotResponse.ok) {
       return createErrorResponse(command.id, snapshotResponse.error);
     }
@@ -231,10 +215,53 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (request.command === "ref.resolve") {
+    const command = request as RequestEnvelope<"ref.resolve">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const refResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!refResponse.ok) {
+      return createErrorResponse(command.id, refResponse.error);
+    }
+
+    const result: RefResolveResult = {
+      ...refResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported browser command: ${request.command}`,
   });
+}
+
+async function sendContentCommand<C extends Extract<CommandId, "snapshot" | "ref.resolve">>(
+  adapter: BackgroundBrowserAdapter,
+  tabId: number,
+  command: RequestEnvelope<C>,
+): Promise<ResponseEnvelope<C>> {
+  let rawContentResponse: unknown;
+  try {
+    rawContentResponse = await adapter.sendContentRequest(tabId, command);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new BrowserCommandError(
+      "SCRIPT_INJECTION_FAILED",
+      `Cannot inject firefox-cli into this tab. Open a normal web page, reload the extension, or choose a different tab. Firefox reported: ${message}`,
+    );
+  }
+
+  const contentResponse = parseBoundaryResponse(
+    "extension-to-content-script",
+    command.command,
+    rawContentResponse,
+  );
+  if (!contentResponse.ok) {
+    return createErrorResponse(command.id, contentResponse.error) as ResponseEnvelope<C>;
+  }
+
+  return contentResponse.value as ResponseEnvelope<C>;
 }
 
 async function getOrderedWindows(

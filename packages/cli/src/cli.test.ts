@@ -475,6 +475,42 @@ describe("runCli", () => {
     });
   });
 
+  it("resolves snapshot refs with optional generation IDs", async () => {
+    const output = await runCli(["ref", "@e1", "--generation", "g1", "--tab", "id:42"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "ref.resolve",
+          params: {
+            ref: "@e1",
+            generationId: "g1",
+            target: {
+              tab: { kind: "id", id: 42 },
+            },
+          },
+        });
+        return createOkResponse(request, {
+          target: targetSummary(),
+          element: {
+            ref: "@e1",
+            generationId: "g1",
+            tagName: "button",
+            role: "button",
+            name: "Save",
+            text: "Save",
+            visible: true,
+          },
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "@e1 button Save (g1)\n",
+      stderr: "",
+    });
+  });
+
   it("prints help for unknown commands", async () => {
     const output = await runCli(["missing"], baseDependencies());
 

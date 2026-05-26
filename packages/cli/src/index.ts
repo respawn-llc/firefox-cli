@@ -108,6 +108,10 @@ async function runCliOrThrow(
     return snapshot(args.slice(1), dependencies);
   }
 
+  if (args[0] === "ref") {
+    return refResolve(args.slice(1), dependencies);
+  }
+
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
   }
@@ -132,6 +136,7 @@ export function renderHelp(): string {
     "  firefox-cli open [--new-tab] <url> [--json]",
     "  firefox-cli back|forward|reload [--json]",
     "  firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]",
+    "  firefox-cli ref <@ref> [--generation id] [--json]",
     "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
     "  firefox-cli window [new|select|close] [target-or-url] [--json]",
     "",
@@ -510,6 +515,39 @@ async function snapshot(
     : ok(response.result.text.endsWith("\n") ? response.result.text : `${response.result.text}\n`);
 }
 
+async function refResolve(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const json = args.includes("--json");
+  const ref = getPositionals(args)[0];
+  if (ref === undefined) {
+    return error("Missing ref.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("ref.resolve", {
+      ref,
+      ...optionalStringOption(args, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(args)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  if (json) {
+    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
+  }
+
+  const element = response.result.element;
+  return ok(
+    `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
+  );
+}
+
 async function createManifestPlan(dependencies: CliDependencies) {
   if (dependencies.binaryPath !== undefined) {
     return planNativeMessagingManifest({
@@ -699,7 +737,8 @@ function getPositionals(args: readonly string[]): readonly string[] {
       arg === "--depth" ||
       arg === "-s" ||
       arg === "--selector" ||
-      arg === "--max-output"
+      arg === "--max-output" ||
+      arg === "--generation"
     ) {
       index += 1;
       continue;
@@ -769,7 +808,17 @@ function optionalStringOption(
   args: readonly string[],
   names: readonly string[],
   outputKey: "selector",
-): { readonly selector?: string } {
+): { readonly selector?: string };
+function optionalStringOption(
+  args: readonly string[],
+  names: readonly string[],
+  outputKey: "generationId",
+): { readonly generationId?: string };
+function optionalStringOption(
+  args: readonly string[],
+  names: readonly string[],
+  outputKey: "selector" | "generationId",
+): { readonly selector?: string; readonly generationId?: string } {
   const value = getOptionValue(args, names);
   if (value === undefined) {
     return {};
