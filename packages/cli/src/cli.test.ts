@@ -511,6 +511,120 @@ describe("runCli", () => {
     });
   });
 
+  it("gets a tab title without an element target", async () => {
+    const output = await runCli(["get", "title", "--tab", "id:42"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "get",
+          params: {
+            kind: "title",
+            target: {
+              tab: { kind: "id", id: 42 },
+            },
+          },
+        });
+        return createOkResponse(request, {
+          target: targetSummary(),
+          kind: "title",
+          value: "Example",
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "Example\n",
+      stderr: "",
+    });
+  });
+
+  it("rejects element positionals for tab-level getters", async () => {
+    const output = await runCli(["get", "title", "#main"], baseDependencies());
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "get title does not accept a selector or ref.\n",
+    });
+  });
+
+  it("gets element text by selector as JSON", async () => {
+    const output = await runCli(["get", "text", "#main", "--max-output", "1000", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "get",
+          params: {
+            kind: "text",
+            selector: "#main",
+            maxOutputBytes: 1000,
+          },
+        });
+        return createOkResponse(request, {
+          target: targetSummary(),
+          kind: "text",
+          value: "Hello",
+          truncated: false,
+        });
+      },
+    });
+
+    expect(output.exitCode).toBe(0);
+    expect(JSON.parse(output.stdout)).toMatchObject({
+      kind: "text",
+      value: "Hello",
+      truncated: false,
+    });
+  });
+
+  it("gets an attribute by snapshot ref with optional generation ID", async () => {
+    const output = await runCli(["get", "attr", "@e1", "href", "--generation", "g1"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "get",
+          params: {
+            kind: "attr",
+            ref: "@e1",
+            generationId: "g1",
+            attribute: "href",
+          },
+        });
+        return createOkResponse(request, {
+          kind: "attr",
+          value: "/docs",
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "/docs\n",
+      stderr: "",
+    });
+  });
+
+  it("rejects attr getters without an attribute name at the CLI boundary", async () => {
+    const output = await runCli(["get", "attr", "a"], baseDependencies());
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing attribute name.\n",
+    });
+  });
+
+  it("rejects malformed get refs instead of treating them as selectors", async () => {
+    const output = await runCli(["get", "text", "@e0"], baseDependencies());
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid ref: @e0\n",
+    });
+  });
+
   it("prints help for unknown commands", async () => {
     const output = await runCli(["missing"], baseDependencies());
 

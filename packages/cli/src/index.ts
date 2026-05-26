@@ -112,6 +112,10 @@ async function runCliOrThrow(
     return refResolve(args.slice(1), dependencies);
   }
 
+  if (args[0] === "get") {
+    return get(args.slice(1), dependencies);
+  }
+
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
   }
@@ -137,6 +141,8 @@ export function renderHelp(): string {
     "  firefox-cli back|forward|reload [--json]",
     "  firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]",
     "  firefox-cli ref <@ref> [--generation id] [--json]",
+    "  firefox-cli get text|html|value|attr|count|box|styles <selector|@ref> [--json]",
+    "  firefox-cli get title|url [--json]",
     "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
     "  firefox-cli window [new|select|close] [target-or-url] [--json]",
     "",
@@ -548,6 +554,49 @@ async function refResolve(
   );
 }
 
+async function get(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const positional = getPositionals(args);
+  const kind = positional[0];
+  if (!isGetKind(kind)) {
+    return error("Missing or invalid get kind.\n");
+  }
+
+  const elementTarget = positional[1];
+  const attribute = positional[2];
+  if (kind === "attr" && attribute === undefined) {
+    return error("Missing attribute name.\n");
+  }
+
+  if ((kind === "title" || kind === "url") && elementTarget !== undefined) {
+    return error(`get ${kind} does not accept a selector or ref.\n`);
+  }
+
+  if (kind !== "title" && kind !== "url" && elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("get", {
+      kind,
+      ...parseGetElementTarget(elementTarget),
+      ...(kind === "attr" && attribute !== undefined ? { attribute } : {}),
+      ...optionalStringOption(args, ["--generation"], "generationId"),
+      ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
+      ...optionalTarget(parseTargetOptions(args)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatGetValue(response.result.value)}\n`);
+}
+
 async function createManifestPlan(dependencies: CliDependencies) {
   if (dependencies.binaryPath !== undefined) {
     return planNativeMessagingManifest({
@@ -708,6 +757,53 @@ function renderTargetSummary(target: ResolvedTarget): string {
   const title = target.title ?? "(untitled)";
   const url = target.url ?? "(url unavailable)";
   return `w${target.windowId} t${target.tabId} [${target.tabIndex}] ${title} ${url}`;
+}
+
+function isGetKind(
+  value: string | undefined,
+): value is "text" | "html" | "value" | "attr" | "title" | "url" | "count" | "box" | "styles" {
+  return (
+    value === "text" ||
+    value === "html" ||
+    value === "value" ||
+    value === "attr" ||
+    value === "title" ||
+    value === "url" ||
+    value === "count" ||
+    value === "box" ||
+    value === "styles"
+  );
+}
+
+function parseGetElementTarget(value: string | undefined): {
+  readonly selector?: string;
+  readonly ref?: string;
+} {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (/^@e[1-9]\d*$/u.test(value)) {
+    return { ref: value };
+  }
+
+  if (value.startsWith("@")) {
+    throw new CliUsageError(`Invalid ref: ${value}`);
+  }
+
+  return { selector: value };
+}
+
+function formatGetValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return JSON.stringify(value, null, 2);
 }
 
 function getPositionals(args: readonly string[]): readonly string[] {

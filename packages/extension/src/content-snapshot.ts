@@ -3,6 +3,10 @@ import {
   createOkResponse,
   type ErrorCode,
   type ElementSummary,
+  type GetBoxValue,
+  type GetParams,
+  type GetResult,
+  type GetStylesValue,
   type RequestEnvelope,
   type ResponseEnvelope,
   type RefResolveParams,
@@ -211,10 +215,191 @@ export function handleContentScriptRequest(
     }
   }
 
+  if (request.command === "get") {
+    try {
+      return createOkResponse(
+        request,
+        createGetResult(
+          options.document,
+          request.params as GetParams,
+          options.registry,
+          options.now,
+        ),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported content command: ${request.command}`,
   });
+}
+
+function createGetResult(
+  document: Document,
+  params: GetParams,
+  registry: ElementRefRegistry<Element>,
+  now = Date.now(),
+): GetResult {
+  if (params.kind === "title") {
+    return { kind: params.kind, value: document.title };
+  }
+
+  if (params.kind === "url") {
+    return { kind: params.kind, value: document.location.href };
+  }
+
+  const resolution = resolveElementForGet(document, params, registry, now);
+  const base = {
+    ...(resolution.ref === undefined || resolution.generationId === undefined
+      ? {}
+      : {
+          element: summarizeElement(resolution.element, {
+            ref: resolution.ref,
+            generationId: resolution.generationId,
+          }),
+        }),
+  };
+
+  switch (params.kind) {
+    case "text": {
+      const truncated = truncateText(
+        collapseWhitespace(resolution.element.textContent ?? ""),
+        params.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+      );
+      return { ...base, kind: params.kind, value: truncated.text, truncated: truncated.truncated };
+    }
+    case "html": {
+      const truncated = truncateText(
+        resolution.element.outerHTML,
+        params.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+      );
+      return { ...base, kind: params.kind, value: truncated.text, truncated: truncated.truncated };
+    }
+    case "value":
+      return { ...base, kind: params.kind, value: getElementValue(resolution.element) ?? null };
+    case "attr":
+      return {
+        ...base,
+        kind: params.kind,
+        value: resolution.element.getAttribute(params.attribute ?? "") ?? null,
+      };
+    case "count":
+      return {
+        ...base,
+        kind: params.kind,
+        value:
+          params.selector === undefined ? 1 : queryAllElements(document, params.selector).length,
+      };
+    case "box":
+      return {
+        ...base,
+        kind: params.kind,
+        value: boxValue(resolution.element.getBoundingClientRect()),
+      };
+    case "styles":
+      return { ...base, kind: params.kind, value: styleValue(resolution.element) };
+  }
+}
+
+function resolveElementForGet(
+  document: Document,
+  params: GetParams,
+  registry: ElementRefRegistry<Element>,
+  now: number,
+): { readonly element: Element; readonly ref?: string; readonly generationId?: string } {
+  if (params.ref !== undefined) {
+    const resolved = registry.resolveRef(params.ref, {
+      ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
+      now,
+    });
+    return { element: resolved.element, ref: params.ref, generationId: resolved.generationId };
+  }
+
+  const selector = params.selector;
+  if (selector === undefined) {
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", "Element selector is required.");
+  }
+
+  const element = querySingleElement(document, selector);
+  return { element };
+}
+
+function querySingleElement(document: Document, selector: string): Element {
+  let element: Element | null;
+  try {
+    element = document.querySelector(selector);
+  } catch (error) {
+    throw new ContentSnapshotError(
+      "SELECTOR_NOT_FOUND",
+      `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (element === null) {
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector not found: ${selector}`);
+  }
+
+  return element;
+}
+
+function queryAllElements(document: Document, selector: string): readonly Element[] {
+  try {
+    return Array.from(document.querySelectorAll(selector));
+  } catch (error) {
+    throw new ContentSnapshotError(
+      "SELECTOR_NOT_FOUND",
+      `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function boxValue(rect: DOMRect): GetBoxValue {
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    left: rect.left,
+  };
+}
+
+function styleValue(element: Element): GetStylesValue {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style === undefined) {
+    return {
+      display: "",
+      visibility: "",
+      opacity: "",
+      pointerEvents: "",
+      position: "",
+      overflow: "",
+      overflowX: "",
+      overflowY: "",
+      color: "",
+      backgroundColor: "",
+      fontSize: "",
+    };
+  }
+
+  return {
+    display: style.display,
+    visibility: style.visibility,
+    opacity: style.opacity,
+    pointerEvents: style.pointerEvents,
+    position: style.position,
+    overflow: style.overflow,
+    overflowX: style.overflowX,
+    overflowY: style.overflowY,
+    color: style.color,
+    backgroundColor: style.backgroundColor,
+    fontSize: style.fontSize,
+  };
 }
 
 function createContentErrorResponse(id: string, error: unknown): ResponseEnvelope {
@@ -407,7 +592,7 @@ function getRole(element: Element): string {
     case "label":
       return "label";
     default:
-      return "generic";
+      return isScrollableContainer(element) ? "region" : "generic";
   }
 }
 
@@ -469,6 +654,10 @@ function getAccessibleName(element: Element): string | undefined {
 
 function getMetadata(element: Element, role: string): readonly string[] {
   const metadata: string[] = [];
+  if (isScrollableContainer(element)) {
+    metadata.push("scrollable=true");
+  }
+
   if (element.localName.match(/^h[1-6]$/u)) {
     metadata.push(`level=${element.localName.slice(1)}`);
   }
@@ -513,6 +702,10 @@ function getMetadata(element: Element, role: string): readonly string[] {
 function isInteractive(element: Element, role: string): boolean {
   if (element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true") {
     return false;
+  }
+
+  if (isScrollableContainer(element)) {
+    return true;
   }
 
   if (
@@ -563,6 +756,35 @@ function isVisible(element: Element): boolean {
   return true;
 }
 
+function isScrollableContainer(element: Element): boolean {
+  const view = element.ownerDocument.defaultView;
+  const style =
+    view === null
+      ? (element.getAttribute("style")?.toLowerCase() ?? "")
+      : view.getComputedStyle(element);
+  const overflowX =
+    typeof style === "string" ? readInlineStyle(style, "overflow-x") : style.overflowX;
+  const overflowY =
+    typeof style === "string" ? readInlineStyle(style, "overflow-y") : style.overflowY;
+  const overflow = typeof style === "string" ? readInlineStyle(style, "overflow") : style.overflow;
+  const canScroll =
+    [overflowX, overflowY, overflow].some((value) => value === "auto" || value === "scroll") ||
+    false;
+  return (
+    canScroll &&
+    (element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth)
+  );
+}
+
+function readInlineStyle(style: string, property: string): string | undefined {
+  return style
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${property}:`))
+    ?.slice(property.length + 1)
+    .trim();
+}
+
 function describeFrame(element: Element): string {
   const id = element.getAttribute("id");
   if (id !== null && id.length > 0) {
@@ -587,7 +809,11 @@ function truncateText(
     return { text, truncated: false };
   }
 
-  const marker = "\n[truncated]";
+  const marker = "[truncated]";
+  if (encoder.encode(marker).length > maxBytes) {
+    return { text: truncateToByteLimit(marker, maxBytes), truncated: true };
+  }
+
   const lines: string[] = [];
   for (const line of text.split("\n")) {
     const candidate = [...lines, line, marker].join("\n");
@@ -598,9 +824,22 @@ function truncateText(
   }
 
   return {
-    text: [...lines, marker.trimStart()].join("\n"),
+    text: [...lines, marker].join("\n"),
     truncated: true,
   };
+}
+
+function truncateToByteLimit(text: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  let truncated = "";
+  for (const char of text) {
+    const candidate = `${truncated}${char}`;
+    if (encoder.encode(candidate).length > maxBytes) {
+      break;
+    }
+    truncated = candidate;
+  }
+  return truncated;
 }
 
 function escapeCssString(value: string): string {

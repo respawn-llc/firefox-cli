@@ -2,6 +2,7 @@ import {
   createErrorResponse,
   createOkResponse,
   type CommandId,
+  type GetResult,
   type RefResolveResult,
   type RequestEnvelope,
   type ResponseEnvelope,
@@ -230,13 +231,37 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (request.command === "get") {
+    const command = request as RequestEnvelope<"get">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    if (command.params.kind === "title" || command.params.kind === "url") {
+      return createOkResponse(command, {
+        kind: command.params.kind,
+        value:
+          command.params.kind === "title" ? (resolved.tab.title ?? "") : (resolved.tab.url ?? ""),
+        target: resolved.target,
+      });
+    }
+
+    const getResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!getResponse.ok) {
+      return createErrorResponse(command.id, getResponse.error);
+    }
+
+    const result: GetResult = {
+      ...getResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported browser command: ${request.command}`,
   });
 }
 
-async function sendContentCommand<C extends Extract<CommandId, "snapshot" | "ref.resolve">>(
+async function sendContentCommand<C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get">>(
   adapter: BackgroundBrowserAdapter,
   tabId: number,
   command: RequestEnvelope<C>,

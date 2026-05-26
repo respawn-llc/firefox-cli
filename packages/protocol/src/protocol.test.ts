@@ -140,6 +140,13 @@ describe("parseBoundaryRequest", () => {
         "snapshot-1",
       ),
       createRequest("ref.resolve", { ref: "@e1", generationId: "g1" }, "ref-resolve-1"),
+      createRequest("get", { kind: "text", selector: "#main", maxOutputBytes: 1000 }, "get-1"),
+      createRequest(
+        "get",
+        { kind: "attr", ref: "@e1", generationId: "g1", attribute: "href" },
+        "get-2",
+      ),
+      createRequest("get", { kind: "title" }, "get-title-1"),
     ];
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
@@ -288,6 +295,116 @@ describe("parseBoundaryResponse", () => {
       ok: true,
       value: response,
     });
+  });
+
+  it("validates get responses with scalar and object values", () => {
+    const text = createRequest("get", { kind: "text", selector: "#main" }, "get-text-1");
+    const box = createRequest("get", { kind: "box", ref: "@e1" }, "get-box-1");
+
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "get",
+        createOkResponse(text, {
+          kind: "text",
+          value: "Hello",
+          truncated: false,
+          element: {
+            ref: "@e1",
+            generationId: "g1",
+            tagName: "main",
+            role: "main",
+            visible: true,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "get",
+        createOkResponse(box, {
+          kind: "box",
+          value: {
+            x: 1,
+            y: 2,
+            width: 100,
+            height: 20,
+            top: 2,
+            right: 101,
+            bottom: 22,
+            left: 1,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rejects attr getters without an attribute name", () => {
+    const parsed = parseBoundaryRequest("host-to-extension", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: "get-1",
+      command: "get",
+      params: {
+        kind: "attr",
+        selector: "a",
+      },
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+    }
+  });
+
+  it("rejects get responses whose value does not match the getter kind", () => {
+    const request = createRequest("get", { kind: "count", selector: ".item" }, "get-1");
+    const parsed = parseBoundaryResponse("extension-to-content-script", "get", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: request.id,
+      ok: true,
+      result: {
+        kind: "count",
+        value: "2",
+      },
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error.code).toBe("INVALID_RESPONSE");
+    }
+  });
+
+  it("rejects malformed get box and styles result objects", () => {
+    const box = createRequest("get", { kind: "box", selector: "#main" }, "get-box-1");
+    const styles = createRequest("get", { kind: "styles", selector: "#main" }, "get-styles-1");
+
+    for (const response of [
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: box.id,
+        ok: true,
+        result: {
+          kind: "box",
+          value: { x: "oops" },
+        },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: styles.id,
+        ok: true,
+        result: {
+          kind: "styles",
+          value: { display: "block", surprise: true },
+        },
+      },
+    ]) {
+      const parsed = parseBoundaryResponse("extension-to-content-script", "get", response);
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_RESPONSE");
+      }
+    }
   });
 
   it("rejects invalid ref resolve params", () => {

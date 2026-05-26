@@ -196,6 +196,79 @@ describe("browser command handling", () => {
     ]);
   });
 
+  it("gets tab title and URL from resolved target metadata without content injection", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [
+        tabSummary(101, 0, true, 10, { url: "https://example.test/", title: "Example title" }),
+      ]),
+    ]);
+
+    await expect(
+      handleBrowserRequest(createRequest("get", { kind: "title" }, "get-title-1"), adapter),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "title",
+        value: "Example title",
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    await expect(
+      handleBrowserRequest(createRequest("get", { kind: "url" }, "get-url-1"), adapter),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "url",
+        value: "https://example.test/",
+      },
+    });
+    expect(adapter.contentRequests).toEqual([]);
+  });
+
+  it("routes element getters to the resolved tab content script and adds target metadata", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("get", { kind: "text", selector: "#main" }, "get-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "text",
+        value: "Submit",
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "get" }]);
+  });
+
+  it("maps restricted-page getter injection failures to actionable errors", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.contentFailure = new Error("Cannot access a restricted Firefox page");
+
+    const response = await handleBrowserRequest(
+      createRequest("get", { kind: "text", selector: "body" }, "get-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "SCRIPT_INJECTION_FAILED",
+      },
+    });
+  });
+
   it("maps content-script injection failures to actionable errors", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -328,26 +401,36 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     if (this.contentFailure !== undefined) {
       throw this.contentFailure;
     }
-    return createOkResponse(request, {
-      ...(request.command === "ref.resolve"
-        ? {
-            element: {
-              ref: "@e1",
-              generationId: "g1",
-              tagName: "button",
-              role: "button",
-              name: "Submit",
-              text: "Submit",
-              visible: true,
-            },
-          }
-        : {
-            generationId: "g1",
-            text: '@e1 button "Submit"',
-            refs: 1,
-            truncated: false,
-            frames: [],
-          }),
+
+    if (request.command === "ref.resolve") {
+      return createOkResponse(request as RequestEnvelope<"ref.resolve">, {
+        element: {
+          ref: "@e1",
+          generationId: "g1",
+          tagName: "button",
+          role: "button",
+          name: "Submit",
+          text: "Submit",
+          visible: true,
+        },
+      });
+    }
+
+    if (request.command === "get") {
+      const getRequest = request as RequestEnvelope<"get">;
+      return createOkResponse(getRequest, {
+        kind: "text",
+        value: "Submit",
+        truncated: false,
+      });
+    }
+
+    return createOkResponse(request as RequestEnvelope<"snapshot">, {
+      generationId: "g1",
+      text: '@e1 button "Submit"',
+      refs: 1,
+      truncated: false,
+      frames: [],
     });
   }
 
@@ -378,13 +461,13 @@ function tabSummary(
   index: number,
   active: boolean,
   windowId: number,
-  options: { readonly url?: string; readonly private?: boolean } = {},
+  options: { readonly title?: string; readonly url?: string; readonly private?: boolean } = {},
 ): BrowserWindowSnapshot["tabs"][number] {
   return {
     id,
     index,
     active,
-    title: `Tab ${id}`,
+    title: options.title ?? `Tab ${id}`,
     url: options.url ?? `https://example.com/${id}`,
     windowId,
     private: options.private ?? false,
