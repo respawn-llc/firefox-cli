@@ -3,7 +3,7 @@ import { ElementRefRegistry, handleContentScriptRequest } from "./content-snapsh
 
 const registry = new ElementRefRegistry<Element>();
 
-browser.runtime.onMessage.addListener((message: unknown) => {
+browser.runtime.onMessage.addListener(async (message: unknown) => {
   const request = parseBoundaryRequest("extension-to-content-script", message);
   if (!request.ok) {
     return createErrorResponse("invalid-content-request", request.error);
