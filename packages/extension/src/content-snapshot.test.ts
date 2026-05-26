@@ -560,6 +560,146 @@ describe("content snapshot", () => {
     });
   });
 
+  it("waits for element state, visible text, load state, and function predicates", async () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="ready">Ready</button>
+        <div style="display: none">Hidden Ready</div>
+      </main>`,
+      { url: "https://example.test/" },
+    );
+    Object.defineProperty(window.document, "readyState", { value: "complete", configurable: true });
+    const registry = new ElementRefRegistry<Element>();
+
+    await expect(
+      handleContentScriptRequest(
+        createRequest("wait", { kind: "element", selector: "#ready", state: "visible" }, "w1"),
+        { document: window.document, registry, now: 1000 },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "element",
+        matched: true,
+        elapsedMs: expect.any(Number),
+        element: {
+          tagName: "button",
+          role: "button",
+          visible: true,
+        },
+      },
+    });
+    await expect(
+      handleContentScriptRequest(
+        createRequest("wait", { kind: "element", selector: "#missing", state: "hidden" }, "w2"),
+        { document: window.document, registry, now: 1000 },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "element",
+        matched: true,
+      },
+    });
+    await expect(
+      handleContentScriptRequest(createRequest("wait", { kind: "text", text: "Ready" }, "w3"), {
+        document: window.document,
+        registry,
+        now: 1000,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "text",
+        matched: true,
+        value: "Ready",
+      },
+    });
+    await expect(
+      handleContentScriptRequest(
+        createRequest("wait", { kind: "load-state", state: "domcontentloaded" }, "w4"),
+        { document: window.document, registry, now: 1000 },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "load-state",
+        matched: true,
+      },
+    });
+    await expect(
+      handleContentScriptRequest(
+        createRequest("wait", { kind: "function", expression: "({ ready: true })" }, "w5"),
+        { document: window.document, registry, now: 1000 },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        kind: "function",
+        matched: true,
+        value: {
+          ready: true,
+        },
+      },
+    });
+  });
+
+  it("returns TIMEOUT for unsatisfied content waits", async () => {
+    const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+
+    await expect(
+      handleContentScriptRequest(
+        createRequest(
+          "wait",
+          { kind: "element", selector: "#ready", state: "visible", timeoutMs: 1, intervalMs: 1 },
+          "wait-1",
+        ),
+        { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "TIMEOUT",
+      },
+    });
+  });
+
+  it("keeps stale refs as REF_NOT_FOUND even for hidden waits", async () => {
+    const { window } = new JSDOM(`<button id="save">Save</button>`, {
+      url: "https://example.test/",
+    });
+    const registry = new ElementRefRegistry<Element>();
+    const snapshot = handleContentScriptRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+      { document: window.document, registry, now: 1000 },
+    ) as ResponseEnvelope<"snapshot">;
+    if (!snapshot.ok) {
+      throw new Error("snapshot failed");
+    }
+    window.document.querySelector("#save")?.remove();
+
+    await expect(
+      handleContentScriptRequest(
+        createRequest(
+          "wait",
+          {
+            kind: "element",
+            ref: "@e1",
+            generationId: snapshot.result.generationId,
+            state: "hidden",
+          },
+          "wait-1",
+        ),
+        { document: window.document, registry, now: 1001 },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "REF_NOT_FOUND",
+      },
+    });
+  });
+
   it("returns REF_NOT_FOUND when resolving an unknown ref", () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
 

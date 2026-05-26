@@ -15,11 +15,13 @@ import {
   type SnapshotFrameDiagnostic,
   type SnapshotParams,
   type SnapshotResult,
+  type WaitParams,
+  type WaitElementSummary,
 } from "@firefox-cli/protocol";
+import { createWaitResult } from "./content-wait.js";
+import { type ElementRefRegistry, ElementRefRegistryError } from "./element-ref-registry.js";
+export { ElementRefRegistry } from "./element-ref-registry.js";
 
-const DEFAULT_REF_TTL_MS = 10 * 60 * 1000;
-const DEFAULT_MAX_GENERATIONS = 5;
-const DEFAULT_MAX_REFS = 1000;
 const DEFAULT_MAX_OUTPUT_BYTES = 60_000;
 
 type SnapshotEntry = {
@@ -29,116 +31,6 @@ type SnapshotEntry = {
   readonly name?: string;
   readonly metadata: readonly string[];
 };
-
-type SnapshotGeneration<TElement> = {
-  readonly id: string;
-  readonly createdAt: number;
-  readonly expiresAt: number;
-  readonly refs: ReadonlyMap<string, TElement>;
-};
-
-export class ElementRefRegistry<TElement> {
-  readonly #ttlMs: number;
-  readonly #maxGenerations: number;
-  readonly #maxRefs: number;
-  #counter = 0;
-  #latestGenerationId: string | undefined;
-  readonly #generations = new Map<string, SnapshotGeneration<TElement>>();
-
-  constructor(
-    options: {
-      readonly ttlMs?: number;
-      readonly maxGenerations?: number;
-      readonly maxRefs?: number;
-    } = {},
-  ) {
-    this.#ttlMs = options.ttlMs ?? DEFAULT_REF_TTL_MS;
-    this.#maxGenerations = options.maxGenerations ?? DEFAULT_MAX_GENERATIONS;
-    this.#maxRefs = options.maxRefs ?? DEFAULT_MAX_REFS;
-  }
-
-  createGeneration(
-    elements: readonly TElement[],
-    now = Date.now(),
-  ): {
-    readonly generationId: string;
-    readonly refsByElement: ReadonlyMap<TElement, string>;
-    readonly refCount: number;
-  } {
-    this.#prune(now);
-    this.#counter += 1;
-    const generationId = `g${now.toString(36)}-${this.#counter.toString(36)}`;
-    const refs = new Map<string, TElement>();
-    const refsByElement = new Map<TElement, string>();
-    for (const [index, element] of elements.slice(0, this.#maxRefs).entries()) {
-      const ref = `@e${index + 1}`;
-      refs.set(ref, element);
-      refsByElement.set(element, ref);
-    }
-
-    this.#generations.set(generationId, {
-      id: generationId,
-      createdAt: now,
-      expiresAt: now + this.#ttlMs,
-      refs,
-    });
-    this.#latestGenerationId = generationId;
-    this.#trimGenerations();
-    return { generationId, refsByElement, refCount: refs.size };
-  }
-
-  resolve(
-    ref: string,
-    options: { readonly generationId?: string; readonly now?: number } = {},
-  ): TElement {
-    return this.resolveRef(ref, options).element;
-  }
-
-  resolveRef(
-    ref: string,
-    options: { readonly generationId?: string; readonly now?: number } = {},
-  ): { readonly element: TElement; readonly generationId: string } {
-    const now = options.now ?? Date.now();
-    this.#prune(now);
-    const generationId = options.generationId ?? this.#latestGenerationId;
-    const generation = generationId === undefined ? undefined : this.#generations.get(generationId);
-    const element = generation?.refs.get(ref);
-    if (generation === undefined || element === undefined || isDetachedElement(element)) {
-      throw new ContentSnapshotError("REF_NOT_FOUND", "Element ref is stale or unknown.");
-    }
-
-    return { element, generationId: generation.id };
-  }
-
-  invalidate(): void {
-    this.#latestGenerationId = undefined;
-    this.#generations.clear();
-  }
-
-  #prune(now: number): void {
-    for (const generation of this.#generations.values()) {
-      if (generation.expiresAt <= now) {
-        this.#generations.delete(generation.id);
-      }
-    }
-
-    if (
-      this.#latestGenerationId !== undefined &&
-      !this.#generations.has(this.#latestGenerationId)
-    ) {
-      this.#latestGenerationId = [...this.#generations.values()]
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .at(0)?.id;
-    }
-  }
-
-  #trimGenerations(): void {
-    const ordered = [...this.#generations.values()].sort((a, b) => b.createdAt - a.createdAt);
-    for (const generation of ordered.slice(this.#maxGenerations)) {
-      this.#generations.delete(generation.id);
-    }
-  }
-}
 
 export function createSnapshotResult(
   document: Document,
@@ -181,8 +73,10 @@ export function handleContentScriptRequest(
     readonly document: Document;
     readonly registry: ElementRefRegistry<Element>;
     readonly now?: number;
+    readonly clock?: () => number;
+    readonly sleep?: (durationMs: number) => Promise<void>;
   },
-): ResponseEnvelope {
+): ResponseEnvelope | Promise<ResponseEnvelope> {
   if (request.command === "snapshot") {
     try {
       return createOkResponse(
@@ -242,6 +136,29 @@ export function handleContentScriptRequest(
     } catch (error) {
       return createContentErrorResponse(request.id, error);
     }
+  }
+
+  if (request.command === "wait") {
+    return createWaitResult({
+      document: options.document,
+      params: request.params as WaitParams,
+      ...(options.now === undefined ? {} : { now: options.now }),
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+      ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
+      resolveRef: (ref, resolveOptions) =>
+        options.registry.resolveRef(ref, {
+          ...(resolveOptions.generationId === undefined
+            ? {}
+            : { generationId: resolveOptions.generationId }),
+          now: resolveOptions.now,
+        }),
+      queryElement: (selector) => queryOptionalElement(options.document, selector),
+      summarizeElement: summarizeWaitElement,
+      isVisible,
+      createError: (code, message) => new ContentSnapshotError(code, message),
+    })
+      .then((result) => createOkResponse(request, result))
+      .catch((error: unknown) => createContentErrorResponse(request.id, error));
   }
 
   return createErrorResponse(request.id, {
@@ -381,21 +298,23 @@ function resolveElementForContentCommand(
 }
 
 function querySingleElement(document: Document, selector: string): Element {
-  let element: Element | null;
+  const element = queryOptionalElement(document, selector);
+  if (element === null) {
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector not found: ${selector}`);
+  }
+
+  return element;
+}
+
+function queryOptionalElement(document: Document, selector: string): Element | null {
   try {
-    element = document.querySelector(selector);
+    return document.querySelector(selector);
   } catch (error) {
     throw new ContentSnapshotError(
       "SELECTOR_NOT_FOUND",
       `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-
-  if (element === null) {
-    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector not found: ${selector}`);
-  }
-
-  return element;
 }
 
 function queryAllElements(document: Document, selector: string): readonly Element[] {
@@ -457,7 +376,10 @@ function styleValue(element: Element): GetStylesValue {
 
 function createContentErrorResponse(id: string, error: unknown): ResponseEnvelope {
   return createErrorResponse(id, {
-    code: error instanceof ContentSnapshotError ? error.code : "SCRIPT_INJECTION_FAILED",
+    code:
+      error instanceof ContentSnapshotError || error instanceof ElementRefRegistryError
+        ? error.code
+        : "SCRIPT_INJECTION_FAILED",
     message: error instanceof Error ? error.message : String(error),
   });
 }
@@ -466,6 +388,29 @@ function summarizeElement(
   element: Element,
   options: { readonly ref: string; readonly generationId: string },
 ): ElementSummary {
+  return {
+    ref: options.ref,
+    generationId: options.generationId,
+    ...summarizeElementBase(element),
+  };
+}
+
+function summarizeWaitElement(
+  element: Element,
+  options?: { readonly ref: string; readonly generationId: string },
+): WaitElementSummary {
+  return {
+    ...(options === undefined
+      ? {}
+      : {
+          ref: options.ref,
+          generationId: options.generationId,
+        }),
+    ...summarizeElementBase(element),
+  };
+}
+
+function summarizeElementBase(element: Element): Omit<ElementSummary, "ref" | "generationId"> {
   const text = collapseWhitespace(element.textContent ?? "").slice(0, 500);
   const value = getElementValue(element);
   const href = element.getAttribute("href");
@@ -474,8 +419,6 @@ function summarizeElement(
   const name = getAccessibleName(element);
 
   return {
-    ref: options.ref,
-    generationId: options.generationId,
     tagName: element.localName,
     role: getRole(element),
     visible: isVisible(element),
@@ -566,15 +509,6 @@ function isNativelyDisabledFallback(element: Element): boolean {
 function isDescendantOfFirstLegend(element: Element, fieldset: Element): boolean {
   const firstLegend = Array.from(fieldset.children).find((child) => child.localName === "legend");
   return firstLegend === undefined ? false : firstLegend.contains(element);
-}
-
-function isDetachedElement(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "isConnected" in value &&
-    value.isConnected === false
-  );
 }
 
 function resolveScope(document: Document, selector: string | undefined): Element {
@@ -969,6 +903,7 @@ export class ContentSnapshotError extends Error {
     | "REF_NOT_FOUND"
     | "OUTPUT_TOO_LARGE"
     | "UNSUPPORTED_CAPABILITY"
+    | "TIMEOUT"
   >;
 
   constructor(code: ContentSnapshotError["code"], message: string) {

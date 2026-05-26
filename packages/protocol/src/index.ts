@@ -38,6 +38,7 @@ export const errorCodeSchema = z.enum([
   "SELECTOR_NOT_FOUND",
   "REF_NOT_FOUND",
   "OUTPUT_TOO_LARGE",
+  "TIMEOUT",
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
@@ -287,6 +288,27 @@ export const elementSummarySchema = z
   .strict();
 export type ElementSummary = z.infer<typeof elementSummarySchema>;
 
+export const waitElementSummarySchema = elementSummarySchema
+  .omit({
+    ref: true,
+    generationId: true,
+  })
+  .extend({
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine((summary, context) => {
+    if ((summary.ref === undefined) !== (summary.generationId === undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Wait element summaries require both ref and generationId, or neither.",
+        path: summary.ref === undefined ? ["generationId"] : ["ref"],
+      });
+    }
+  });
+export type WaitElementSummary = z.infer<typeof waitElementSummarySchema>;
+
 export const refResolveParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
@@ -479,6 +501,184 @@ export const isResultSchema = z
   .strict();
 export type IsResult = z.infer<typeof isResultSchema>;
 
+export const waitKindSchema = z.enum(["ms", "element", "text", "url", "function", "load-state"]);
+export type WaitKind = z.infer<typeof waitKindSchema>;
+export const waitStateSchema = z.enum([
+  "visible",
+  "hidden",
+  "attached",
+  "domcontentloaded",
+  "complete",
+]);
+export type WaitState = z.infer<typeof waitStateSchema>;
+
+export const waitParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    kind: waitKindSchema,
+    durationMs: z.number().int().nonnegative().max(600_000).optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+    state: waitStateSchema.optional(),
+    text: z.string().min(1).optional(),
+    urlGlob: z.string().min(1).optional(),
+    expression: z.string().min(1).max(20_000).optional(),
+    timeoutMs: z.number().int().positive().max(600_000).optional(),
+    intervalMs: z.number().int().positive().max(60_000).optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if (params.kind === "ms" && params.durationMs === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Duration waits require durationMs.",
+        path: ["durationMs"],
+      });
+    }
+
+    if (params.kind !== "ms" && params.durationMs !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only duration waits accept durationMs.",
+        path: ["durationMs"],
+      });
+    }
+
+    if (
+      params.kind === "element" &&
+      (params.selector === undefined) === (params.ref === undefined)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Element waits require exactly one selector or ref.",
+        path: ["selector"],
+      });
+    }
+
+    if (
+      params.kind === "element" &&
+      params.state !== undefined &&
+      params.state !== "visible" &&
+      params.state !== "hidden" &&
+      params.state !== "attached"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Element waits require visible, hidden, or attached state.",
+        path: ["state"],
+      });
+    }
+
+    if (params.kind === "text" && params.text === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Text waits require text.",
+        path: ["text"],
+      });
+    }
+
+    if (params.kind !== "text" && params.text !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only text waits accept text.",
+        path: ["text"],
+      });
+    }
+
+    if (params.kind === "url" && params.urlGlob === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "URL waits require urlGlob.",
+        path: ["urlGlob"],
+      });
+    }
+
+    if (params.kind !== "url" && params.urlGlob !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only URL waits accept urlGlob.",
+        path: ["urlGlob"],
+      });
+    }
+
+    if (params.kind === "function" && params.expression === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Function waits require expression.",
+        path: ["expression"],
+      });
+    }
+
+    if (params.kind !== "function" && params.expression !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only function waits accept expression.",
+        path: ["expression"],
+      });
+    }
+
+    if (
+      params.kind === "load-state" &&
+      params.state !== "domcontentloaded" &&
+      params.state !== "complete"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Load-state waits require domcontentloaded or complete state.",
+        path: ["state"],
+      });
+    }
+
+    if (params.kind !== "element" && params.kind !== "load-state" && params.state !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only element and load-state waits accept state.",
+        path: ["state"],
+      });
+    }
+
+    if (params.kind !== "element" && (params.selector !== undefined || params.ref !== undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only element waits accept selector or ref.",
+        path: params.selector === undefined ? ["ref"] : ["selector"],
+      });
+    }
+
+    if (params.ref === undefined && params.generationId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Generation IDs apply only to refs.",
+        path: ["generationId"],
+      });
+    }
+  });
+export type WaitParams = z.infer<typeof waitParamsSchema>;
+
+const waitBaseResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    matched: z.literal(true),
+    elapsedMs: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const waitResultSchema = z.discriminatedUnion("kind", [
+  waitBaseResultSchema.extend({ kind: z.literal("ms") }).strict(),
+  waitBaseResultSchema
+    .extend({
+      kind: z.literal("element"),
+      element: waitElementSummarySchema.optional(),
+    })
+    .strict(),
+  waitBaseResultSchema.extend({ kind: z.literal("text"), value: z.string() }).strict(),
+  waitBaseResultSchema.extend({ kind: z.literal("url"), value: z.string() }).strict(),
+  waitBaseResultSchema.extend({ kind: z.literal("function"), value: getValueSchema }).strict(),
+  waitBaseResultSchema.extend({ kind: z.literal("load-state") }).strict(),
+]);
+export type WaitResult = z.infer<typeof waitResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -589,6 +789,11 @@ export const commandSchemas = {
   is: {
     params: isParamsSchema,
     result: isResultSchema,
+    status: "mvp",
+  },
+  wait: {
+    params: waitParamsSchema,
+    result: waitResultSchema,
     status: "mvp",
   },
   "pair.approve": {

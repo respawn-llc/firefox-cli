@@ -18,6 +18,7 @@ import {
   type ResolvedTarget,
   type TabSummary,
   type TargetSelector,
+  type WaitResult,
 } from "@firefox-cli/protocol";
 
 export type CliExitCode = 0 | 1;
@@ -120,6 +121,10 @@ async function runCliOrThrow(
     return is(args.slice(1), dependencies);
   }
 
+  if (args[0] === "wait") {
+    return wait(args.slice(1), dependencies);
+  }
+
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
   }
@@ -148,6 +153,8 @@ export function renderHelp(): string {
     "  firefox-cli get text|html|value|attr|count|box|styles <selector|@ref> [--json]",
     "  firefox-cli get title|url [--json]",
     "  firefox-cli is visible|enabled|checked <selector|@ref> [--generation id] [--json]",
+    "  firefox-cli wait <ms|selector|@ref> [--state visible|hidden|attached] [--json]",
+    "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
     "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
     "  firefox-cli window [new|select|close] [target-or-url] [--json]",
     "",
@@ -634,6 +641,33 @@ async function is(args: readonly string[], dependencies: CliDependencies): Promi
     : ok(`${response.result.value}\n`);
 }
 
+async function wait(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const waitArgs = parseWaitArguments(args);
+  const params = parseWaitParams(waitArgs);
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("wait", {
+      ...params,
+      ...(waitArgs.timeout === undefined
+        ? {}
+        : { timeoutMs: parsePositiveIntegerValue(waitArgs.timeout, "timeout") }),
+      ...(waitArgs.interval === undefined
+        ? {}
+        : { intervalMs: parsePositiveIntegerValue(waitArgs.interval, "interval") }),
+      ...optionalTarget(parseTargetOptions(args)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatWaitResult(response.result)}\n`);
+}
+
 async function createManifestPlan(dependencies: CliDependencies) {
   if (dependencies.binaryPath !== undefined) {
     return planNativeMessagingManifest({
@@ -816,6 +850,176 @@ function isIsKind(value: string | undefined): value is "visible" | "enabled" | "
   return value === "visible" || value === "enabled" || value === "checked";
 }
 
+type ParsedWaitArguments = {
+  readonly positionals: readonly string[];
+  readonly text?: string;
+  readonly urlGlob?: string;
+  readonly expression?: string;
+  readonly loadState?: string;
+  readonly state?: string;
+  readonly generationId?: string;
+  readonly timeout?: string;
+  readonly interval?: string;
+};
+
+function parseWaitParams(waitArgs: ParsedWaitArguments): {
+  readonly kind: "ms" | "element" | "text" | "url" | "function" | "load-state";
+  readonly durationMs?: number;
+  readonly selector?: string;
+  readonly ref?: string;
+  readonly generationId?: string;
+  readonly state?: "visible" | "hidden" | "attached" | "domcontentloaded" | "complete";
+  readonly text?: string;
+  readonly urlGlob?: string;
+  readonly expression?: string;
+} {
+  const conditionCount = [
+    waitArgs.text,
+    waitArgs.urlGlob,
+    waitArgs.expression,
+    waitArgs.loadState,
+  ].filter((value) => value !== undefined).length;
+  if (conditionCount > 1) {
+    throw new CliUsageError("Specify exactly one wait condition.");
+  }
+
+  if (conditionCount > 0 && waitArgs.positionals.length > 0) {
+    throw new CliUsageError("Specify exactly one wait condition.");
+  }
+
+  if (conditionCount > 0 && waitArgs.state !== undefined) {
+    throw new CliUsageError("Only element waits accept --state.");
+  }
+
+  if (conditionCount > 0 && waitArgs.generationId !== undefined) {
+    throw new CliUsageError("Only element waits accept --generation.");
+  }
+
+  if (waitArgs.text !== undefined) {
+    return { kind: "text", text: waitArgs.text };
+  }
+
+  if (waitArgs.urlGlob !== undefined) {
+    return { kind: "url", urlGlob: waitArgs.urlGlob };
+  }
+
+  if (waitArgs.expression !== undefined) {
+    return { kind: "function", expression: waitArgs.expression };
+  }
+
+  if (waitArgs.loadState !== undefined) {
+    if (waitArgs.loadState !== "domcontentloaded" && waitArgs.loadState !== "complete") {
+      throw new CliUsageError(`Invalid load state: ${waitArgs.loadState}`);
+    }
+    return { kind: "load-state", state: waitArgs.loadState };
+  }
+
+  const target = waitArgs.positionals[0];
+  if (target === undefined) {
+    throw new CliUsageError("Missing wait target or condition.");
+  }
+
+  if (waitArgs.positionals.length > 1) {
+    throw new CliUsageError("Specify exactly one wait condition.");
+  }
+
+  if (/^\d+$/u.test(target)) {
+    if (waitArgs.state !== undefined) {
+      throw new CliUsageError("Only element waits accept --state.");
+    }
+    if (waitArgs.generationId !== undefined) {
+      throw new CliUsageError("Only element waits accept --generation.");
+    }
+    return { kind: "ms", durationMs: Number(target) };
+  }
+
+  const elementState = waitArgs.state ?? "visible";
+  if (elementState !== "visible" && elementState !== "hidden" && elementState !== "attached") {
+    throw new CliUsageError(`Invalid wait state: ${elementState}`);
+  }
+  const elementTarget = parseElementTarget(target);
+  if (elementTarget.ref === undefined && waitArgs.generationId !== undefined) {
+    throw new CliUsageError("Generation IDs apply only to refs.");
+  }
+
+  return {
+    kind: "element",
+    ...elementTarget,
+    state: elementState,
+    ...(waitArgs.generationId === undefined ? {} : { generationId: waitArgs.generationId }),
+  };
+}
+
+function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {
+  const parsed: {
+    positionals: string[];
+    text?: string;
+    urlGlob?: string;
+    expression?: string;
+    loadState?: string;
+    state?: string;
+    generationId?: string;
+    timeout?: string;
+    interval?: string;
+  } = { positionals: [] };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined || arg === "--json") {
+      continue;
+    }
+
+    if (arg === "--window" || arg === "--tab") {
+      readFlagValue(args, index, arg);
+      index += 1;
+      continue;
+    }
+
+    switch (arg) {
+      case "--text":
+        parsed.text = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--url":
+        parsed.urlGlob = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--fn":
+        parsed.expression = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--load":
+        parsed.loadState = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--state":
+        parsed.state = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--generation":
+        parsed.generationId = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--timeout":
+        parsed.timeout = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--interval":
+        parsed.interval = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      default:
+        if (arg.startsWith("-")) {
+          throw new CliUsageError(`Unsupported wait option: ${arg}`);
+        }
+        parsed.positionals.push(arg);
+        break;
+    }
+  }
+
+  return parsed;
+}
+
 function parseElementTarget(value: string | undefined): {
   readonly selector?: string;
   readonly ref?: string;
@@ -847,6 +1051,21 @@ function formatGetValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function formatWaitResult(result: WaitResult): string {
+  const suffix = `in ${result.elapsedMs}ms`;
+  if (result.kind === "element" && result.element !== undefined) {
+    const element = result.element;
+    const refPrefix = element.ref === undefined ? "" : `${element.ref} `;
+    return `${refPrefix}${element.role} ${element.name ?? element.text ?? element.tagName} ${suffix}`;
+  }
+
+  if ("value" in result && result.value !== undefined) {
+    return `${formatGetValue(result.value)} ${suffix}`;
+  }
+
+  return `matched ${suffix}`;
+}
+
 function getPositionals(args: readonly string[]): readonly string[] {
   const positionals: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
@@ -875,7 +1094,14 @@ function getPositionals(args: readonly string[]): readonly string[] {
       arg === "-s" ||
       arg === "--selector" ||
       arg === "--max-output" ||
-      arg === "--generation"
+      arg === "--generation" ||
+      arg === "--state" ||
+      arg === "--text" ||
+      arg === "--url" ||
+      arg === "--fn" ||
+      arg === "--load" ||
+      arg === "--timeout" ||
+      arg === "--interval"
     ) {
       index += 1;
       continue;
@@ -985,6 +1211,23 @@ function optionalPositiveInteger(
   }
 
   return { [outputKey]: parsed };
+}
+
+function parsePositiveIntegerValue(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new CliUsageError(`Invalid ${label}: ${value}`);
+  }
+
+  return parsed;
+}
+
+function readFlagValue(args: readonly string[], index: number, flag: string): string {
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("-")) {
+    throw new CliUsageError(`Missing value for ${flag}.`);
+  }
+  return value;
 }
 
 function getOptionValue(args: readonly string[], names: readonly string[]): string | undefined {

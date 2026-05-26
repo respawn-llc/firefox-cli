@@ -11,9 +11,13 @@ import {
   type SnapshotResult,
   type TabSummary,
   type TargetSelector,
+  type WaitResult,
   type WindowSummary,
   parseBoundaryResponse,
 } from "@firefox-cli/protocol";
+
+const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
+const DEFAULT_WAIT_INTERVAL_MS = 100;
 
 export type BrowserWindowSnapshot = {
   readonly id: number;
@@ -271,6 +275,36 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (request.command === "wait") {
+    const command = request as RequestEnvelope<"wait">;
+    if (command.params.kind === "ms") {
+      const startedAt = Date.now();
+      await delay(command.params.durationMs);
+      return createOkResponse(command, {
+        kind: command.params.kind,
+        matched: true,
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+      });
+    }
+
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    if (command.params.kind === "url") {
+      const result = await waitForUrl(adapter, resolved.tab.id, command.params);
+      return createOkResponse(command, result);
+    }
+
+    const waitResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!waitResponse.ok) {
+      return createErrorResponse(command.id, waitResponse.error);
+    }
+
+    const result: WaitResult = {
+      ...waitResponse.result,
+      target: resolved.target,
+    };
+    return createOkResponse(command, result);
+  }
+
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported browser command: ${request.command}`,
@@ -278,7 +312,7 @@ async function handleBrowserRequestOrThrow(
 }
 
 async function sendContentCommand<
-  C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get" | "is">,
+  C extends Extract<CommandId, "snapshot" | "ref.resolve" | "get" | "is" | "wait">,
 >(
   adapter: BackgroundBrowserAdapter,
   tabId: number,
@@ -305,6 +339,43 @@ async function sendContentCommand<
   }
 
   return contentResponse.value as ResponseEnvelope<C>;
+}
+
+async function waitForUrl(
+  adapter: BackgroundBrowserAdapter,
+  tabId: number,
+  params: RequestEnvelope<"wait">["params"],
+): Promise<WaitResult> {
+  const startedAt = Date.now();
+  const timeoutMs = params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const intervalMs = params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS;
+  while (true) {
+    const match = findTabById(await getOrderedWindows(adapter), tabId);
+    if (match === undefined) {
+      throw new BrowserCommandError("INVALID_TARGET", "Requested Firefox tab was not found.");
+    }
+
+    const url = match.tab.url ?? "";
+    if (matchesGlob(url, params.urlGlob ?? "")) {
+      return {
+        kind: params.kind,
+        matched: true,
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+        value: url,
+        target: toResolvedTarget(match.window, match.tab),
+      };
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs >= timeoutMs) {
+      throw new BrowserCommandError(
+        "TIMEOUT",
+        `Timed out after ${timeoutMs}ms waiting for URL ${JSON.stringify(params.urlGlob ?? "")}.`,
+      );
+    }
+
+    await delay(Math.max(0, Math.min(intervalMs, timeoutMs - elapsedMs)));
+  }
 }
 
 async function getOrderedWindows(
@@ -482,11 +553,27 @@ class BrowserCommandError extends Error {
     | "UNSUPPORTED_CAPABILITY"
     | "PERMISSION_DENIED"
     | "NAVIGATION_FAILED"
-    | "SCRIPT_INJECTION_FAILED";
+    | "SCRIPT_INJECTION_FAILED"
+    | "TIMEOUT";
 
   constructor(code: BrowserCommandError["code"], message: string) {
     super(message);
     this.name = "BrowserCommandError";
     this.code = code;
   }
+}
+
+function matchesGlob(value: string, glob: string): boolean {
+  return new RegExp(
+    `^${escapeRegExp(glob).replaceAll("\\*", ".*").replaceAll("\\?", ".")}$`,
+    "u",
+  ).test(value);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[|\\{}()[\]^$+?.*]/gu, "\\$&");
+}
+
+function delay(durationMs: number | undefined): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs ?? 0));
 }

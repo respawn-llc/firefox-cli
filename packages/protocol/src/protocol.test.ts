@@ -149,6 +149,9 @@ describe("parseBoundaryRequest", () => {
       createRequest("get", { kind: "title" }, "get-title-1"),
       createRequest("is", { kind: "visible", selector: "#main" }, "is-1"),
       createRequest("is", { kind: "checked", ref: "@e1", generationId: "g1" }, "is-2"),
+      createRequest("wait", { kind: "ms", durationMs: 50 }, "wait-ms-1"),
+      createRequest("wait", { kind: "element", selector: "#main", state: "visible" }, "wait-1"),
+      createRequest("wait", { kind: "url", urlGlob: "https://example.test/*" }, "wait-url-1"),
     ];
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
@@ -465,6 +468,149 @@ describe("parseBoundaryResponse", () => {
     expect(invalidResult.ok).toBe(false);
     if (!invalidResult.ok) {
       expect(invalidResult.error.code).toBe("INVALID_RESPONSE");
+    }
+  });
+
+  it("validates wait responses with elapsed timing and serializable values", () => {
+    const element = createRequest(
+      "wait",
+      { kind: "element", selector: "#main", state: "visible" },
+      "wait-element-1",
+    );
+    const fn = createRequest("wait", { kind: "function", expression: "1" }, "wait-fn-1");
+
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "wait",
+        createOkResponse(element, {
+          kind: "element",
+          matched: true,
+          elapsedMs: 12,
+          element: {
+            ref: "@e1",
+            generationId: "g1",
+            tagName: "main",
+            role: "main",
+            visible: true,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "wait",
+        createOkResponse(fn, {
+          kind: "function",
+          matched: true,
+          elapsedMs: 3,
+          value: {
+            ready: true,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rejects invalid wait params and malformed wait results", () => {
+    for (const params of [
+      { kind: "ms" },
+      { kind: "ms", durationMs: 10, selector: "#main" },
+      { kind: "element", selector: "#main", ref: "@e1" },
+      { kind: "element", selector: "#main", generationId: "g1" },
+      { kind: "element", selector: "#main", state: "complete" },
+      { kind: "text" },
+      { kind: "text", text: "Ready", selector: "#main" },
+      { kind: "url" },
+      { kind: "url", urlGlob: "https://example.test/*", text: "Ready" },
+      { kind: "function" },
+      { kind: "function", expression: "true", urlGlob: "*" },
+      { kind: "load-state" },
+      { kind: "load-state", state: "visible" },
+      { kind: "load-state", state: "complete", ref: "@e1" },
+      { kind: "text", text: "Ready", durationMs: 10 },
+    ]) {
+      const invalidParams = parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "wait-1",
+        command: "wait",
+        params,
+      });
+      expect(invalidParams.ok).toBe(false);
+      if (!invalidParams.ok) {
+        expect(invalidParams.error.code).toBe("INVALID_ENVELOPE");
+      }
+    }
+
+    const request = createRequest("wait", { kind: "text", text: "Ready" }, "wait-2");
+    for (const result of [
+      {
+        kind: "text",
+        matched: false,
+        elapsedMs: 1,
+      },
+      {
+        kind: "text",
+        matched: true,
+        elapsedMs: 1,
+      },
+      {
+        kind: "ms",
+        matched: true,
+        elapsedMs: 1,
+        element: {
+          ref: "@e1",
+          generationId: "g1",
+          tagName: "main",
+          role: "main",
+          visible: true,
+        },
+      },
+      {
+        kind: "url",
+        matched: true,
+        elapsedMs: 1,
+        value: "https://example.test/",
+        element: {
+          tagName: "main",
+          role: "main",
+          visible: true,
+        },
+      },
+      {
+        kind: "element",
+        matched: true,
+        elapsedMs: 1,
+        element: {
+          ref: "@e1",
+          tagName: "main",
+          role: "main",
+          visible: true,
+        },
+      },
+      {
+        kind: "element",
+        matched: true,
+        elapsedMs: 1,
+        element: {
+          generationId: "g1",
+          tagName: "main",
+          role: "main",
+          visible: true,
+        },
+      },
+    ]) {
+      const invalidResult = parseBoundaryResponse("extension-to-content-script", "wait", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: request.id,
+        ok: true,
+        result,
+      });
+      expect(invalidResult.ok).toBe(false);
+      if (!invalidResult.ok) {
+        expect(invalidResult.error.code).toBe("INVALID_RESPONSE");
+      }
     }
   });
 

@@ -273,6 +273,101 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "is" }]);
   });
 
+  it("handles duration waits without content injection or browser mutation", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("wait", { kind: "ms", durationMs: 0 }, "wait-ms-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "ms",
+        matched: true,
+        elapsedMs: expect.any(Number),
+      },
+    });
+    expect(adapter.contentRequests).toEqual([]);
+    expect(adapter.selectedTabs).toEqual([]);
+    expect(adapter.navigations).toEqual([]);
+  });
+
+  it("waits for URL globs against the resolved tab without content injection", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { url: "https://example.test/app" })]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("wait", { kind: "url", urlGlob: "https://example.test/*" }, "wait-url-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "url",
+        matched: true,
+        value: "https://example.test/app",
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([]);
+  });
+
+  it("routes document waits to content script and adds target metadata", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("wait", { kind: "text", text: "Ready" }, "wait-text-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "text",
+        matched: true,
+        value: "Ready",
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "wait" }]);
+  });
+
+  it("returns TIMEOUT for unsatisfied URL waits", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [
+        tabSummary(101, 0, true, 10, { url: "https://example.test/loading" }),
+      ]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "wait",
+        { kind: "url", urlGlob: "https://example.test/done", timeoutMs: 1, intervalMs: 1 },
+        "wait-url-1",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "TIMEOUT",
+      },
+    });
+  });
+
   it("maps restricted-page getter injection failures to actionable errors", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -452,6 +547,15 @@ class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       return createOkResponse(request as RequestEnvelope<"is">, {
         kind: "visible",
         value: true,
+      });
+    }
+
+    if (request.command === "wait") {
+      return createOkResponse(request as RequestEnvelope<"wait">, {
+        kind: "text",
+        matched: true,
+        elapsedMs: 5,
+        value: "Ready",
       });
     }
 
