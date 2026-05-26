@@ -36,6 +36,28 @@ describe("verifyPackageLayout", () => {
       "Expected extension version",
     );
   });
+
+  it("rejects extension bundles with shared JavaScript chunks", async () => {
+    const packageRoot = await createPackageRoot();
+    await mkdir(join(packageRoot, "extension/development/chunks"), { recursive: true });
+    await writeFile(join(packageRoot, "extension/development/chunks/index.js"), "export {};\n");
+
+    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
+      "Unexpected extension JavaScript artifacts",
+    );
+  });
+
+  it("rejects extension entry scripts that import generated chunks", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeFile(
+      join(packageRoot, "extension/development/background.js"),
+      'import "./chunks/index.js";\n',
+    );
+
+    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
+      "Expected standalone extension script",
+    );
+  });
 });
 
 async function createPackageRoot(
@@ -69,8 +91,21 @@ async function createPackageRoot(
   await writeFile(join(packageRoot, "lib/platform-binary.js"), "export {};\n");
   await writeFile(
     join(packageRoot, "extension/development/manifest.json"),
-    `${JSON.stringify({ version: options.extensionVersion ?? rootPackage.version })}\n`,
+    `${JSON.stringify(
+      {
+        version: options.extensionVersion ?? rootPackage.version,
+        background: { scripts: ["background.js"] },
+        content_scripts: [{ js: ["content.js"] }],
+        action: { default_popup: "popup.html" },
+      },
+      null,
+      2,
+    )}\n`,
   );
+  await writeFile(join(packageRoot, "extension/development/background.js"), "console.log('bg');\n");
+  await writeFile(join(packageRoot, "extension/development/content.js"), "console.log('cs');\n");
+  await writeFile(join(packageRoot, "extension/development/popup.js"), "console.log('popup');\n");
+  await writeFile(join(packageRoot, "extension/development/popup.html"), "<!doctype html>\n");
 
   if (options.includeBinary !== false) {
     await writeFile(join(packageRoot, "bin", platformKey, getBinaryName(platform)), "");

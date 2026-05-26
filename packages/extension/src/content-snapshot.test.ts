@@ -1,4 +1,4 @@
-import { createRequest } from "@firefox-cli/protocol";
+import { createRequest, parseBoundaryResponse } from "@firefox-cli/protocol";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
@@ -6,6 +6,7 @@ import {
   createSnapshotResult,
   handleContentScriptRequest,
 } from "./content-snapshot.js";
+import { createContentMessageHandler } from "./content.js";
 
 describe("content snapshot", () => {
   it("emits compact interactive refs with accessible names", () => {
@@ -121,5 +122,27 @@ describe("content snapshot", () => {
       },
     ]);
     expect(result.text).toContain("iframe");
+  });
+
+  it("returns an async protocol envelope for browser.tabs.sendMessage", async () => {
+    const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
+    const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
+    const response = await createContentMessageHandler({
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+    })(request);
+
+    const parsed = parseBoundaryResponse("extension-to-content-script", "snapshot", response);
+
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.value).toMatchObject({
+        ok: true,
+        id: "snapshot-1",
+        result: {
+          refs: 1,
+        },
+      });
+    }
   });
 });

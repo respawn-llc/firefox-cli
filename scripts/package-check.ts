@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
 import { resolvePackagedBinary, type PlatformInput } from "@firefox-cli/native-host";
@@ -66,13 +66,74 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
     await access(manifestPath);
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
       readonly version?: string;
+      readonly background?: { readonly scripts?: readonly string[] };
+      readonly content_scripts?: readonly { readonly js?: readonly string[] }[];
+      readonly action?: { readonly default_popup?: string };
     };
     if (manifest.version !== rootPackage.version) {
       throw new Error(
         `Expected extension version ${rootPackage.version}, received ${manifest.version ?? "<missing>"}`,
       );
     }
+    await verifyDevelopmentExtensionBundle(options.packageRoot, manifest);
   }
+}
+
+async function verifyDevelopmentExtensionBundle(
+  packageRoot: string,
+  manifest: {
+    readonly background?: { readonly scripts?: readonly string[] };
+    readonly content_scripts?: readonly { readonly js?: readonly string[] }[];
+    readonly action?: { readonly default_popup?: string };
+  },
+): Promise<void> {
+  const extensionRoot = resolve(packageRoot, "extension/development");
+  const requiredFiles = ["background.js", "content.js", "popup.js", "popup.html"] as const;
+  await Promise.all(requiredFiles.map((artifact) => access(resolve(extensionRoot, artifact))));
+
+  if (manifest.background?.scripts?.join(",") !== "background.js") {
+    throw new Error("Expected extension background script to be background.js");
+  }
+  if (manifest.content_scripts?.flatMap((script) => script.js ?? []).join(",") !== "content.js") {
+    throw new Error("Expected extension content script to be content.js");
+  }
+  if (manifest.action?.default_popup !== "popup.html") {
+    throw new Error("Expected extension popup to be popup.html");
+  }
+
+  const unexpectedJs = (await listRelativeFiles(extensionRoot))
+    .filter((file) => file.endsWith(".js"))
+    .filter((file) => !["background.js", "content.js", "popup.js"].includes(file));
+  if (unexpectedJs.length > 0) {
+    throw new Error(`Unexpected extension JavaScript artifacts: ${unexpectedJs.join(", ")}`);
+  }
+
+  await Promise.all(
+    ["background.js", "content.js", "popup.js"].map(async (artifact) => {
+      const source = await readFile(resolve(extensionRoot, artifact), "utf8");
+      if (
+        source.includes('from"./') ||
+        source.includes('from "./') ||
+        source.includes('import"./') ||
+        source.includes('import "./') ||
+        source.includes("import(")
+      ) {
+        throw new Error(`Expected standalone extension script without chunk imports: ${artifact}`);
+      }
+    }),
+  );
+}
+
+async function listRelativeFiles(root: string, prefix = ""): Promise<readonly string[]> {
+  const entries = await readdir(resolve(root, prefix), { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map((entry) => {
+      const relativePath = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      return entry.isDirectory() ? listRelativeFiles(root, relativePath) : [relativePath];
+    }),
+  );
+
+  return files.flat();
 }
 
 if (import.meta.main) {
