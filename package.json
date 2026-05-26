@@ -24,7 +24,7 @@
     "typecheck": "tsc -p packages/protocol/tsconfig.json --noEmit && tsc -p packages/native-host/tsconfig.json --noEmit && tsc -p packages/cli/tsconfig.json --noEmit && tsc -p packages/extension/tsconfig.json --noEmit && tsc -p packages/test-support/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:e2e": "bun run build && bun scripts/e2e-phase2.ts",
-    "extension:build": "vite build --config packages/extension/vite.config.ts && bun scripts/copy-extension-assets.ts && bun scripts/build-extension-archive.ts",
+    "extension:build": "bun scripts/build-extension.ts && bun scripts/copy-extension-assets.ts && bun scripts/build-extension-archive.ts",
     "extension:lint": "bun run extension:build && web-ext lint --source-dir dist/extension",
     "extension:run": "bun run extension:build && web-ext run --source-dir dist/extension",
     "build:binary": "bun scripts/build-binary.ts",
