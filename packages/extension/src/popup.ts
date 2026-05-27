@@ -46,7 +46,7 @@ async function sendMessage<T>(type: string): Promise<T> {
 }
 
 approveButton?.addEventListener("click", () => {
-  sendMessage<Status>("firefox-cli:approve").then(renderStatus).catch(renderError);
+  approve().catch(renderError);
 });
 
 resetButton?.addEventListener("click", () => {
@@ -67,4 +67,31 @@ function renderError(error: unknown): void {
     errorElement.hidden = false;
     errorElement.textContent = error instanceof Error ? error.message : String(error);
   }
+}
+
+async function approve(): Promise<void> {
+  const reloadAfterApproval = await requestHostAccess();
+  const status = await sendMessage<Status>("firefox-cli:approve");
+  renderStatus(status);
+  if (reloadAfterApproval) {
+    browser.runtime.reload();
+  }
+}
+
+async function requestHostAccess(): Promise<boolean> {
+  const permissions = browser.permissions;
+  if (permissions === undefined) {
+    throw new Error("Firefox permissions API is unavailable.");
+  }
+
+  const required = { origins: ["<all_urls>"] };
+  const captureApiRequiresReload = typeof browser.tabs.captureVisibleTab !== "function";
+  if (await permissions.contains(required)) {
+    return captureApiRequiresReload;
+  }
+
+  if (!(await permissions.request(required))) {
+    throw new Error("Approve host access for all websites to use firefox-cli commands.");
+  }
+  return true;
 }

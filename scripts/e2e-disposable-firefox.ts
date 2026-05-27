@@ -1,4 +1,3 @@
-import { createServer as createHttpServer, type Server } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -9,24 +8,16 @@ import {
   writeNativeMessagingManifest,
 } from "@firefox-cli/native-host";
 import { createTempDir } from "@firefox-cli/test-support";
-import { approveExtensionWithMarionette } from "./marionette-client.js";
+import { runAgentWorkflowE2e, startWorkflowFixtureServer } from "./e2e-disposable-workflow.js";
+import {
+  approveExtensionWithMarionette,
+  type MarionetteApprovalResult,
+} from "./marionette-client.js";
 
 type CliRun = {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
-};
-
-type TabListPayload = {
-  readonly tabs?: readonly {
-    readonly id?: number;
-    readonly url?: string;
-  }[];
-};
-
-type SnapshotPayload = {
-  readonly generationId?: string;
-  readonly text?: string;
 };
 
 if (process.env.FIREFOX_CLI_E2E_DISPOSABLE !== "1") {
@@ -65,11 +56,12 @@ if (process.platform === "win32") {
 const firefoxBinary = await findFirefoxBinary();
 const homeDir = await createTempDir("firefox-cli-e2e-firefox-home");
 const profileDir = await createTempDir("firefox-cli-e2e-firefox-profile");
-const fixture = await startFixtureServer();
+const fixture = await startWorkflowFixtureServer();
 const env = e2eEnvironment(homeDir);
 const webExtOutput: string[] = [];
 let webExt: ChildProcess | undefined;
 let lastDoctorStatus = "<not run>";
+let approvalResult: MarionetteApprovalResult | undefined;
 let failed = false;
 
 try {
@@ -130,7 +122,7 @@ try {
 
   await waitForDoctorStatus({ env, status: "not-approved", timeoutMs: 20_000 });
   if (approvalMode === "marionette") {
-    await approveExtensionWithMarionette(profileDir);
+    approvalResult = await approveExtensionWithMarionette(profileDir);
   } else {
     console.error(
       [
@@ -149,29 +141,17 @@ try {
     status: "connected",
     timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
   });
+  await waitForStableCliConnection({
+    env,
+    timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
+  });
   console.error(`Disposable Firefox approval confirmed by doctor --json: ${lastDoctorStatus}`);
-  await runCliJson(["open", fixture.url, "--json"], env);
-  const tab = await waitForFixtureTab({ env, fixtureUrl: fixture.url });
-  const target = `id:${tab.id}`;
-  const snapshot = await runCliJson<SnapshotPayload>(
-    ["snapshot", "--tab", target, "-i", "--json"],
-    env,
-  );
-  if (snapshot.generationId === undefined || snapshot.text === undefined) {
-    throw new Error(`Snapshot response was missing generation/text: ${JSON.stringify(snapshot)}`);
+  if (approvalResult?.captureVisibleTabAvailableBeforeApproval === false) {
+    console.error(
+      "Disposable Firefox approval exercised the extension-reload path for tabs.captureVisibleTab.",
+    );
   }
-  const ref = snapshot.text.match(/@e\d+/u)?.[0];
-  if (ref === undefined) {
-    throw new Error(`Snapshot did not contain an element ref: ${snapshot.text}`);
-  }
-
-  const getText = await runCliJson<{ readonly value?: string }>(
-    ["get", "text", ref, "--generation", snapshot.generationId, "--tab", target, "--json"],
-    env,
-  );
-  if (getText.value !== "Submit E2E") {
-    throw new Error(`Expected ref get text to return fixture button text, got ${getText.value}`);
-  }
+  await runAgentWorkflowE2e((args) => runCliJson(args, env), fixture.url);
 
   console.log("Disposable Firefox E2E passed.");
 } catch (error) {
@@ -224,25 +204,69 @@ async function waitForDoctorStatus(options: {
   );
 }
 
-async function waitForFixtureTab(options: {
+async function waitForStableCliConnection(options: {
   readonly env: NodeJS.ProcessEnv;
-  readonly fixtureUrl: string;
-}): Promise<{ readonly id: number }> {
-  return pollUntil(
+  readonly timeoutMs: number;
+}): Promise<void> {
+  let consecutive = 0;
+  let lastProbe = "<not run>";
+  await pollUntil(
     async () => {
-      const payload = await runCliJson<TabListPayload>(["tab", "--json"], options.env);
-      const tab = payload.tabs?.find(
-        (candidate) =>
-          typeof candidate.id === "number" && candidate.url?.startsWith(options.fixtureUrl),
-      );
-      return tab?.id === undefined ? false : { id: tab.id };
+      const doctor = await runCli(["doctor", "--json"], options.env);
+      lastProbe = `doctor exit=${String(doctor.exitCode)} stdout=${doctor.stdout.trim()} stderr=${doctor.stderr.trim()}`;
+      lastDoctorStatus = lastProbe;
+      if (!doctorReportsConnected(doctor)) {
+        consecutive = 0;
+        return false;
+      }
+
+      const capabilities = await runCli(["capabilities", "--json"], options.env);
+      lastProbe += `\ncapabilities exit=${String(capabilities.exitCode)} stdout=${capabilities.stdout.trim()} stderr=${capabilities.stderr.trim()}`;
+      if (!capabilitiesReportsReady(capabilities)) {
+        consecutive = 0;
+        return false;
+      }
+
+      consecutive += 1;
+      return consecutive >= 3;
     },
     {
-      timeoutMs: 15_000,
+      timeoutMs: options.timeoutMs,
       intervalMs: 250,
-      timeoutMessage: () => "Timed out waiting for fixture tab in disposable Firefox.",
+      timeoutMessage: () =>
+        `Timed out waiting for stable disposable Firefox CLI connectivity.\nLast probe: ${lastProbe}\n${webExtOutput
+          .join("")
+          .trim()}`,
     },
   );
+}
+
+function doctorReportsConnected(result: CliRun): boolean {
+  if (result.exitCode !== 0 || result.stdout.trim().length === 0) {
+    return false;
+  }
+  try {
+    const payload = JSON.parse(result.stdout) as {
+      readonly extensionConnection?: { readonly status?: string };
+    };
+    return payload.extensionConnection?.status === "connected";
+  } catch {
+    return false;
+  }
+}
+
+function capabilitiesReportsReady(result: CliRun): boolean {
+  if (result.exitCode !== 0 || result.stdout.trim().length === 0) {
+    return false;
+  }
+  try {
+    const payload = JSON.parse(result.stdout) as {
+      readonly capabilities?: readonly unknown[];
+    };
+    return Array.isArray(payload.capabilities);
+  } catch {
+    return false;
+  }
 }
 
 async function runCliJson<T>(args: readonly string[], env: NodeJS.ProcessEnv): Promise<T> {
@@ -272,35 +296,6 @@ function e2eEnvironment(homeDir: string): NodeJS.ProcessEnv {
     HOME: homeDir,
     USERPROFILE: homeDir,
     APPDATA: join(homeDir, "AppData", "Roaming"),
-  };
-}
-
-async function startFixtureServer(): Promise<{ readonly server: Server; readonly url: string }> {
-  const server = createHttpServer((_request, response) => {
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(`<!doctype html>
-      <html>
-        <head><title>firefox-cli disposable E2E</title></head>
-        <body>
-          <main>
-            <h1>Disposable Firefox E2E</h1>
-            <button id="submit">Submit E2E</button>
-          </main>
-        </body>
-      </html>`);
-  });
-  await new Promise<void>((resolveListen, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(0, "127.0.0.1", () => resolveListen());
-  });
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("Fixture server did not bind to a TCP port.");
-  }
-
-  return {
-    server,
-    url: `http://127.0.0.1:${address.port}/`,
   };
 }
 

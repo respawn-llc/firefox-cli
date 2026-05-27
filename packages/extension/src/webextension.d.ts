@@ -37,6 +37,7 @@ declare const browser: {
       postMessage(message: unknown): void;
     };
     sendMessage(message: unknown): Promise<unknown>;
+    reload(): void;
   };
   readonly windows: {
     getAll(options: { readonly populate: true }): Promise<readonly BrowserWindow[]>;
@@ -93,5 +94,9 @@ declare const browser: {
       get(key: string): Promise<Record<string, unknown>>;
       set(values: Record<string, unknown>): Promise<void>;
     };
+  };
+  readonly permissions?: {
+    contains(permissions: { readonly origins: readonly string[] }): Promise<boolean>;
+    request(permissions: { readonly origins: readonly string[] }): Promise<boolean>;
   };
 };

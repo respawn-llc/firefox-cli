@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FIREFOX_CLI_EXTENSION_ID } from "@firefox-cli/native-host";
 
-export async function approveExtensionWithMarionette(profileDir: string): Promise<void> {
+export type MarionetteApprovalResult = {
+  readonly captureVisibleTabAvailableBeforeApproval: boolean;
+};
+
+export async function approveExtensionWithMarionette(
+  profileDir: string,
+): Promise<MarionetteApprovalResult> {
   const port = await waitForMarionettePort(profileDir);
   const client = await MarionetteClient.connect(port);
   try {
@@ -21,6 +27,13 @@ export async function approveExtensionWithMarionette(profileDir: string): Promis
 
     await client.send("Marionette:SetContext", { value: "content" });
     await client.send("WebDriver:Navigate", { url: popupUrl });
+    const captureVisibleTabAvailableBeforeApproval =
+      webDriverValue(
+        await client.send("WebDriver:ExecuteScript", {
+          script: `return typeof browser !== "undefined" && typeof browser.tabs?.captureVisibleTab === "function";`,
+          args: [],
+        }),
+      ) === true;
     const element = webDriverValue(
       await client.send("WebDriver:FindElement", {
         using: "css selector",
@@ -28,6 +41,7 @@ export async function approveExtensionWithMarionette(profileDir: string): Promis
       }),
     );
     await client.send("WebDriver:ElementClick", { id: marionetteElementId(element) });
+    return { captureVisibleTabAvailableBeforeApproval };
   } finally {
     client.close();
   }
