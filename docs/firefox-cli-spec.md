@@ -256,7 +256,7 @@ MVP starts with WebExtension/content-script actions:
 
 - Pointer actions are implemented through DOM element resolution, scrolling into view, focus, and synthetic mouse/pointer/click events where needed.
 - Text entry uses value-setting plus input/change events for form controls, and keyboard/input event simulation for editable content where feasible.
-- Click, hover, press, keyboard, fill, and type are MVP only after target-site smoke tests pass for representative normal web controls.
+- Click, hover, press, keyboard, fill, and type are MVP for normal main-frame web controls with target-site limitations recorded in `docs/target-site-qa.md`.
 - Drag, upload, direct mouse commands, and rich editor behavior stay prototype-gated until target-site tests prove fidelity.
 
 Generated DOM events are not trusted user input. Sites that check `event.isTrusted`, require browser user activation, use complex editors, or implement anti-abuse controls may reject content-script actions. Track concrete failures; add OS-level input emulation only if these failures block the product.
@@ -313,7 +313,7 @@ Agent-browser family compatibility summary:
 | Navigation: `open`, `back`, `forward`, `reload` | MVP |
 | Browser/session close: `close`, `quit`, `exit`, `close --all` | Unsupported; use explicit `tab close` or `window close` |
 | Snapshot/refs: `snapshot` | MVP for main-frame refs; iframe refs prototype-gated |
-| Core actions: `click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`, `swipe` | MVP after content-script target-site smoke tests pass |
+| Core actions: `click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`, `swipe` | MVP for normal main-frame controls; target-site QA covers representative public click/fill/type/scroll actions and records x.com unauthenticated-headless limits |
 | Advanced input: `drag`, `upload`, direct `mouse`, `keydown`, `keyup`, rich-editor fidelity | Prototype-gated |
 | Semantic locators: `find ...` | Prototype-gated |
 | Read/check/wait: `get`, `is`, selector/text/URL/function/load waits | MVP except `networkidle`, which is prototype-gated |
