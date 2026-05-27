@@ -7,6 +7,7 @@ export const PROTOCOL_VERSION = 1;
 export const MAX_EVAL_SCRIPT_BYTES = 100_000;
 export const MAX_EVAL_RESULT_BYTES = 900_000;
 export const MAX_SCREENSHOT_BYTES = 8_000_000;
+export const MAX_BATCH_RESULT_BYTES = 900_000;
 
 export const componentSchema = z.enum(["cli", "native-host", "extension", "content-script"]);
 export type Component = z.infer<typeof componentSchema>;
@@ -978,6 +979,177 @@ export const screenshotResultSchema = z
   .strict();
 export type ScreenshotResult = z.infer<typeof screenshotResultSchema>;
 
+const nonBatchableCommands = new Set([
+  "hello",
+  "capabilities",
+  "noop",
+  "batch",
+  "pair.approve",
+  "pair.reset",
+]);
+
+export const batchStepSchema = z
+  .object({
+    command: z.string().min(1),
+    params: z.unknown().default({}),
+  })
+  .strict()
+  .superRefine((step, context) => {
+    if (!isCommandId(step.command)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Unknown batch command: ${step.command}`,
+        path: ["command"],
+      });
+      return;
+    }
+
+    if (!isBatchableCommandId(step.command)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Command cannot run inside batch: ${step.command}`,
+        path: ["command"],
+      });
+      return;
+    }
+
+    const params = commandSchemas[step.command].params.safeParse(step.params);
+    const paramsWithDefaultTarget = batchStepParamsWithDefaultTarget(step.command, step.params);
+    const fallbackParams =
+      params.success || paramsWithDefaultTarget === undefined
+        ? params
+        : commandSchemas[step.command].params.safeParse(paramsWithDefaultTarget);
+    if (!fallbackParams.success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Batch step params are invalid.",
+        path: ["params"],
+        params: {
+          command: step.command,
+          issues: fallbackParams.error.issues,
+        },
+      });
+    }
+  });
+export type BatchStep = z.infer<typeof batchStepSchema>;
+
+export const batchParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    steps: z.array(batchStepSchema).min(1).max(100),
+    bail: z.boolean().optional(),
+    timeoutMs: z.number().int().positive().max(600_000).optional(),
+    maxResultBytes: z.number().int().positive().max(MAX_BATCH_RESULT_BYTES).optional(),
+  })
+  .strict();
+export type BatchParams = z.infer<typeof batchParamsSchema>;
+
+const batchStepResultBaseSchema = z
+  .object({
+    index: z.number().int().nonnegative(),
+    command: z.string().min(1),
+  })
+  .strict();
+
+export const batchStepResultSchema = z
+  .discriminatedUnion("ok", [
+    batchStepResultBaseSchema
+      .extend({
+        ok: z.literal(true),
+        result: z.unknown(),
+      })
+      .strict(),
+    batchStepResultBaseSchema
+      .extend({
+        ok: z.literal(false),
+        error: protocolErrorSchema,
+      })
+      .strict(),
+  ])
+  .superRefine((step, context) => {
+    if (!isCommandId(step.command)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Unknown batch result command: ${step.command}`,
+        path: ["command"],
+      });
+      return;
+    }
+
+    if (!isBatchableCommandId(step.command)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Command cannot appear in batch results: ${step.command}`,
+        path: ["command"],
+      });
+      return;
+    }
+
+    if (step.ok) {
+      const result = commandSchemas[step.command].result.safeParse(step.result);
+      if (!result.success) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Batch step result is invalid.",
+          path: ["result"],
+          params: {
+            command: step.command,
+            issues: result.error.issues,
+          },
+        });
+      }
+    }
+  });
+export type BatchStepResult = z.infer<typeof batchStepResultSchema>;
+
+export const batchResultSchema = z
+  .object({
+    ok: z.boolean(),
+    steps: z.array(batchStepResultSchema),
+    firstFailedIndex: z.number().int().nonnegative().optional(),
+    elapsedMs: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    const firstFailedIndex = result.steps.find((step) => !step.ok)?.index;
+    if (result.ok) {
+      if (firstFailedIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Successful batch results cannot contain failed steps.",
+          path: ["ok"],
+        });
+      }
+
+      if (result.firstFailedIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Successful batch results cannot include firstFailedIndex.",
+          path: ["firstFailedIndex"],
+        });
+      }
+      return;
+    }
+
+    if (firstFailedIndex === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Failed batch results must contain a failed step.",
+        path: ["ok"],
+      });
+      return;
+    }
+
+    if (result.firstFailedIndex !== firstFailedIndex) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Batch firstFailedIndex must match the first failed step.",
+        path: ["firstFailedIndex"],
+      });
+    }
+  });
+export type BatchResult = z.infer<typeof batchResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -1103,6 +1275,11 @@ export const commandSchemas = {
   screenshot: {
     params: screenshotParamsSchema,
     result: screenshotResultSchema,
+    status: "mvp",
+  },
+  batch: {
+    params: batchParamsSchema,
+    result: batchResultSchema,
     status: "mvp",
   },
   click: {
@@ -1442,6 +1619,44 @@ function failure(
 
 function isCommandId(command: string): command is CommandId {
   return command in commandSchemas;
+}
+
+export function isBatchableCommandId(command: string): command is CommandId {
+  return isCommandId(command) && !nonBatchableCommands.has(command);
+}
+
+function batchStepParamsWithDefaultTarget(
+  command: CommandId,
+  params: unknown,
+): unknown | undefined {
+  if (!batchCommandAcceptsRequiredDefaultTarget(command) || !isRecord(params)) {
+    return undefined;
+  }
+
+  if (params.target !== undefined) {
+    return undefined;
+  }
+
+  return {
+    ...params,
+    target: {
+      window: { kind: "active" },
+      tab: { kind: "active" },
+    },
+  };
+}
+
+function batchCommandAcceptsRequiredDefaultTarget(command: CommandId): boolean {
+  return (
+    command === "tab.select" ||
+    command === "tab.close" ||
+    command === "window.select" ||
+    command === "window.close"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function encodedByteLength(value: string): number {

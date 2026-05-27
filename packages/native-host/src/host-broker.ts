@@ -7,8 +7,10 @@ import {
   createOkResponse,
   parseBoundaryRequest,
   parseBoundaryResponse,
+  type BatchResult,
   type RequestEnvelope,
   type ResponseEnvelope,
+  type ScreenshotParams,
   type ScreenshotResult,
 } from "@firefox-cli/protocol";
 import type { HostIdentity, PairTokenVerification } from "./pair-state.js";
@@ -98,6 +100,13 @@ export class NativeHostBroker {
       );
     }
 
+    if (request.command === "batch" && response.value.ok) {
+      return this.#writeBatchScreenshotResponses(
+        request as RequestEnvelope<"batch">,
+        response.value.result as BatchResult,
+      );
+    }
+
     return {
       protocolVersion: PROTOCOL_VERSION,
       id: request.id,
@@ -117,48 +126,116 @@ export class NativeHostBroker {
     request: RequestEnvelope<"screenshot">,
     result: ScreenshotResult,
   ): Promise<ResponseEnvelope<"screenshot">> {
+    const writeResult = await this.#writeScreenshotResult(request.id, request.params, result);
+    if (!writeResult.ok) {
+      return writeResult.response as ResponseEnvelope<"screenshot">;
+    }
+
+    return createOkResponse(request, writeResult.result);
+  }
+
+  async #writeBatchScreenshotResponses(
+    request: RequestEnvelope<"batch">,
+    result: BatchResult,
+  ): Promise<ResponseEnvelope<"batch">> {
+    const steps: BatchResult["steps"] = [];
+    for (const step of result.steps) {
+      if (!step.ok || step.command !== "screenshot") {
+        steps.push(step);
+        continue;
+      }
+
+      const requestStep = request.params.steps[step.index];
+      if (requestStep?.command !== "screenshot") {
+        return createErrorResponse(request.id, {
+          code: "INVALID_RESPONSE",
+          message: "Batch screenshot result did not match the request step.",
+        }) as ResponseEnvelope<"batch">;
+      }
+
+      const writeResult = await this.#writeScreenshotResult(
+        request.id,
+        requestStep.params as ScreenshotParams,
+        step.result as ScreenshotResult,
+      );
+      if (!writeResult.ok) {
+        return writeResult.response as ResponseEnvelope<"batch">;
+      }
+
+      steps.push({
+        ...step,
+        result: writeResult.result,
+      });
+    }
+
+    return createOkResponse(request, {
+      ...result,
+      steps,
+    });
+  }
+
+  async #writeScreenshotResult(
+    id: string,
+    params: ScreenshotParams,
+    result: ScreenshotResult,
+  ): Promise<
+    | { readonly ok: true; readonly result: Omit<ScreenshotResult, "imageBase64"> }
+    | { readonly ok: false; readonly response: ResponseEnvelope }
+  > {
     if (result.imageBase64 === undefined) {
-      return createErrorResponse(request.id, {
-        code: "INVALID_RESPONSE",
-        message: "Screenshot response did not include image bytes.",
-      }) as ResponseEnvelope<"screenshot">;
+      return {
+        ok: false,
+        response: createErrorResponse(id, {
+          code: "INVALID_RESPONSE",
+          message: "Screenshot response did not include image bytes.",
+        }),
+      };
     }
 
     const bytes = Buffer.from(result.imageBase64, "base64");
     if (bytes.byteLength !== result.bytes) {
-      return createErrorResponse(request.id, {
-        code: "INVALID_RESPONSE",
-        message: "Screenshot byte count did not match image data.",
-        details: {
-          expectedBytes: result.bytes,
-          actualBytes: bytes.byteLength,
-        },
-      }) as ResponseEnvelope<"screenshot">;
+      return {
+        ok: false,
+        response: createErrorResponse(id, {
+          code: "INVALID_RESPONSE",
+          message: "Screenshot byte count did not match image data.",
+          details: {
+            expectedBytes: result.bytes,
+            actualBytes: bytes.byteLength,
+          },
+        }),
+      };
     }
 
-    const maxImageBytes = request.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES;
+    const maxImageBytes = params.maxImageBytes ?? MAX_SCREENSHOT_BYTES;
     if (bytes.byteLength > maxImageBytes) {
-      return createErrorResponse(request.id, {
-        code: "OUTPUT_TOO_LARGE",
-        message: `Screenshot is ${bytes.byteLength} bytes, exceeding the ${maxImageBytes} byte limit.`,
-      }) as ResponseEnvelope<"screenshot">;
+      return {
+        ok: false,
+        response: createErrorResponse(id, {
+          code: "OUTPUT_TOO_LARGE",
+          message: `Screenshot is ${bytes.byteLength} bytes, exceeding the ${maxImageBytes} byte limit.`,
+        }),
+      };
     }
 
     const publicResult = {
       ...result,
-      path: request.params.path,
+      path: params.path,
     };
 
     try {
-      await this.#writeFile(request.params.path, bytes);
+      await this.#writeFile(params.path, bytes);
     } catch (error) {
-      return createErrorResponse(request.id, {
-        code: "FILE_WRITE_FAILED",
-        message: `Failed to write screenshot: ${error instanceof Error ? error.message : String(error)}`,
-      }) as ResponseEnvelope<"screenshot">;
+      return {
+        ok: false,
+        response: createErrorResponse(id, {
+          code: "FILE_WRITE_FAILED",
+          message: `Failed to write screenshot: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+      };
     }
 
     const { imageBase64: _imageBase64, ...publicResponse } = publicResult;
-    return createOkResponse(request, publicResponse);
+    return { ok: true, result: publicResponse };
   }
 }

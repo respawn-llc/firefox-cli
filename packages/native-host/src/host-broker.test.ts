@@ -160,6 +160,78 @@ describe("NativeHostBroker", () => {
     }
   });
 
+  it("writes nested batch screenshot bytes and strips image data", async () => {
+    const request = createRequest(
+      "batch",
+      {
+        steps: [{ command: "screenshot", params: { path: "/tmp/page.png", format: "png" } }],
+      },
+      "batch-1",
+    );
+    const writes: { readonly path: string; readonly data: readonly number[] }[] = [];
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      writeFile: async (path, data) => {
+        writes.push({ path, data: [...data] });
+      },
+    });
+    broker.connectExtension({
+      approved: true,
+      token: "test-token",
+      send: async (forwarded) =>
+        createOkResponse(forwarded as typeof request, {
+          ok: true,
+          steps: [
+            {
+              index: 0,
+              command: "screenshot",
+              ok: true,
+              result: {
+                path: "/extension/attempted-retarget.png",
+                format: "png",
+                bytes: 3,
+                activation: {
+                  tabActivated: false,
+                  windowFocused: false,
+                },
+                imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+              },
+            },
+          ],
+          elapsedMs: 4,
+        }),
+    });
+
+    const response = await broker.handleCliRequest(request);
+
+    expect(writes).toEqual([{ path: "/tmp/page.png", data: [1, 2, 3] }]);
+    expect(response).toEqual(
+      createOkResponse(request, {
+        ok: true,
+        steps: [
+          {
+            index: 0,
+            command: "screenshot",
+            ok: true,
+            result: {
+              path: "/tmp/page.png",
+              format: "png",
+              bytes: 3,
+              activation: {
+                tabActivated: false,
+                windowFocused: false,
+              },
+            },
+          },
+        ],
+        elapsedMs: 4,
+      }),
+    );
+  });
+
   it("rejects CLI requests before extension approval", async () => {
     const request = createRequest("noop", {}, "request-1");
     const broker = new NativeHostBroker({

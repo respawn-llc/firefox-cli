@@ -1,8 +1,11 @@
 import {
+  MAX_BATCH_RESULT_BYTES,
   MAX_SCREENSHOT_BYTES,
   MAX_EVAL_RESULT_BYTES,
   createErrorResponse,
   createOkResponse,
+  type BatchResult,
+  type BatchStepResult,
   type ActionResult,
   type ActionKind,
   type CommandId,
@@ -291,7 +294,15 @@ async function handleBrowserRequestOrThrow(
     const command = request as RequestEnvelope<"wait">;
     if (command.params.kind === "ms") {
       const startedAt = Date.now();
-      await delay(command.params.durationMs);
+      const durationMs = command.params.durationMs ?? 0;
+      const timeoutMs = command.params.timeoutMs;
+      await delay(Math.min(durationMs, timeoutMs ?? durationMs));
+      if (timeoutMs !== undefined && durationMs > timeoutMs) {
+        throw new BrowserCommandError(
+          "TIMEOUT",
+          `Timed out after ${timeoutMs}ms waiting ${durationMs}ms.`,
+        );
+      }
       return createOkResponse(command, {
         kind: command.params.kind,
         matched: true,
@@ -393,6 +404,12 @@ async function handleBrowserRequestOrThrow(
       imageBase64: image.base64,
       target,
     };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "batch") {
+    const command = request as RequestEnvelope<"batch">;
+    const result = await executeBatch(command, adapter);
     return createOkResponse(command, result);
   }
 
@@ -504,6 +521,204 @@ async function waitForUrl(
 
     await delay(Math.max(0, Math.min(intervalMs, timeoutMs - elapsedMs)));
   }
+}
+
+async function executeBatch(
+  command: RequestEnvelope<"batch">,
+  adapter: BackgroundBrowserAdapter,
+): Promise<BatchResult> {
+  const startedAt = Date.now();
+  const timeoutMs = command.params.timeoutMs;
+  const maxResultBytes = command.params.maxResultBytes ?? MAX_BATCH_RESULT_BYTES;
+  const defaultTarget = resolveTarget(
+    await getOrderedWindows(adapter),
+    command.params.target,
+  ).target;
+  const defaultSelector: TargetSelector = {
+    window: { kind: "id", id: defaultTarget.windowId },
+    tab: { kind: "id", id: defaultTarget.tabId },
+  };
+  const steps: BatchStepResult[] = [];
+  let totalScreenshotBytes = 0;
+
+  for (let index = 0; index < command.params.steps.length; index += 1) {
+    const step = command.params.steps[index];
+    if (step === undefined) {
+      continue;
+    }
+
+    const remainingMs = remainingBatchTime(startedAt, timeoutMs);
+    if (remainingMs !== undefined && remainingMs <= 0) {
+      throw new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms.`);
+    }
+
+    const stepRequest: RequestEnvelope = {
+      protocolVersion: command.protocolVersion,
+      id: `${command.id}:${index}`,
+      command: step.command as CommandId,
+      params: applyBatchStepDefaults(
+        step.command,
+        step.params,
+        defaultSelector,
+        remainingMs,
+      ) as RequestEnvelope["params"],
+    };
+    const response = await handleBrowserRequest(stepRequest, adapter);
+    const stepResult: BatchStepResult = response.ok
+      ? {
+          index,
+          command: step.command,
+          ok: true,
+          result: response.result,
+        }
+      : {
+          index,
+          command: step.command,
+          ok: false,
+          error: response.error,
+        };
+    steps.push(stepResult);
+
+    if (stepResult.ok && stepResult.command === "screenshot") {
+      totalScreenshotBytes += (stepResult.result as ScreenshotResult).bytes;
+      if (totalScreenshotBytes > MAX_SCREENSHOT_BYTES) {
+        throw new BrowserCommandError(
+          "OUTPUT_TOO_LARGE",
+          `Batch screenshots exceed the ${MAX_SCREENSHOT_BYTES} byte native messaging limit.`,
+        );
+      }
+    }
+
+    assertBatchResultSize(
+      {
+        ok: steps.every((candidate) => candidate.ok),
+        steps,
+        ...(firstFailedIndex(steps) === undefined
+          ? {}
+          : { firstFailedIndex: firstFailedIndex(steps) }),
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+      },
+      maxResultBytes,
+    );
+
+    if (!stepResult.ok && command.params.bail === true) {
+      break;
+    }
+  }
+
+  const failedIndex = firstFailedIndex(steps);
+  const result: BatchResult = {
+    ok: failedIndex === undefined,
+    steps,
+    ...(failedIndex === undefined ? {} : { firstFailedIndex: failedIndex }),
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  };
+  assertBatchResultSize(result, maxResultBytes);
+  return result;
+}
+
+function applyBatchStepDefaults(
+  command: string,
+  rawParams: unknown,
+  defaultTarget: TargetSelector,
+  remainingMs: number | undefined,
+): unknown {
+  if (!isRecord(rawParams)) {
+    return rawParams;
+  }
+
+  return {
+    ...rawParams,
+    ...(acceptsBatchDefaultTarget(command) && rawParams.target === undefined
+      ? { target: defaultTarget }
+      : {}),
+    ...timeoutOverride(command, rawParams.timeoutMs, remainingMs),
+  };
+}
+
+function timeoutOverride(
+  command: string,
+  existingTimeout: unknown,
+  remainingMs: number | undefined,
+): { readonly timeoutMs?: number } {
+  if (remainingMs === undefined || !acceptsBatchTimeout(command)) {
+    return {};
+  }
+
+  const boundedTimeout =
+    typeof existingTimeout === "number" ? Math.min(existingTimeout, remainingMs) : remainingMs;
+  return { timeoutMs: Math.max(1, Math.floor(boundedTimeout)) };
+}
+
+function acceptsBatchDefaultTarget(command: string): boolean {
+  return (
+    command === "tabs.list" ||
+    command === "tab.new" ||
+    command === "tab.select" ||
+    command === "tab.close" ||
+    command === "window.select" ||
+    command === "window.close" ||
+    command === "open" ||
+    command === "back" ||
+    command === "forward" ||
+    command === "reload" ||
+    command === "snapshot" ||
+    command === "ref.resolve" ||
+    command === "get" ||
+    command === "is" ||
+    command === "wait" ||
+    command === "eval" ||
+    command === "screenshot" ||
+    isActionCommand(command)
+  );
+}
+
+function acceptsBatchTimeout(command: string): boolean {
+  return command === "wait" || command === "eval" || command === "screenshot";
+}
+
+function remainingBatchTime(startedAt: number, timeoutMs: number | undefined): number | undefined {
+  return timeoutMs === undefined ? undefined : timeoutMs - (Date.now() - startedAt);
+}
+
+function assertBatchResultSize(result: BatchResult, maxResultBytes: number): void {
+  const publicResult = publicBatchResult(result);
+  const bytes = new TextEncoder().encode(JSON.stringify(publicResult)).byteLength;
+  if (bytes > maxResultBytes) {
+    throw new BrowserCommandError(
+      "RESULT_TOO_LARGE",
+      `Batch result is ${bytes} bytes, exceeding the ${maxResultBytes} byte limit.`,
+    );
+  }
+}
+
+function publicBatchResult(result: BatchResult): BatchResult {
+  return {
+    ...result,
+    steps: result.steps.map((step) =>
+      step.ok && step.command === "screenshot"
+        ? {
+            ...step,
+            result: stripScreenshotImageBytes(step.result as ScreenshotResult),
+          }
+        : step,
+    ),
+  };
+}
+
+function stripScreenshotImageBytes(
+  result: ScreenshotResult,
+): Omit<ScreenshotResult, "imageBase64"> {
+  const { imageBase64: _imageBase64, ...publicResult } = result;
+  return publicResult;
+}
+
+function firstFailedIndex(steps: readonly BatchStepResult[]): number | undefined {
+  return steps.find((step) => !step.ok)?.index;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function getOrderedWindows(
@@ -684,7 +899,8 @@ class BrowserCommandError extends Error {
     | "SCRIPT_INJECTION_FAILED"
     | "TIMEOUT"
     | "CAPTURE_FAILED"
-    | "OUTPUT_TOO_LARGE";
+    | "OUTPUT_TOO_LARGE"
+    | "RESULT_TOO_LARGE";
 
   constructor(code: BrowserCommandError["code"], message: string) {
     super(message);

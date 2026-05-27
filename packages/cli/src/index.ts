@@ -10,8 +10,11 @@ import {
   writeNativeMessagingManifest,
 } from "@firefox-cli/native-host";
 import {
+  createErrorResponse,
   createRequest,
   type ActionResult,
+  type BatchResult,
+  type BatchStep,
   type CommandId,
   type EvalResult,
   type ProtocolError,
@@ -22,6 +25,7 @@ import {
   type TabSummary,
   type TargetSelector,
   type WaitResult,
+  isBatchableCommandId,
 } from "@firefox-cli/protocol";
 
 export type CliExitCode = 0 | 1;
@@ -138,6 +142,10 @@ async function runCliOrThrow(
     return screenshot(args.slice(1), dependencies);
   }
 
+  if (args[0] === "batch") {
+    return batch(args.slice(1), dependencies);
+  }
+
   if (isElementActionCommand(args[0])) {
     return elementAction(args[0], args.slice(1), dependencies);
   }
@@ -194,6 +202,7 @@ export function renderHelp(): string {
     "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
     "  firefox-cli eval <js> | --stdin | -b base64 [--json]",
     "  firefox-cli screenshot [path] [--json]",
+    "  firefox-cli batch <json> | --stdin [--bail] [--json]",
     "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
     "  firefox-cli fill|type <selector|@ref> <text> [--json]",
     "  firefox-cli keyboard type|inserttext <text> [--json]",
@@ -403,14 +412,14 @@ async function tabs(args: readonly string[], dependencies: CliDependencies): Pro
         ? await sendOrUnavailable(
             dependencies,
             createRequest("tab.select", {
-              target: mergeTarget(target, { tab: parseTargetValue(positional[1]) }),
+              target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
             }),
           )
         : subcommand === "close"
           ? await sendOrUnavailable(
               dependencies,
               createRequest("tab.close", {
-                target: mergeTarget(target, { tab: parseTargetValue(positional[1] ?? "active") }),
+                target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
               }),
             )
           : await sendOrUnavailable(
@@ -460,16 +469,14 @@ async function windows(args: readonly string[], dependencies: CliDependencies): 
         ? await sendOrUnavailable(
             dependencies,
             createRequest("window.select", {
-              target: mergeTarget(target, { window: parseTargetValue(positional[1]) }),
+              target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
             }),
           )
         : subcommand === "close"
           ? await sendOrUnavailable(
               dependencies,
               createRequest("window.close", {
-                target: mergeTarget(target, {
-                  window: parseTargetValue(positional[1] ?? "active"),
-                }),
+                target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
               }),
             )
           : await sendOrUnavailable(dependencies, createRequest("windows.list", {}));
@@ -775,6 +782,38 @@ async function screenshot(
   return parsedArgs.json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
     : ok(`${formatScreenshotResult(response.result)}\n`);
+}
+
+async function batch(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsedArgs = parseBatchArguments(args);
+  const steps = await readBatchSteps(parsedArgs, dependencies);
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("batch", {
+      steps,
+      ...(parsedArgs.bail ? { bail: true } : {}),
+      ...(parsedArgs.timeout === undefined
+        ? {}
+        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+      ...(parsedArgs.maxResultBytes === undefined
+        ? {}
+        : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  const exitCode: CliExitCode = response.result.ok ? 0 : 1;
+  return {
+    exitCode,
+    stdout: parsedArgs.json
+      ? `${JSON.stringify(response.result, null, 2)}\n`
+      : `${formatBatchResult(response.result)}\n`,
+    stderr: "",
+  };
 }
 
 async function elementAction(
@@ -1146,6 +1185,38 @@ function isScrollDirection(value: string | undefined): value is "up" | "down" | 
   return value === "up" || value === "down" || value === "left" || value === "right";
 }
 
+function isPotentialBatchCliCommand(value: string | undefined): boolean {
+  return (
+    value === "tab" ||
+    value === "window" ||
+    value === "open" ||
+    value === "back" ||
+    value === "forward" ||
+    value === "reload" ||
+    value === "snapshot" ||
+    value === "ref" ||
+    value === "get" ||
+    value === "is" ||
+    value === "wait" ||
+    value === "eval" ||
+    value === "screenshot" ||
+    value === "click" ||
+    value === "dblclick" ||
+    value === "focus" ||
+    value === "hover" ||
+    value === "check" ||
+    value === "uncheck" ||
+    value === "scrollintoview" ||
+    value === "fill" ||
+    value === "type" ||
+    value === "press" ||
+    value === "keyboard" ||
+    value === "select" ||
+    value === "scroll" ||
+    value === "swipe"
+  );
+}
+
 type ParsedWaitArguments = {
   readonly positionals: readonly string[];
   readonly text?: string;
@@ -1173,6 +1244,16 @@ type ParsedScreenshotArguments = {
   readonly outputPath?: string;
   readonly timeout?: string;
   readonly maxImageBytes?: string;
+  readonly json: boolean;
+};
+
+type ParsedBatchArguments = {
+  readonly optionArgs: readonly string[];
+  readonly inputSource: "argv" | "stdin";
+  readonly input?: string;
+  readonly bail: boolean;
+  readonly timeout?: string;
+  readonly maxResultBytes?: string;
   readonly json: boolean;
 };
 
@@ -1312,6 +1393,80 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
   };
 }
 
+function parseBatchArguments(args: readonly string[]): ParsedBatchArguments {
+  const optionArgs: string[] = [];
+  const parsed: {
+    inputSource?: "argv" | "stdin";
+    input?: string;
+    bail: boolean;
+    timeout?: string;
+    maxResultBytes?: string;
+    json: boolean;
+  } = { bail: false, json: false };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--json":
+        parsed.json = true;
+        optionArgs.push(arg);
+        break;
+      case "--bail":
+        parsed.bail = true;
+        break;
+      case "--stdin":
+        if (parsed.inputSource !== undefined) {
+          throw new CliUsageError("Specify exactly one batch input source.");
+        }
+        parsed.inputSource = "stdin";
+        break;
+      case "--timeout":
+        parsed.timeout = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--max-output":
+        parsed.maxResultBytes = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--window":
+      case "--tab": {
+        const value = readFlagValue(args, index, arg);
+        optionArgs.push(arg, value);
+        index += 1;
+        break;
+      }
+      default:
+        if (arg.startsWith("-")) {
+          throw new CliUsageError(`Unsupported batch option: ${arg}`);
+        }
+        if (parsed.inputSource !== undefined) {
+          throw new CliUsageError("Specify exactly one batch input source.");
+        }
+        parsed.inputSource = "argv";
+        parsed.input = arg;
+        break;
+    }
+  }
+
+  if (parsed.inputSource === undefined) {
+    throw new CliUsageError("Missing batch JSON.");
+  }
+
+  return {
+    optionArgs,
+    inputSource: parsed.inputSource,
+    ...(parsed.input === undefined ? {} : { input: parsed.input }),
+    bail: parsed.bail,
+    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
+    ...(parsed.maxResultBytes === undefined ? {} : { maxResultBytes: parsed.maxResultBytes }),
+    json: parsed.json,
+  };
+}
+
 async function readEvalScript(
   args: ParsedEvalArguments,
   dependencies: CliDependencies,
@@ -1328,6 +1483,151 @@ async function readEvalScript(
   }
 
   return script;
+}
+
+async function readBatchSteps(
+  args: ParsedBatchArguments,
+  dependencies: CliDependencies,
+): Promise<BatchStep[]> {
+  const input =
+    args.inputSource === "stdin"
+      ? await (dependencies.readStdin?.() ?? readProcessStdin())
+      : (args.input ?? "");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(input);
+  } catch {
+    throw new CliUsageError("Invalid batch JSON.");
+  }
+
+  if (!Array.isArray(raw)) {
+    throw new CliUsageError("Batch JSON must be an array.");
+  }
+
+  const steps: BatchStep[] = [];
+  for (const [index, rawStep] of raw.entries()) {
+    steps.push(await parseBatchStep(rawStep, index, dependencies));
+  }
+  if (steps.length === 0) {
+    throw new CliUsageError("Batch requires at least one step.");
+  }
+
+  return steps;
+}
+
+async function parseBatchStep(
+  rawStep: unknown,
+  index: number,
+  dependencies: CliDependencies,
+): Promise<BatchStep> {
+  if (Array.isArray(rawStep)) {
+    if (!rawStep.every((value): value is string => typeof value === "string")) {
+      throw new CliUsageError(`Batch argv step ${index} must contain only strings.`);
+    }
+    return batchStepFromArgv(rawStep, index, dependencies);
+  }
+
+  if (!isRecord(rawStep)) {
+    throw new CliUsageError(`Batch step ${index} must be an argv array or command object.`);
+  }
+
+  const command = rawStep.command;
+  if (typeof command !== "string" || !isBatchableCommandId(command)) {
+    throw new CliUsageError(`Invalid batch command at step ${index}.`);
+  }
+
+  return {
+    command,
+    params: rawStep.params ?? {},
+  };
+}
+
+async function batchStepFromArgv(
+  argv: readonly string[],
+  index: number,
+  dependencies: CliDependencies,
+): Promise<BatchStep> {
+  if (!isPotentialBatchCliCommand(argv[0])) {
+    throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
+  }
+  if (batchArgvReadsStdin(argv)) {
+    throw new CliUsageError(`Batch argv step ${index} cannot read from stdin.`);
+  }
+
+  let captured: RequestEnvelope | undefined;
+  const parsed = await runCli(argv, {
+    ...dependencies,
+    sendRequest: async (request) => {
+      captured = request;
+      return createErrorResponse(request.id, {
+        code: "UNSUPPORTED_CAPABILITY",
+        message: "Batch parser captured request.",
+      });
+    },
+    clearPairState: async () => {
+      throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
+    },
+  });
+
+  if (captured === undefined) {
+    throw new CliUsageError(
+      parsed.stderr.trim().length === 0
+        ? `Invalid batch argv command at step ${index}.`
+        : `Invalid batch argv step ${index}: ${parsed.stderr.trim()}`,
+    );
+  }
+
+  if (!isBatchableCommandId(captured.command)) {
+    throw new CliUsageError(`Invalid batch command at step ${index}.`);
+  }
+
+  return {
+    command: captured.command,
+    params: stripImplicitBatchTarget(captured.command, captured.params, argv),
+  };
+}
+
+function batchArgvReadsStdin(argv: readonly string[]): boolean {
+  return argv[0] === "eval" && argv.includes("--stdin");
+}
+
+function stripImplicitBatchTarget(
+  command: CommandId,
+  params: unknown,
+  argv: readonly string[],
+): unknown {
+  if (!isImplicitBatchDefaultTargetCommand(command) || !isRecord(params)) {
+    return params;
+  }
+
+  if (hasExplicitTargetInBatchArgv(command, argv)) {
+    return params;
+  }
+
+  const { target: _target, ...paramsWithoutImplicitTarget } = params;
+  return paramsWithoutImplicitTarget;
+}
+
+function isImplicitBatchDefaultTargetCommand(command: CommandId): boolean {
+  return (
+    command === "tab.select" ||
+    command === "tab.close" ||
+    command === "window.select" ||
+    command === "window.close"
+  );
+}
+
+function hasExplicitTargetInBatchArgv(command: CommandId, argv: readonly string[]): boolean {
+  const positionals = getPositionals(argv.slice(1));
+  if (command === "tab.select" || command === "tab.close") {
+    return positionals[1] !== undefined || hasOption(argv, "--tab") || hasOption(argv, "--window");
+  }
+
+  if (command === "window.select" || command === "window.close") {
+    return positionals[1] !== undefined || hasOption(argv, "--window");
+  }
+
+  return false;
 }
 
 function decodeBase64(value: string): string {
@@ -1557,6 +1857,17 @@ function formatScreenshotResult(result: ScreenshotResult): string {
       ? ""
       : ` ${result.width}x${result.height}`;
   return `${result.path} ${result.bytes} bytes${dimensions}`;
+}
+
+function formatBatchResult(result: BatchResult): string {
+  return [
+    ...result.steps.map((step) =>
+      step.ok
+        ? `${step.index} ${step.command} ok`
+        : `${step.index} ${step.command} ${step.error.code}: ${step.error.message}`,
+    ),
+    `batch ${result.ok ? "ok" : "failed"} in ${result.elapsedMs}ms`,
+  ].join("\n");
 }
 
 function formatActionResult(result: ActionResult): string {
@@ -1813,6 +2124,25 @@ function parseTargetValue(value: string | undefined): NonNullable<TargetSelector
   return prefix === "id" ? { kind: "id", id: parsed } : { kind: "index", index: parsed };
 }
 
+function parseOptionalTabTarget(value: string | undefined, base: TargetSelector): TargetSelector {
+  if (value !== undefined) {
+    return { tab: parseTargetValue(value) };
+  }
+
+  return base.tab === undefined ? { tab: { kind: "active" } } : {};
+}
+
+function parseOptionalWindowTarget(
+  value: string | undefined,
+  base: TargetSelector,
+): TargetSelector {
+  if (value !== undefined) {
+    return { window: parseTargetValue(value) };
+  }
+
+  return base.window === undefined ? { window: { kind: "active" } } : {};
+}
+
 function mergeTarget(base: TargetSelector, override: TargetSelector): TargetSelector {
   return {
     ...(base.window === undefined ? {} : { window: base.window }),
@@ -1822,8 +2152,16 @@ function mergeTarget(base: TargetSelector, override: TargetSelector): TargetSele
   };
 }
 
+function hasOption(args: readonly string[], option: string): boolean {
+  return args.includes(option);
+}
+
 function optionalTarget(target: TargetSelector): { readonly target?: TargetSelector } {
   return target.window === undefined && target.tab === undefined ? {} : { target };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function optionalUrl(url: string | undefined): { readonly url?: string } {
