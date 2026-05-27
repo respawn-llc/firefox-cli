@@ -58,6 +58,8 @@ const controller = new FirefoxCliBackgroundController({
       await browser.tabs.reload(tabId);
       return toTabSummary(await browser.tabs.get(tabId));
     },
+    captureVisibleTab: (windowId, options) =>
+      browser.tabs.captureVisibleTab(windowId, { format: options.format }),
     sendContentRequest: async (tabId, request) => {
       try {
         return await browser.tabs.sendMessage(tabId, request);

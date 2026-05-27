@@ -18,6 +18,7 @@ import {
   type RequestEnvelope,
   type ResponseEnvelope,
   type ResolvedTarget,
+  type ScreenshotResult,
   type TabSummary,
   type TargetSelector,
   type WaitResult,
@@ -47,6 +48,7 @@ export type CliDependencies = {
   readonly packageRoot: string;
   readonly binaryPath?: string;
   readonly extensionPath?: string;
+  readonly cwd?: string;
   sendRequest?(request: RequestEnvelope): Promise<ResponseEnvelope>;
   readStdin?(): Promise<string>;
   clearPairState?(): Promise<void>;
@@ -132,6 +134,10 @@ async function runCliOrThrow(
     return evalCommand(args.slice(1), dependencies);
   }
 
+  if (args[0] === "screenshot") {
+    return screenshot(args.slice(1), dependencies);
+  }
+
   if (isElementActionCommand(args[0])) {
     return elementAction(args[0], args.slice(1), dependencies);
   }
@@ -187,6 +193,7 @@ export function renderHelp(): string {
     "  firefox-cli wait <ms|selector|@ref> [--state visible|hidden|attached] [--json]",
     "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
     "  firefox-cli eval <js> | --stdin | -b base64 [--json]",
+    "  firefox-cli screenshot [path] [--json]",
     "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
     "  firefox-cli fill|type <selector|@ref> <text> [--json]",
     "  firefox-cli keyboard type|inserttext <text> [--json]",
@@ -212,6 +219,7 @@ export function createDefaultDependencies(version: string): CliDependencies {
     ...(process.env.APPDATA === undefined ? {} : { appDataDir: process.env.APPDATA }),
     packageRoot,
     binaryPath,
+    cwd: process.cwd(),
     sendRequest: async (request) => {
       const stateRoot = getUserStateRoot(process.platform, homeDir, process.env.APPDATA);
       const endpoint = planLocalIpcEndpoint({
@@ -736,6 +744,39 @@ async function evalCommand(
     : ok(`${formatEvalResult(response.result)}\n`);
 }
 
+async function screenshot(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsedArgs = parseScreenshotArguments(args);
+  const outputPath = resolve(
+    dependencies.cwd ?? process.cwd(),
+    parsedArgs.outputPath ?? "screenshot.png",
+  );
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("screenshot", {
+      path: outputPath,
+      format: "png",
+      ...(parsedArgs.timeout === undefined
+        ? {}
+        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+      ...(parsedArgs.maxImageBytes === undefined
+        ? {}
+        : { maxImageBytes: parsePositiveIntegerValue(parsedArgs.maxImageBytes, "max output") }),
+      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+    }),
+  );
+
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return parsedArgs.json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatScreenshotResult(response.result)}\n`);
+}
+
 async function elementAction(
   command: "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview",
   args: readonly string[],
@@ -1127,6 +1168,14 @@ type ParsedEvalArguments = {
   readonly json: boolean;
 };
 
+type ParsedScreenshotArguments = {
+  readonly optionArgs: readonly string[];
+  readonly outputPath?: string;
+  readonly timeout?: string;
+  readonly maxImageBytes?: string;
+  readonly json: boolean;
+};
+
 function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
   const optionArgs: string[] = [];
   const scriptParts: string[] = [];
@@ -1203,6 +1252,62 @@ function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
     ...(parsed.base64 === undefined ? {} : { base64: parsed.base64 }),
     ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
     ...(parsed.maxResultBytes === undefined ? {} : { maxResultBytes: parsed.maxResultBytes }),
+    json: parsed.json,
+  };
+}
+
+function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArguments {
+  const optionArgs: string[] = [];
+  const parsed: {
+    outputPath?: string;
+    timeout?: string;
+    maxImageBytes?: string;
+    json: boolean;
+  } = { json: false };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--json":
+        parsed.json = true;
+        optionArgs.push(arg);
+        break;
+      case "--timeout":
+        parsed.timeout = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--max-output":
+        parsed.maxImageBytes = readFlagValue(args, index, arg);
+        index += 1;
+        break;
+      case "--window":
+      case "--tab": {
+        const value = readFlagValue(args, index, arg);
+        optionArgs.push(arg, value);
+        index += 1;
+        break;
+      }
+      default:
+        if (arg.startsWith("-")) {
+          throw new CliUsageError(`Unsupported screenshot option: ${arg}`);
+        }
+        if (parsed.outputPath !== undefined) {
+          throw new CliUsageError("Specify at most one screenshot path.");
+        }
+        parsed.outputPath = arg;
+        break;
+    }
+  }
+
+  return {
+    optionArgs,
+    ...(parsed.outputPath === undefined ? {} : { outputPath: parsed.outputPath }),
+    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
+    ...(parsed.maxImageBytes === undefined ? {} : { maxImageBytes: parsed.maxImageBytes }),
     json: parsed.json,
   };
 }
@@ -1444,6 +1549,14 @@ function formatEvalResult(result: EvalResult): string {
   }
 
   return formatGetValue(result.value.value);
+}
+
+function formatScreenshotResult(result: ScreenshotResult): string {
+  const dimensions =
+    result.width === undefined || result.height === undefined
+      ? ""
+      : ` ${result.width}x${result.height}`;
+  return `${result.path} ${result.bytes} bytes${dimensions}`;
 }
 
 function formatActionResult(result: ActionResult): string {

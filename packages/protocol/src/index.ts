@@ -6,6 +6,7 @@ export const FIREFOX_CLI_EXTENSION_ID = "firefox-cli@example.invalid";
 export const PROTOCOL_VERSION = 1;
 export const MAX_EVAL_SCRIPT_BYTES = 100_000;
 export const MAX_EVAL_RESULT_BYTES = 900_000;
+export const MAX_SCREENSHOT_BYTES = 8_000_000;
 
 export const componentSchema = z.enum(["cli", "native-host", "extension", "content-script"]);
 export type Component = z.infer<typeof componentSchema>;
@@ -52,6 +53,8 @@ export const errorCodeSchema = z.enum([
   "SERIALIZATION_FAILED",
   "UNSUPPORTED_EXECUTION_WORLD",
   "RESULT_TOO_LARGE",
+  "CAPTURE_FAILED",
+  "FILE_WRITE_FAILED",
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
@@ -939,6 +942,42 @@ export const evalResultSchema = z
   .strict();
 export type EvalResult = z.infer<typeof evalResultSchema>;
 
+export const screenshotFormatSchema = z.literal("png");
+export type ScreenshotFormat = z.infer<typeof screenshotFormatSchema>;
+
+export const screenshotParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    path: z.string().min(1),
+    format: screenshotFormatSchema,
+    timeoutMs: z.number().int().positive().max(600_000).optional(),
+    maxImageBytes: z.number().int().positive().max(MAX_SCREENSHOT_BYTES).optional(),
+  })
+  .strict();
+export type ScreenshotParams = z.infer<typeof screenshotParamsSchema>;
+
+export const screenshotActivationSchema = z
+  .object({
+    tabActivated: z.boolean(),
+    windowFocused: z.boolean(),
+  })
+  .strict();
+export type ScreenshotActivation = z.infer<typeof screenshotActivationSchema>;
+
+export const screenshotResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    path: z.string().min(1),
+    format: screenshotFormatSchema,
+    bytes: z.number().int().nonnegative().max(MAX_SCREENSHOT_BYTES),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+    activation: screenshotActivationSchema,
+    imageBase64: z.string().min(1).optional(),
+  })
+  .strict();
+export type ScreenshotResult = z.infer<typeof screenshotResultSchema>;
+
 export const pairApproveParamsSchema = z.object({}).strict();
 export const pairApproveResultSchema = z
   .object({
@@ -1059,6 +1098,11 @@ export const commandSchemas = {
   eval: {
     params: evalParamsSchema,
     result: evalResultSchema,
+    status: "mvp",
+  },
+  screenshot: {
+    params: screenshotParamsSchema,
+    result: screenshotResultSchema,
     status: "mvp",
   },
   click: {

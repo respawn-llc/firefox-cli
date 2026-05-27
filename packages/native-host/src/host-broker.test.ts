@@ -33,6 +33,133 @@ describe("NativeHostBroker", () => {
     });
   });
 
+  it("writes screenshot bytes and strips internal image data from CLI responses", async () => {
+    const request = createRequest(
+      "screenshot",
+      { path: "/tmp/page.png", format: "png" },
+      "screenshot-1",
+    );
+    const writes: { readonly path: string; readonly data: readonly number[] }[] = [];
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      writeFile: async (path, data) => {
+        writes.push({ path, data: [...data] });
+      },
+    });
+    broker.connectExtension({
+      approved: true,
+      token: "test-token",
+      send: async (forwarded) =>
+        createOkResponse(forwarded as typeof request, {
+          path: "/extension/attempted-retarget.png",
+          format: "png",
+          bytes: 3,
+          activation: {
+            tabActivated: false,
+            windowFocused: false,
+          },
+          imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        }),
+    });
+
+    const response = await broker.handleCliRequest(request);
+
+    expect(writes).toEqual([{ path: "/tmp/page.png", data: [1, 2, 3] }]);
+    expect(response).toEqual(
+      createOkResponse(request, {
+        path: "/tmp/page.png",
+        format: "png",
+        bytes: 3,
+        activation: {
+          tabActivated: false,
+          windowFocused: false,
+        },
+      }),
+    );
+  });
+
+  it("maps screenshot write and byte-contract failures to structured errors", async () => {
+    for (const testCase of [
+      {
+        result: {
+          path: "/tmp/page.png",
+          format: "png" as const,
+          bytes: 3,
+          activation: { tabActivated: false, windowFocused: false },
+        },
+        code: "INVALID_RESPONSE",
+      },
+      {
+        result: {
+          path: "/tmp/page.png",
+          format: "png" as const,
+          bytes: 4,
+          activation: { tabActivated: false, windowFocused: false },
+          imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        },
+        code: "INVALID_RESPONSE",
+      },
+      {
+        params: { maxImageBytes: 2 },
+        result: {
+          path: "/tmp/page.png",
+          format: "png" as const,
+          bytes: 3,
+          activation: { tabActivated: false, windowFocused: false },
+          imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        },
+        code: "OUTPUT_TOO_LARGE",
+      },
+      {
+        result: {
+          path: "/tmp/page.png",
+          format: "png" as const,
+          bytes: 3,
+          activation: { tabActivated: false, windowFocused: false },
+          imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        },
+        code: "FILE_WRITE_FAILED",
+        writeFailure: true,
+      },
+    ]) {
+      const request = createRequest(
+        "screenshot",
+        {
+          path: "/tmp/page.png",
+          format: "png",
+          ...("params" in testCase ? testCase.params : {}),
+        },
+        `screenshot-${testCase.code}`,
+      );
+      const broker = new NativeHostBroker({
+        hostIdentity: createHostIdentity({
+          extensionId: FIREFOX_CLI_EXTENSION_ID,
+          generateId: () => "host-1",
+        }),
+        writeFile: async () => {
+          if (testCase.writeFailure === true) {
+            throw new Error("disk full");
+          }
+        },
+      });
+      broker.connectExtension({
+        approved: true,
+        token: "test-token",
+        send: async (forwarded) => createOkResponse(forwarded as typeof request, testCase.result),
+      });
+
+      await expect(broker.handleCliRequest(request)).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: testCase.code,
+        },
+      });
+    }
+  });
+
   it("rejects CLI requests before extension approval", async () => {
     const request = createRequest("noop", {}, "request-1");
     const broker = new NativeHostBroker({

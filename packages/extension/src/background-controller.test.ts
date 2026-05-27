@@ -358,6 +358,9 @@ function createTestBrowserAdapter(
     executeEval: async () => {
       throw new Error("not implemented");
     },
+    captureVisibleTab: async () => {
+      throw new Error("not implemented");
+    },
   };
 }
 

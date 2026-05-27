@@ -60,6 +60,10 @@ declare const browser: {
     goForward(tabId: number): Promise<void>;
     reload(tabId: number): Promise<void>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
+    captureVisibleTab(
+      windowId: number,
+      options: { readonly format?: "png" | "jpeg"; readonly quality?: number },
+    ): Promise<string>;
   };
   readonly scripting: {
     executeScript(options: {

@@ -1048,6 +1048,107 @@ describe("runCli", () => {
     });
   });
 
+  it("captures visible screenshots to an absolute path", async () => {
+    const output = await runCli(
+      ["screenshot", "page.png", "--timeout", "1000", "--max-output", "2000", "--tab", "id:42"],
+      {
+        ...baseDependencies(),
+        cwd: "/work",
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({
+            command: "screenshot",
+            params: {
+              path: "/work/page.png",
+              format: "png",
+              timeoutMs: 1000,
+              maxImageBytes: 2000,
+              target: {
+                tab: { kind: "id", id: 42 },
+              },
+            },
+          });
+          return createOkResponse(request, {
+            target: targetSummary(),
+            path: "/work/page.png",
+            format: "png",
+            bytes: 68,
+            width: 1,
+            height: 1,
+            activation: {
+              tabActivated: false,
+              windowFocused: false,
+            },
+          });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "/work/page.png 68 bytes 1x1\n",
+      stderr: "",
+    });
+  });
+
+  it("captures screenshots with the default output path and JSON output", async () => {
+    const output = await runCli(["screenshot", "--json"], {
+      ...baseDependencies(),
+      cwd: "/work",
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "screenshot",
+          params: {
+            path: "/work/screenshot.png",
+            format: "png",
+          },
+        });
+        return createOkResponse(request, {
+          path: "/work/screenshot.png",
+          format: "png",
+          bytes: 68,
+          activation: {
+            tabActivated: true,
+            windowFocused: false,
+          },
+        });
+      },
+    });
+
+    expect(output.exitCode).toBe(0);
+    expect(JSON.parse(output.stdout)).toEqual({
+      path: "/work/screenshot.png",
+      format: "png",
+      bytes: 68,
+      activation: {
+        tabActivated: true,
+        windowFocused: false,
+      },
+    });
+  });
+
+  it("rejects malformed screenshot arguments at the CLI boundary", async () => {
+    await expect(runCli(["screenshot", "--timeout", "0"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid timeout: 0\n",
+    });
+    await expect(runCli(["screenshot", "--max-output", "0"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid max output: 0\n",
+    });
+    await expect(runCli(["screenshot", "--new-tab"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Unsupported screenshot option: --new-tab\n",
+    });
+    await expect(runCli(["screenshot", "a.png", "b.png"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Specify at most one screenshot path.\n",
+    });
+  });
+
   it("runs element actions by selector and ref", async () => {
     const output = await runCli(["click", "button.primary"], {
       ...baseDependencies(),
@@ -1334,6 +1435,7 @@ function baseDependencies(): CliDependencies {
     binaryPath: "/opt/firefox-cli/bin/darwin-arm64/firefox-cli",
     extensionPath: "/opt/firefox-cli/extension/development",
     packageRoot: "/opt/firefox-cli",
+    cwd: "/work",
     sendRequest: async (request) =>
       createErrorResponse(request.id, {
         code: "NATIVE_HOST_UNAVAILABLE",

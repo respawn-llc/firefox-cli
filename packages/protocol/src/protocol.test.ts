@@ -157,6 +157,16 @@ describe("parseBoundaryRequest", () => {
         { script: "document.title", source: "argv", timeoutMs: 1000, maxResultBytes: 1000 },
         "eval-1",
       ),
+      createRequest(
+        "screenshot",
+        {
+          path: "/tmp/page.png",
+          format: "png",
+          timeoutMs: 1000,
+          maxImageBytes: 1000,
+        },
+        "screenshot-1",
+      ),
       createRequest("click", { selector: "button" }, "click-1"),
       createRequest("dblclick", { ref: "@e1", generationId: "g1" }, "dblclick-1"),
       createRequest("focus", { selector: "input" }, "focus-1"),
@@ -730,6 +740,108 @@ describe("parseBoundaryResponse", () => {
       },
     ]) {
       const parsed = parseBoundaryResponse("host-to-extension", "eval", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: request.id,
+        ok: true,
+        result,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_RESPONSE");
+      }
+    }
+  });
+
+  it("validates screenshot responses and rejects malformed screenshot contracts", () => {
+    const request = createRequest(
+      "screenshot",
+      { path: "/tmp/page.png", format: "png" },
+      "screenshot-1",
+    );
+
+    expect(
+      parseBoundaryResponse(
+        "host-to-extension",
+        "screenshot",
+        createOkResponse(request, {
+          path: "/tmp/page.png",
+          format: "png",
+          bytes: 68,
+          width: 1,
+          height: 1,
+          activation: {
+            tabActivated: false,
+            windowFocused: false,
+          },
+          imageBase64: "iVBORw0KGgo=",
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      parseBoundaryResponse(
+        "cli-to-host",
+        "screenshot",
+        createOkResponse(request, {
+          path: "/tmp/page.png",
+          format: "png",
+          bytes: 68,
+          activation: {
+            tabActivated: false,
+            windowFocused: false,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+
+    for (const params of [
+      { path: "", format: "png" },
+      { path: "/tmp/page.png", format: "jpeg" },
+      { path: "/tmp/page.png", format: "png", timeoutMs: 0 },
+      { path: "/tmp/page.png", format: "png", maxImageBytes: 8_000_001 },
+    ]) {
+      const parsed = parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "screenshot-invalid",
+        command: "screenshot",
+        params,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+      }
+    }
+
+    for (const result of [
+      {
+        path: "/tmp/page.png",
+        format: "png",
+        bytes: -1,
+        activation: {
+          tabActivated: false,
+          windowFocused: false,
+        },
+      },
+      {
+        path: "/tmp/page.png",
+        format: "png",
+        bytes: 1,
+        activation: {
+          tabActivated: "false",
+          windowFocused: false,
+        },
+      },
+      {
+        path: "/tmp/page.png",
+        format: "jpeg",
+        bytes: 1,
+        activation: {
+          tabActivated: false,
+          windowFocused: false,
+        },
+      },
+    ]) {
+      const parsed = parseBoundaryResponse("host-to-extension", "screenshot", {
         protocolVersion: PROTOCOL_VERSION,
         id: request.id,
         ok: true,

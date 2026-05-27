@@ -1,4 +1,5 @@
 import {
+  MAX_SCREENSHOT_BYTES,
   MAX_EVAL_RESULT_BYTES,
   createErrorResponse,
   createOkResponse,
@@ -12,6 +13,7 @@ import {
   type RequestEnvelope,
   type ResponseEnvelope,
   type ResolvedTarget,
+  type ScreenshotResult,
   type SnapshotResult,
   type TabSummary,
   type TargetSelector,
@@ -25,6 +27,7 @@ import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 100;
 const DEFAULT_EVAL_TIMEOUT_MS = 30_000;
+const DEFAULT_SCREENSHOT_TIMEOUT_MS = 30_000;
 
 export type BrowserWindowSnapshot = {
   readonly id: number;
@@ -51,6 +54,7 @@ export type BackgroundBrowserAdapter = {
   reload(tabId: number): Promise<TabSummary>;
   sendContentRequest(tabId: number, request: RequestEnvelope): Promise<unknown>;
   executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult>;
+  captureVisibleTab(windowId: number, options: { readonly format: "png" }): Promise<string>;
 };
 
 type OrderedWindow = BrowserWindowSnapshot & {
@@ -343,6 +347,55 @@ async function handleBrowserRequestOrThrow(
     return createOkResponse(command, result);
   }
 
+  if (request.command === "screenshot") {
+    const command = request as RequestEnvelope<"screenshot">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const tabActivated = !resolved.tab.active;
+    const windowFocused = !resolved.window.focused;
+    try {
+      if (tabActivated) {
+        await adapter.selectTab(resolved.tab.id);
+      }
+      if (windowFocused) {
+        await adapter.focusWindow(resolved.window.id);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BrowserCommandError(
+        "CAPTURE_FAILED",
+        `Failed to activate screenshot target: ${message}`,
+      );
+    }
+
+    const target = await resolveFreshTarget(adapter, { tab: { kind: "id", id: resolved.tab.id } });
+    let dataUrl: string;
+    try {
+      dataUrl = await withTimeout(
+        adapter.captureVisibleTab(target.windowId, { format: command.params.format }),
+        command.params.timeoutMs ?? DEFAULT_SCREENSHOT_TIMEOUT_MS,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BrowserCommandError(
+        error instanceof BrowserCommandError ? error.code : "CAPTURE_FAILED",
+        `Failed to capture visible tab screenshot: ${message}`,
+      );
+    }
+
+    const image = parsePngDataUrl(dataUrl, command.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES);
+    const result: ScreenshotResult = {
+      path: command.params.path,
+      format: command.params.format,
+      bytes: image.bytes,
+      ...(image.width === undefined ? {} : { width: image.width }),
+      ...(image.height === undefined ? {} : { height: image.height }),
+      activation: { tabActivated, windowFocused },
+      imageBase64: image.base64,
+      target,
+    };
+    return createOkResponse(command, result);
+  }
+
   if (isActionCommand(request.command)) {
     const command = request as RequestEnvelope<ActionKind>;
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
@@ -629,7 +682,9 @@ class BrowserCommandError extends Error {
     | "PERMISSION_DENIED"
     | "NAVIGATION_FAILED"
     | "SCRIPT_INJECTION_FAILED"
-    | "TIMEOUT";
+    | "TIMEOUT"
+    | "CAPTURE_FAILED"
+    | "OUTPUT_TOO_LARGE";
 
   constructor(code: BrowserCommandError["code"], message: string) {
     super(message);
@@ -651,4 +706,91 @@ function escapeRegExp(value: string): string {
 
 function delay(durationMs: number | undefined): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs ?? 0));
+}
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms.`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function parsePngDataUrl(
+  dataUrl: string,
+  maxImageBytes: number,
+): {
+  readonly base64: string;
+  readonly bytes: number;
+  readonly width?: number;
+  readonly height?: number;
+} {
+  const prefix = "data:image/png;base64,";
+  if (!dataUrl.startsWith(prefix)) {
+    throw new BrowserCommandError("CAPTURE_FAILED", "Firefox did not return a PNG screenshot.");
+  }
+
+  const base64 = dataUrl.slice(prefix.length);
+  const bytes = base64DecodedLength(base64);
+  if (bytes <= 0) {
+    throw new BrowserCommandError("CAPTURE_FAILED", "Firefox returned an empty screenshot.");
+  }
+  if (bytes > maxImageBytes) {
+    throw new BrowserCommandError(
+      "OUTPUT_TOO_LARGE",
+      `Screenshot is ${bytes} bytes, exceeding the ${maxImageBytes} byte limit.`,
+    );
+  }
+
+  return {
+    base64,
+    bytes,
+    ...parsePngDimensions(base64),
+  };
+}
+
+function base64DecodedLength(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+function parsePngDimensions(base64: string): { readonly width?: number; readonly height?: number } {
+  try {
+    const header = atob(base64.slice(0, 32));
+    const bytes = Uint8Array.from(header, (character) => character.charCodeAt(0));
+    const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    const isPng = pngSignature.every((byte, index) => bytes[index] === byte);
+    if (!isPng || bytes.length < 24) {
+      throw new Error("Invalid PNG header.");
+    }
+
+    return {
+      width: readUint32(bytes, 16),
+      height: readUint32(bytes, 20),
+    };
+  } catch (error) {
+    throw new BrowserCommandError(
+      "CAPTURE_FAILED",
+      `Firefox returned invalid PNG data: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return (
+    (bytes[offset] ?? 0) * 0x1000000 +
+    ((bytes[offset + 1] ?? 0) << 16) +
+    ((bytes[offset + 2] ?? 0) << 8) +
+    (bytes[offset + 3] ?? 0)
+  );
 }
