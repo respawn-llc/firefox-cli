@@ -3,6 +3,7 @@ import {
   PROTOCOL_VERSION,
   createOkResponse,
   createRequest,
+  gatedCapabilities,
   kernelCapabilities,
   parseBoundaryRequest,
   parseBoundaryResponse,
@@ -204,6 +205,21 @@ describe("parseBoundaryRequest", () => {
 });
 
 describe("parseBoundaryResponse", () => {
+  it("includes explicit prototype-gated and unsupported capability metadata", () => {
+    for (const capability of gatedCapabilities) {
+      expect(kernelCapabilities).toContainEqual({
+        command: capability.command,
+        status: capability.status,
+        reason: capability.reason,
+      });
+    }
+
+    const commandNames = gatedCapabilities.map((capability) => capability.command);
+    expect(new Set(commandNames).size).toBe(commandNames.length);
+    const cliCommands = gatedCapabilities.flatMap((capability) => capability.cliCommands ?? []);
+    expect(new Set(cliCommands).size).toBe(cliCommands.length);
+  });
+
   it.each(boundaries)("validates successful responses across %s", (boundary) => {
     const request = createRequest("capabilities", {}, "request-1");
     const response = createOkResponse(request, { capabilities: [...kernelCapabilities] });

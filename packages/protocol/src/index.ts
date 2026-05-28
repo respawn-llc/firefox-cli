@@ -1427,12 +1427,189 @@ const responseEnvelopeSchema = z.discriminatedUnion("ok", [
     .strict(),
 ]);
 
-export const kernelCapabilities: readonly CapabilitySummary[] = Object.entries(commandSchemas).map(
-  ([command, schema]) => ({
+export type GatedCapabilitySummary = CapabilitySummary & {
+  readonly cliCommands?: readonly string[];
+};
+
+export const gatedCapabilities: readonly GatedCapabilitySummary[] = [
+  {
+    command: "drag",
+    status: "prototype-gated",
+    reason: "drag is prototype-gated until target-site and input-fidelity validation is complete.",
+    cliCommands: ["drag"],
+  },
+  {
+    command: "upload",
+    status: "prototype-gated",
+    reason: "upload is prototype-gated until file-picker and target-site validation is complete.",
+    cliCommands: ["upload"],
+  },
+  {
+    command: "mouse",
+    status: "prototype-gated",
+    reason: "direct mouse commands are prototype-gated until OS-level input is validated.",
+    cliCommands: ["mouse"],
+  },
+  {
+    command: "keydown",
+    status: "prototype-gated",
+    reason: "keydown is prototype-gated until raw key-event fidelity is validated.",
+    cliCommands: ["keydown"],
+  },
+  {
+    command: "keyup",
+    status: "prototype-gated",
+    reason: "keyup is prototype-gated until raw key-event fidelity is validated.",
+    cliCommands: ["keyup"],
+  },
+  {
+    command: "find",
+    status: "prototype-gated",
+    reason: "semantic locators are prototype-gated until the locator contract is implemented.",
+    cliCommands: ["find"],
+  },
+  {
+    command: "frame",
+    status: "prototype-gated",
+    reason: "frame commands are prototype-gated until actionable iframe refs are implemented.",
+    cliCommands: ["frame"],
+  },
+  {
+    command: "screenshot --full",
+    status: "prototype-gated",
+    reason: "full-page screenshots are prototype-gated until scroll-and-stitch is validated.",
+  },
+  {
+    command: "screenshot --format jpeg",
+    status: "prototype-gated",
+    reason: "JPEG screenshots are prototype-gated until format and quality options are validated.",
+  },
+  {
+    command: "download",
+    status: "prototype-gated",
+    reason:
+      "download commands are prototype-gated until download lifecycle support is implemented.",
+    cliCommands: ["download"],
+  },
+  {
+    command: "wait --download",
+    status: "prototype-gated",
+    reason: "wait --download is prototype-gated until download lifecycle support is implemented.",
+  },
+  {
+    command: "dialog",
+    status: "prototype-gated",
+    reason: "dialog commands are prototype-gated until dialog instrumentation is implemented.",
+    cliCommands: ["dialog"],
+  },
+  {
+    command: "clipboard",
+    status: "prototype-gated",
+    reason: "clipboard commands are prototype-gated pending permission and UX decisions.",
+    cliCommands: ["clipboard"],
+  },
+  {
+    command: "cookies",
+    status: "prototype-gated",
+    reason: "cookie commands are prototype-gated pending additional Firefox permissions.",
+    cliCommands: ["cookies"],
+  },
+  {
+    command: "storage",
+    status: "prototype-gated",
+    reason: "storage commands are prototype-gated until a scoped storage contract is implemented.",
+    cliCommands: ["storage"],
+  },
+  {
+    command: "network",
+    status: "prototype-gated",
+    reason: "network commands are prototype-gated pending webRequest or instrumentation design.",
+    cliCommands: ["network"],
+  },
+  {
+    command: "console",
+    status: "prototype-gated",
+    reason: "console capture is prototype-gated until injected instrumentation is implemented.",
+    cliCommands: ["console"],
+  },
+  {
+    command: "errors",
+    status: "prototype-gated",
+    reason: "error capture is prototype-gated until injected instrumentation is implemented.",
+    cliCommands: ["errors"],
+  },
+  {
+    command: "highlight",
+    status: "prototype-gated",
+    reason: "highlight is prototype-gated until injected overlay lifecycle support is implemented.",
+    cliCommands: ["highlight"],
+  },
+  {
+    command: "pdf",
+    status: "prototype-gated",
+    reason: "PDF export is prototype-gated until Firefox print/export behavior is validated.",
+    cliCommands: ["pdf"],
+  },
+  {
+    command: "set",
+    status: "prototype-gated",
+    reason:
+      "viewport and emulation commands are prototype-gated until window sizing is implemented.",
+    cliCommands: ["set"],
+  },
+  {
+    command: "diff",
+    status: "prototype-gated",
+    reason: "diff commands are prototype-gated until baseline persistence is implemented.",
+    cliCommands: ["diff"],
+  },
+  {
+    command: "wait --load networkidle",
+    status: "prototype-gated",
+    reason:
+      "wait --load networkidle is prototype-gated until network instrumentation is implemented.",
+  },
+  {
+    command: "close",
+    status: "unsupported",
+    reason: "top-level close is unsupported; use explicit tab close or window close.",
+    cliCommands: ["close"],
+  },
+  {
+    command: "quit",
+    status: "unsupported",
+    reason:
+      "quit is unsupported because firefox-cli must not terminate the user's Firefox process.",
+    cliCommands: ["quit"],
+  },
+  {
+    command: "exit",
+    status: "unsupported",
+    reason:
+      "exit is unsupported because firefox-cli must not terminate the user's Firefox process.",
+    cliCommands: ["exit"],
+  },
+  {
+    command: "connect",
+    status: "unsupported",
+    reason: "connect is unsupported because Firefox does not provide Chrome CDP attach semantics.",
+    cliCommands: ["connect"],
+  },
+  {
+    command: "inspect",
+    status: "unsupported",
+    reason: "inspect is unsupported because Firefox does not expose agent-browser CDP inspection.",
+    cliCommands: ["inspect"],
+  },
+] as const;
+
+export const kernelCapabilities: readonly CapabilitySummary[] = [
+  ...Object.entries(commandSchemas).map(([command, schema]) => ({
     command,
     status: schema.status,
-  }),
-);
+  })),
+  ...gatedCapabilities.map(({ cliCommands: _cliCommands, ...capability }) => capability),
+];
 
 export function parseBoundaryRequest(
   boundary: Boundary,

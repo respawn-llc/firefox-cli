@@ -4,6 +4,7 @@ import { createTempDir } from "@firefox-cli/test-support";
 import {
   createErrorResponse,
   createOkResponse,
+  gatedCapabilities,
   kernelCapabilities,
   type RequestEnvelope,
   type WaitResult,
@@ -874,6 +875,12 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Invalid timeout: 0\n",
     });
+    await expect(runCli(["wait", "--load", "networkidle"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: wait --load networkidle is prototype-gated until network instrumentation is implemented.\n",
+    });
   });
 
   it("runs eval from argv with target, timeout, and result-size options", async () => {
@@ -1640,6 +1647,61 @@ describe("runCli", () => {
 
     expect(output.exitCode).toBe(1);
     expect(output.stdout).toContain("Usage:");
+  });
+
+  it("returns explicit unsupported-capability errors for prototype-gated command families", async () => {
+    for (const capability of gatedCapabilities) {
+      for (const command of capability.cliCommands ?? []) {
+        await expect(runCli([command], baseDependencies())).resolves.toEqual({
+          exitCode: 1,
+          stdout: "",
+          stderr: `UNSUPPORTED_CAPABILITY: ${capability.reason}\n`,
+        });
+      }
+    }
+  });
+
+  it("returns explicit unsupported-capability errors for prototype-gated options", async () => {
+    await expect(runCli(["wait", "--load", "networkidle"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: wait --load networkidle is prototype-gated until network instrumentation is implemented.\n",
+    });
+    await expect(runCli(["wait", "--download", "file.zip"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: wait --download is prototype-gated until download lifecycle support is implemented.\n",
+    });
+    await expect(runCli(["screenshot", "--full"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: full-page screenshots are prototype-gated until scroll-and-stitch is validated.\n",
+    });
+    await expect(runCli(["screenshot", "--format", "jpeg"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
+    });
+    await expect(
+      runCli(["screenshot", "--screenshot-format", "jpeg"], baseDependencies()),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
+    });
+    await expect(
+      runCli(["screenshot", "--screenshot-quality", "80"], baseDependencies()),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
+    });
   });
 });
 

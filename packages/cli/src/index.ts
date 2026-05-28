@@ -25,6 +25,7 @@ import {
   type TabSummary,
   type TargetSelector,
   type WaitResult,
+  gatedCapabilities,
   isBatchableCommandId,
 } from "@firefox-cli/protocol";
 
@@ -42,6 +43,15 @@ class CliUsageError extends Error {
     this.name = "CliUsageError";
   }
 }
+
+const gatedCliCommands = new Map(
+  gatedCapabilities.flatMap((capability) =>
+    (capability.cliCommands ?? []).map((command) => [command, capability] as const),
+  ),
+);
+const gatedCapabilitiesByCommand = new Map(
+  gatedCapabilities.map((capability) => [capability.command, capability] as const),
+);
 
 export type CliDependencies = {
   readonly version: string;
@@ -172,6 +182,11 @@ async function runCliOrThrow(
 
   if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
     return navigation(args[0], args.slice(1), dependencies);
+  }
+
+  const gated = args[0] === undefined ? undefined : gatedCliCommands.get(args[0]);
+  if (gated !== undefined) {
+    return error(formatGatedCapability(gated.command));
   }
 
   return {
@@ -1134,6 +1149,14 @@ function formatProtocolError(error: ProtocolError): string {
   return `${error.code}: ${error.message}\n`;
 }
 
+function formatGatedCapability(command: string): string {
+  const capability = gatedCapabilitiesByCommand.get(command);
+  return formatProtocolError({
+    code: "UNSUPPORTED_CAPABILITY",
+    message: capability?.reason ?? `${command} is not supported by firefox-cli.`,
+  });
+}
+
 function renderTabSummary(tab: TabSummary): string {
   const activePrefix = tab.active ? "*" : " ";
   const title = tab.title ?? "(untitled)";
@@ -1365,6 +1388,16 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
         parsed.maxImageBytes = readFlagValue(args, index, arg);
         index += 1;
         break;
+      case "--full":
+        throw new CliUsageError(formatGatedCapability("screenshot --full").trim());
+      case "--format":
+      case "--screenshot-format":
+        if (readFlagValue(args, index, arg).toLowerCase() === "jpeg") {
+          throw new CliUsageError(formatGatedCapability("screenshot --format jpeg").trim());
+        }
+        throw new CliUsageError("Only PNG screenshots are supported.");
+      case "--screenshot-quality":
+        throw new CliUsageError(formatGatedCapability("screenshot --format jpeg").trim());
       case "--window":
       case "--tab": {
         const value = readFlagValue(args, index, arg);
@@ -1685,6 +1718,9 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
   }
 
   if (waitArgs.loadState !== undefined) {
+    if (waitArgs.loadState === "networkidle") {
+      throw new CliUsageError(formatGatedCapability("wait --load networkidle").trim());
+    }
     if (waitArgs.loadState !== "domcontentloaded" && waitArgs.loadState !== "complete") {
       throw new CliUsageError(`Invalid load state: ${waitArgs.loadState}`);
     }
@@ -1769,6 +1805,8 @@ function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {
         parsed.loadState = readFlagValue(args, index, arg);
         index += 1;
         break;
+      case "--download":
+        throw new CliUsageError(formatGatedCapability("wait --download").trim());
       case "--state":
         parsed.state = readFlagValue(args, index, arg);
         index += 1;
