@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import {
@@ -92,6 +92,29 @@ describe("runCli", () => {
       ].join("\n"),
       stderr: "",
     });
+  });
+
+  it("prefers packaged signed extension path in setup guidance", async () => {
+    const packageRoot = await createTempDir("firefox-cli-package");
+    await mkdir(join(packageRoot, "extension"), { recursive: true });
+    await writeFile(join(packageRoot, "extension/firefox-cli.xpi"), "signed xpi\n");
+    const { extensionPath: _extensionPath, ...dependencies } = baseDependencies();
+
+    const jsonOutput = await runCli(["setup", "--json"], {
+      ...dependencies,
+      packageRoot,
+    });
+    const textOutput = await runCli(["setup"], {
+      ...dependencies,
+      packageRoot,
+    });
+
+    expect(JSON.parse(jsonOutput.stdout)).toMatchObject({
+      extensionPath: join(packageRoot, "extension/firefox-cli.xpi"),
+    });
+    expect(textOutput.stdout).toContain(
+      `Extension: install ${join(packageRoot, "extension/firefox-cli.xpi")} in Firefox.`,
+    );
   });
 
   it("prints setup native-host dry-run JSON without writing the manifest", async () => {

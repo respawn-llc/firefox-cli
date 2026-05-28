@@ -13,7 +13,9 @@ import rootPackage from "../package.json" with { type: "json" };
 const packageRoot = resolve("dist/package");
 const errors: string[] = [];
 const phase0Mode = process.argv.includes("--phase0");
-const phase2Mode = process.argv.includes("--phase2");
+const requireSignedXpi =
+  process.argv.includes("--require-signed-xpi") ||
+  process.env.FIREFOX_CLI_REQUIRE_SIGNED_XPI === "1";
 
 await runCheck("package layout", () => verifyPackageLayout({ packageRoot }));
 await runCheck("temp install --version", async () => {
@@ -50,11 +52,13 @@ if (phase0Mode) {
   await runCheck("stale native manifest repair", () =>
     verifyStaleNativeManifestRepair({ packageRoot }),
   );
-  if (phase2Mode) {
-    console.log("Phase 2 release check: signed XPI verification is deferred.");
-  } else {
+  if (requireSignedXpi) {
     await runCheck("signed extension XPI", () =>
       verifyPackageLayout({ packageRoot, requireSignedXpi: true }),
+    );
+  } else {
+    console.log(
+      "Release check completed without signed XPI gate. Use --require-signed-xpi for release-candidate packages.",
     );
   }
 }

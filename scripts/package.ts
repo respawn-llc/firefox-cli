@@ -36,6 +36,7 @@ await cp("dist/extension", resolve(packageRoot, "extension/development"), {
 });
 
 await copyExtensionArchive(packageRoot);
+await copySignedExtensionXpi(packageRoot);
 
 console.log(`Assembled package at ${packageRoot}`);
 
@@ -77,4 +78,21 @@ async function copyExtensionArchive(path: string): Promise<void> {
     resolve(path, "extension/development/README.md"),
     `Development extension directory only. Manifest:\n\n${manifest}`,
   );
+}
+
+async function copySignedExtensionXpi(path: string): Promise<void> {
+  const envPath = process.env.FIREFOX_CLI_SIGNED_XPI;
+  const sourcePath =
+    envPath === undefined || envPath.length === 0
+      ? resolve("dist/extension-artifacts", `firefox-cli-${rootPackage.version}.xpi`)
+      : resolve(envPath);
+
+  try {
+    await cp(sourcePath, resolve(path, "extension/firefox-cli.xpi"));
+  } catch (error) {
+    if (envPath !== undefined && envPath.length > 0) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to copy FIREFOX_CLI_SIGNED_XPI from ${sourcePath}: ${message}`);
+    }
+  }
 }

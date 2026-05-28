@@ -523,8 +523,10 @@ Expose root scripts with these roles once package manifests exist:
 - `test:e2e`: run Firefox extension/native-host integration tests.
 - `extension:run`: load the extension into Firefox for development.
 - `extension:build`: produce the extension package.
+- `extension:sign`: sign the built extension through Mozilla Add-ons credentials.
 - `package`: build the npm package artifacts.
 - `release:check`: verify the package can install, register the native host, and print actionable setup state.
+- `release:check:signed`: run release verification with signed XPI presence required.
 
 Do not put exact command strings in AGENTS.md or docs until the scripts exist in tracked manifests.
 
@@ -545,6 +547,7 @@ Package requirements:
 - Postinstall may print setup guidance but must not silently mutate Firefox configuration without an explicit setup command.
 - `doctor --fix` handles moved package paths after npm upgrades.
 - Host-mode stdout is reserved for native messaging frames.
+- Release-candidate package verification requires `extension/firefox-cli.xpi` in the assembled package.
 
 Manual extension install is in scope; Mozilla store/public listing automation is out of scope.
 
