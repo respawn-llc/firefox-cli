@@ -1436,11 +1436,7 @@ async function keyboard(
 }
 
 async function select(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
-    payloadStartPositionals: 1,
-    minPositionals: 2,
-    variadicAfterMin: true,
-  });
+  const parsedArgs = parseSelectArguments(args);
   const json = parsedArgs.optionArgs.includes("--json");
   const positional = parsedArgs.positionals;
   const elementTarget = positional[0];
@@ -1463,6 +1459,38 @@ async function select(args: readonly string[], dependencies: CliDependencies): P
   );
 
   return formatActionResponse(response, json);
+}
+
+function parseSelectArguments(args: readonly string[]): {
+  readonly positionals: readonly string[];
+  readonly optionArgs: readonly string[];
+} {
+  const positionals: string[] = [];
+  const optionArgs: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) {
+      continue;
+    }
+
+    if (arg === "--json") {
+      optionArgs.push(arg);
+      continue;
+    }
+
+    if (arg === "--tab" || arg === "--window" || arg === "--generation") {
+      const value = args[index + 1];
+      if (value !== undefined) {
+        optionArgs.push(arg, value);
+        index += 1;
+        continue;
+      }
+    }
+
+    positionals.push(arg);
+  }
+
+  return { positionals, optionArgs };
 }
 
 async function scroll(

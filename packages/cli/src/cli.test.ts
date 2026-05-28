@@ -1653,6 +1653,27 @@ describe("runCli", () => {
         stdout: "select ok combobox Plan selected=pro,--generation\n",
       },
       {
+        args: ["select", "#plan", "pro", "--tab", "id:42", "--json"],
+        command: "select",
+        params: { selector: "#plan", values: ["pro"], target: { tab: { kind: "id", id: 42 } } },
+        result: {
+          action: "select",
+          ok: true,
+          element: actionElement("combobox", "Plan"),
+          selectedValues: ["pro"],
+        },
+        stdout: `${JSON.stringify(
+          {
+            action: "select",
+            ok: true,
+            element: actionElement("combobox", "Plan"),
+            selectedValues: ["pro"],
+          },
+          null,
+          2,
+        )}\n`,
+      },
+      {
         args: ["scroll", "down", "300", "#feed"],
         command: "scroll",
         params: { direction: "down", distancePx: 300, selector: "#feed" },

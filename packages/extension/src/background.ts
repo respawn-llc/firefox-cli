@@ -148,8 +148,15 @@ const controller = new FirefoxCliBackgroundController({
       }
       throw new Error("Timed out waiting for network idle.");
     },
-    resizeWindow: async (windowId, size) =>
-      toWindowSnapshot(await browser.windows.update(windowId, size)),
+    resizeWindow: async (windowId, size) => {
+      await browser.windows.update(windowId, size);
+      const windows = await browser.windows.getAll({ populate: true });
+      const window = windows.find((candidate) => candidate.id === windowId);
+      if (window === undefined) {
+        throw new Error("Firefox did not return the resized window.");
+      }
+      return toWindowSnapshot(window);
+    },
     sendContentRequest: async (tabId, request) => {
       try {
         return await browser.tabs.sendMessage(tabId, request);

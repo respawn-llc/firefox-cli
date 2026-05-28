@@ -347,6 +347,49 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "wait" }]);
   });
 
+  it("runs function waits through main-world eval instead of content-script eval", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.evalResult = {
+      ok: true,
+      value: { type: "json", value: { matched: true, value: true } },
+      elapsedMs: 1,
+    };
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "wait",
+        { kind: "function", expression: "document.readyState === 'complete'" },
+        "wait-fn-1",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        kind: "function",
+        matched: true,
+        value: true,
+        target: {
+          tabId: 101,
+        },
+      },
+    });
+    expect(adapter.contentRequests).toEqual([]);
+    expect(adapter.evalRequests).toEqual([
+      {
+        tabId: 101,
+        payload: {
+          script: expect.stringContaining("document.readyState === 'complete'"),
+          timeoutMs: 30_000,
+          maxResultBytes: 4096,
+        },
+      },
+    ]);
+  });
+
   it("waits for network idle through the background network tracker", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),

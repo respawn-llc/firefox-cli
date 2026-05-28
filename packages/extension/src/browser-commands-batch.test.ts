@@ -184,7 +184,7 @@ describe("browser batch command handling", () => {
       createRequest(
         "batch",
         {
-          timeoutMs: 1,
+          timeoutMs: 10,
           steps: [{ command: "wait", params: { kind: "url", urlGlob: "https://never.test/*" } }],
         },
         "batch-timeout",

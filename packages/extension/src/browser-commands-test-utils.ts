@@ -38,6 +38,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   networkRequests: { readonly id: string; readonly url: string }[] = [];
   contentFailure: Error | undefined;
   evalFailure: Error | undefined;
+  evalResult: EvalExecutorResult | undefined;
   captureFailure: Error | undefined;
   selectFailure: Error | undefined;
   captureDelayMs: number | undefined;
@@ -286,14 +287,16 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       throw this.evalFailure;
     }
 
-    return {
-      ok: true,
-      value: {
-        type: "json",
-        value: "Eval result",
-      },
-      elapsedMs: 4,
-    };
+    return (
+      this.evalResult ?? {
+        ok: true,
+        value: {
+          type: "json",
+          value: "Eval result",
+        },
+        elapsedMs: 4,
+      }
+    );
   }
 
   async captureVisibleTab(
