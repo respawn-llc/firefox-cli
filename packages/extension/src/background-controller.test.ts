@@ -361,6 +361,33 @@ function createTestBrowserAdapter(
     captureVisibleTab: async () => {
       throw new Error("not implemented");
     },
+    download: async () => {
+      throw new Error("not implemented");
+    },
+    waitForDownload: async () => {
+      throw new Error("not implemented");
+    },
+    readClipboard: async () => {
+      throw new Error("not implemented");
+    },
+    writeClipboard: async () => {
+      throw new Error("not implemented");
+    },
+    listCookies: async () => {
+      throw new Error("not implemented");
+    },
+    setCookie: async () => {
+      throw new Error("not implemented");
+    },
+    removeCookie: async () => {
+      throw new Error("not implemented");
+    },
+    listNetworkRequests: async () => [],
+    clearNetworkRequests: async () => undefined,
+    waitForNetworkIdle: async () => undefined,
+    resizeWindow: async () => {
+      throw new Error("not implemented");
+    },
   };
 }
 

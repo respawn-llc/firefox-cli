@@ -518,7 +518,15 @@ export const isResultSchema = z
   .strict();
 export type IsResult = z.infer<typeof isResultSchema>;
 
-export const waitKindSchema = z.enum(["ms", "element", "text", "url", "function", "load-state"]);
+export const waitKindSchema = z.enum([
+  "ms",
+  "element",
+  "text",
+  "url",
+  "function",
+  "load-state",
+  "download",
+]);
 export type WaitKind = z.infer<typeof waitKindSchema>;
 export const waitStateSchema = z.enum([
   "visible",
@@ -526,6 +534,7 @@ export const waitStateSchema = z.enum([
   "attached",
   "domcontentloaded",
   "complete",
+  "networkidle",
 ]);
 export type WaitState = z.infer<typeof waitStateSchema>;
 
@@ -541,6 +550,8 @@ export const waitParamsSchema = z
     text: z.string().min(1).optional(),
     urlGlob: z.string().min(1).optional(),
     expression: z.string().min(1).max(20_000).optional(),
+    downloadId: z.number().int().positive().optional(),
+    filenameGlob: z.string().min(1).optional(),
     timeoutMs: z.number().int().positive().max(600_000).optional(),
     intervalMs: z.number().int().positive().max(60_000).optional(),
   })
@@ -636,13 +647,25 @@ export const waitParamsSchema = z
     }
 
     if (
-      params.kind === "load-state" &&
-      params.state !== "domcontentloaded" &&
-      params.state !== "complete"
+      params.kind !== "download" &&
+      (params.downloadId !== undefined || params.filenameGlob !== undefined)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Load-state waits require domcontentloaded or complete state.",
+        message: "Only download waits accept download criteria.",
+        path: params.downloadId === undefined ? ["filenameGlob"] : ["downloadId"],
+      });
+    }
+
+    if (
+      params.kind === "load-state" &&
+      params.state !== "domcontentloaded" &&
+      params.state !== "complete" &&
+      params.state !== "networkidle"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Load-state waits require domcontentloaded, complete, or networkidle state.",
         path: ["state"],
       });
     }
@@ -693,6 +716,18 @@ export const waitResultSchema = z.discriminatedUnion("kind", [
   waitBaseResultSchema.extend({ kind: z.literal("url"), value: z.string() }).strict(),
   waitBaseResultSchema.extend({ kind: z.literal("function"), value: getValueSchema }).strict(),
   waitBaseResultSchema.extend({ kind: z.literal("load-state") }).strict(),
+  waitBaseResultSchema
+    .extend({
+      kind: z.literal("download"),
+      download: z
+        .object({
+          id: z.number().int(),
+          filename: z.string().optional(),
+          state: z.string().optional(),
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 export type WaitResult = z.infer<typeof waitResultSchema>;
 
@@ -712,6 +747,11 @@ export const actionKindSchema = z.enum([
   "scroll",
   "scrollintoview",
   "swipe",
+  "drag",
+  "upload",
+  "mouse",
+  "keydown",
+  "keyup",
 ]);
 export type ActionKind = z.infer<typeof actionKindSchema>;
 
@@ -881,6 +921,11 @@ export const actionResultSchema = z.union([
   scrollActionResultSchemaFor("scroll"),
   elementActionResultSchemaFor("scrollintoview"),
   scrollActionResultSchemaFor("swipe"),
+  elementActionResultSchemaFor("drag"),
+  textActionResultSchemaFor("upload"),
+  elementActionResultSchemaFor("mouse"),
+  elementActionResultSchemaFor("keydown"),
+  elementActionResultSchemaFor("keyup"),
 ]);
 export type ActionResult = z.infer<typeof actionResultSchema>;
 
@@ -943,7 +988,7 @@ export const evalResultSchema = z
   .strict();
 export type EvalResult = z.infer<typeof evalResultSchema>;
 
-export const screenshotFormatSchema = z.literal("png");
+export const screenshotFormatSchema = z.enum(["png", "jpeg"]);
 export type ScreenshotFormat = z.infer<typeof screenshotFormatSchema>;
 
 export const screenshotParamsSchema = z
@@ -951,11 +996,364 @@ export const screenshotParamsSchema = z
     target: targetSelectorSchema.optional(),
     path: z.string().min(1),
     format: screenshotFormatSchema,
+    fullPage: z.boolean().optional(),
+    quality: z.number().int().min(1).max(100).optional(),
     timeoutMs: z.number().int().positive().max(600_000).optional(),
     maxImageBytes: z.number().int().positive().max(MAX_SCREENSHOT_BYTES).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((params, context) => {
+    if (params.quality !== undefined && params.format !== "jpeg") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Screenshot quality applies only to JPEG screenshots.",
+        path: ["quality"],
+      });
+    }
+  });
 export type ScreenshotParams = z.infer<typeof screenshotParamsSchema>;
+
+export const phase8ElementTargetParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine(elementTargetRefinement);
+
+export const dragParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    sourceSelector: z.string().min(1).optional(),
+    sourceRef: elementRefSchema.optional(),
+    sourceGenerationId: z.string().min(1).optional(),
+    targetSelector: z.string().min(1).optional(),
+    targetRef: elementRefSchema.optional(),
+    targetGenerationId: z.string().min(1).optional(),
+  })
+  .strict();
+export type DragParams = z.infer<typeof dragParamsSchema>;
+
+export const uploadFileSchema = z
+  .object({
+    name: z.string().min(1),
+    mimeType: z.string().min(1).optional(),
+    dataBase64: z.string().min(1),
+  })
+  .strict();
+export type UploadFile = z.infer<typeof uploadFileSchema>;
+
+export const uploadParamsSchema = phase8ElementTargetParamsSchema.extend({
+  files: z.array(uploadFileSchema).min(1).max(20),
+});
+export type UploadParams = z.infer<typeof uploadParamsSchema>;
+
+export const mouseParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    action: z.enum(["move", "down", "up", "wheel"]),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+    x: z.number().optional(),
+    y: z.number().optional(),
+    button: z.number().int().nonnegative().max(4).optional(),
+    deltaX: z.number().optional(),
+    deltaY: z.number().optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if (params.ref === undefined && params.generationId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Generation IDs apply only to refs.",
+        path: ["generationId"],
+      });
+    }
+  });
+export type MouseParams = z.infer<typeof mouseParamsSchema>;
+
+export const keyEventParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    key: z.string().min(1).max(100),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine((params, context) => {
+    if (params.ref === undefined && params.generationId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Generation IDs apply only to refs.",
+        path: ["generationId"],
+      });
+    }
+  });
+export type KeyEventParams = z.infer<typeof keyEventParamsSchema>;
+
+export const findKindSchema = z.enum([
+  "role",
+  "text",
+  "label",
+  "placeholder",
+  "alt",
+  "title",
+  "testid",
+]);
+export type FindKind = z.infer<typeof findKindSchema>;
+
+export const findParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    kind: findKindSchema,
+    value: z.string().min(1),
+    first: z.boolean().optional(),
+    last: z.boolean().optional(),
+    nth: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type FindParams = z.infer<typeof findParamsSchema>;
+
+export const findResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    elements: z.array(waitElementSummarySchema),
+  })
+  .strict();
+export type FindResult = z.infer<typeof findResultSchema>;
+
+export const frameParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+  })
+  .strict();
+export const frameSummarySchema = z
+  .object({
+    index: z.number().int().nonnegative(),
+    selector: z.string().min(1).optional(),
+    title: z.string().optional(),
+    url: z.string().optional(),
+  })
+  .strict();
+export const frameResultSchema = z
+  .object({
+    target: resolvedTargetSchema.optional(),
+    frames: z.array(frameSummarySchema),
+  })
+  .strict();
+export type FrameResult = z.infer<typeof frameResultSchema>;
+
+export const downloadParamsSchema = z
+  .object({
+    url: z.string().min(1),
+    filename: z.string().min(1).optional(),
+    saveAs: z.boolean().optional(),
+  })
+  .strict();
+export const downloadResultSchema = z
+  .object({
+    id: z.number().int(),
+    filename: z.string().optional(),
+    state: z.string().optional(),
+  })
+  .strict();
+export type DownloadResult = z.infer<typeof downloadResultSchema>;
+
+export const dialogParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    action: z.enum(["status", "accept", "dismiss"]),
+    promptText: z.string().optional(),
+  })
+  .strict();
+export const dialogResultSchema = z
+  .object({
+    action: z.enum(["status", "accept", "dismiss"]),
+    handled: z.boolean(),
+    message: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .strict();
+export type DialogResult = z.infer<typeof dialogResultSchema>;
+
+export const clipboardParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    action: z.enum(["read", "write", "copy", "paste"]),
+    text: z.string().optional(),
+    selector: z.string().min(1).optional(),
+    ref: elementRefSchema.optional(),
+    generationId: z.string().min(1).optional(),
+  })
+  .strict();
+export const clipboardResultSchema = z
+  .object({
+    action: z.enum(["read", "write", "copy", "paste"]),
+    ok: z.literal(true),
+    text: z.string().optional(),
+  })
+  .strict();
+export type ClipboardResult = z.infer<typeof clipboardResultSchema>;
+
+export const cookieParamsSchema = z
+  .object({
+    action: z.enum(["list", "get", "set", "remove"]),
+    url: z.string().min(1),
+    name: z.string().min(1).optional(),
+    value: z.string().optional(),
+    domain: z.string().optional(),
+    path: z.string().optional(),
+  })
+  .strict();
+export const cookieSummarySchema = z
+  .object({
+    name: z.string(),
+    value: z.string(),
+    domain: z.string().optional(),
+    path: z.string().optional(),
+  })
+  .strict();
+export const cookieResultSchema = z
+  .object({
+    action: z.enum(["list", "get", "set", "remove"]),
+    ok: z.literal(true),
+    cookies: z.array(cookieSummarySchema).optional(),
+    cookie: cookieSummarySchema.nullable().optional(),
+  })
+  .strict();
+export type CookieResult = z.infer<typeof cookieResultSchema>;
+
+export const storageParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    area: z.enum(["local", "session"]),
+    action: z.enum(["get", "set", "remove", "clear"]),
+    key: z.string().min(1).optional(),
+    value: z.string().optional(),
+  })
+  .strict();
+export const storageResultSchema = z
+  .object({
+    area: z.enum(["local", "session"]),
+    action: z.enum(["get", "set", "remove", "clear"]),
+    ok: z.literal(true),
+    value: z.string().nullable().optional(),
+    entries: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
+export type StorageResult = z.infer<typeof storageResultSchema>;
+
+export const networkParamsSchema = z
+  .object({
+    action: z.enum(["list", "clear"]),
+    urlGlob: z.string().min(1).optional(),
+  })
+  .strict();
+export const networkRequestSummarySchema = z
+  .object({
+    id: z.string(),
+    url: z.string(),
+    method: z.string().optional(),
+    type: z.string().optional(),
+    statusCode: z.number().int().optional(),
+  })
+  .strict();
+export const networkResultSchema = z
+  .object({
+    action: z.enum(["list", "clear"]),
+    ok: z.literal(true),
+    requests: z.array(networkRequestSummarySchema).optional(),
+  })
+  .strict();
+export type NetworkResult = z.infer<typeof networkResultSchema>;
+
+export const consoleParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    action: z.enum(["list", "clear"]),
+  })
+  .strict();
+export const consoleEntrySchema = z
+  .object({
+    level: z.string(),
+    text: z.string(),
+    timestamp: z.number(),
+  })
+  .strict();
+export const consoleResultSchema = z
+  .object({
+    action: z.enum(["list", "clear"]),
+    ok: z.literal(true),
+    entries: z.array(consoleEntrySchema).optional(),
+  })
+  .strict();
+export type ConsoleResult = z.infer<typeof consoleResultSchema>;
+
+export const errorsParamsSchema = consoleParamsSchema;
+export const errorsResultSchema = z
+  .object({
+    action: z.enum(["list", "clear"]),
+    ok: z.literal(true),
+    errors: z.array(consoleEntrySchema).optional(),
+  })
+  .strict();
+export type ErrorsResult = z.infer<typeof errorsResultSchema>;
+
+export const highlightParamsSchema = phase8ElementTargetParamsSchema.extend({
+  durationMs: z.number().int().positive().max(60_000).optional(),
+});
+export const highlightResultSchema = z
+  .object({
+    ok: z.literal(true),
+    element: waitElementSummarySchema,
+    target: resolvedTargetSchema.optional(),
+  })
+  .strict();
+export type HighlightResult = z.infer<typeof highlightResultSchema>;
+
+export const pdfParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    path: z.string().min(1),
+  })
+  .strict();
+export const pdfResultSchema = z.object({ path: z.string().min(1) }).strict();
+
+export const setViewportParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    width: z.number().int().positive().max(10_000),
+    height: z.number().int().positive().max(10_000),
+  })
+  .strict();
+export const setViewportResultSchema = z
+  .object({
+    window: windowSummarySchema,
+  })
+  .strict();
+export type SetViewportResult = z.infer<typeof setViewportResultSchema>;
+
+export const diffParamsSchema = z
+  .object({
+    target: targetSelectorSchema.optional(),
+    kind: z.enum(["url", "title", "snapshot"]),
+    expected: z.string(),
+    selector: z.string().min(1).optional(),
+  })
+  .strict();
+export const diffResultSchema = z
+  .object({
+    kind: z.enum(["url", "title", "snapshot"]),
+    matches: z.boolean(),
+    expected: z.string(),
+    actual: z.string(),
+  })
+  .strict();
+export type DiffResult = z.infer<typeof diffResultSchema>;
 
 export const screenshotActivationSchema = z
   .object({
@@ -1277,6 +1675,101 @@ export const commandSchemas = {
     result: screenshotResultSchema,
     status: "mvp",
   },
+  drag: {
+    params: dragParamsSchema,
+    result: actionResultSchema,
+    status: "mvp",
+  },
+  upload: {
+    params: uploadParamsSchema,
+    result: actionResultSchema,
+    status: "mvp",
+  },
+  mouse: {
+    params: mouseParamsSchema,
+    result: actionResultSchema,
+    status: "mvp",
+  },
+  keydown: {
+    params: keyEventParamsSchema,
+    result: actionResultSchema,
+    status: "mvp",
+  },
+  keyup: {
+    params: keyEventParamsSchema,
+    result: actionResultSchema,
+    status: "mvp",
+  },
+  find: {
+    params: findParamsSchema,
+    result: findResultSchema,
+    status: "mvp",
+  },
+  frame: {
+    params: frameParamsSchema,
+    result: frameResultSchema,
+    status: "mvp",
+  },
+  download: {
+    params: downloadParamsSchema,
+    result: downloadResultSchema,
+    status: "mvp",
+  },
+  dialog: {
+    params: dialogParamsSchema,
+    result: dialogResultSchema,
+    status: "mvp",
+  },
+  clipboard: {
+    params: clipboardParamsSchema,
+    result: clipboardResultSchema,
+    status: "mvp",
+  },
+  cookies: {
+    params: cookieParamsSchema,
+    result: cookieResultSchema,
+    status: "mvp",
+  },
+  storage: {
+    params: storageParamsSchema,
+    result: storageResultSchema,
+    status: "mvp",
+  },
+  network: {
+    params: networkParamsSchema,
+    result: networkResultSchema,
+    status: "mvp",
+  },
+  console: {
+    params: consoleParamsSchema,
+    result: consoleResultSchema,
+    status: "mvp",
+  },
+  errors: {
+    params: errorsParamsSchema,
+    result: errorsResultSchema,
+    status: "mvp",
+  },
+  highlight: {
+    params: highlightParamsSchema,
+    result: highlightResultSchema,
+    status: "mvp",
+  },
+  pdf: {
+    params: pdfParamsSchema,
+    result: pdfResultSchema,
+    status: "unsupported",
+  },
+  "set.viewport": {
+    params: setViewportParamsSchema,
+    result: setViewportResultSchema,
+    status: "mvp",
+  },
+  diff: {
+    params: diffParamsSchema,
+    result: diffResultSchema,
+    status: "mvp",
+  },
   batch: {
     params: batchParamsSchema,
     result: batchResultSchema,
@@ -1433,141 +1926,10 @@ export type GatedCapabilitySummary = CapabilitySummary & {
 
 export const gatedCapabilities: readonly GatedCapabilitySummary[] = [
   {
-    command: "drag",
-    status: "prototype-gated",
-    reason: "drag is prototype-gated until target-site and input-fidelity validation is complete.",
-    cliCommands: ["drag"],
-  },
-  {
-    command: "upload",
-    status: "prototype-gated",
-    reason: "upload is prototype-gated until file-picker and target-site validation is complete.",
-    cliCommands: ["upload"],
-  },
-  {
-    command: "mouse",
-    status: "prototype-gated",
-    reason: "direct mouse commands are prototype-gated until OS-level input is validated.",
-    cliCommands: ["mouse"],
-  },
-  {
-    command: "keydown",
-    status: "prototype-gated",
-    reason: "keydown is prototype-gated until raw key-event fidelity is validated.",
-    cliCommands: ["keydown"],
-  },
-  {
-    command: "keyup",
-    status: "prototype-gated",
-    reason: "keyup is prototype-gated until raw key-event fidelity is validated.",
-    cliCommands: ["keyup"],
-  },
-  {
-    command: "find",
-    status: "prototype-gated",
-    reason: "semantic locators are prototype-gated until the locator contract is implemented.",
-    cliCommands: ["find"],
-  },
-  {
-    command: "frame",
-    status: "prototype-gated",
-    reason: "frame commands are prototype-gated until actionable iframe refs are implemented.",
-    cliCommands: ["frame"],
-  },
-  {
     command: "screenshot --full",
-    status: "prototype-gated",
-    reason: "full-page screenshots are prototype-gated until scroll-and-stitch is validated.",
-  },
-  {
-    command: "screenshot --format jpeg",
-    status: "prototype-gated",
-    reason: "JPEG screenshots are prototype-gated until format and quality options are validated.",
-  },
-  {
-    command: "download",
-    status: "prototype-gated",
+    status: "unsupported",
     reason:
-      "download commands are prototype-gated until download lifecycle support is implemented.",
-    cliCommands: ["download"],
-  },
-  {
-    command: "wait --download",
-    status: "prototype-gated",
-    reason: "wait --download is prototype-gated until download lifecycle support is implemented.",
-  },
-  {
-    command: "dialog",
-    status: "prototype-gated",
-    reason: "dialog commands are prototype-gated until dialog instrumentation is implemented.",
-    cliCommands: ["dialog"],
-  },
-  {
-    command: "clipboard",
-    status: "prototype-gated",
-    reason: "clipboard commands are prototype-gated pending permission and UX decisions.",
-    cliCommands: ["clipboard"],
-  },
-  {
-    command: "cookies",
-    status: "prototype-gated",
-    reason: "cookie commands are prototype-gated pending additional Firefox permissions.",
-    cliCommands: ["cookies"],
-  },
-  {
-    command: "storage",
-    status: "prototype-gated",
-    reason: "storage commands are prototype-gated until a scoped storage contract is implemented.",
-    cliCommands: ["storage"],
-  },
-  {
-    command: "network",
-    status: "prototype-gated",
-    reason: "network commands are prototype-gated pending webRequest or instrumentation design.",
-    cliCommands: ["network"],
-  },
-  {
-    command: "console",
-    status: "prototype-gated",
-    reason: "console capture is prototype-gated until injected instrumentation is implemented.",
-    cliCommands: ["console"],
-  },
-  {
-    command: "errors",
-    status: "prototype-gated",
-    reason: "error capture is prototype-gated until injected instrumentation is implemented.",
-    cliCommands: ["errors"],
-  },
-  {
-    command: "highlight",
-    status: "prototype-gated",
-    reason: "highlight is prototype-gated until injected overlay lifecycle support is implemented.",
-    cliCommands: ["highlight"],
-  },
-  {
-    command: "pdf",
-    status: "prototype-gated",
-    reason: "PDF export is prototype-gated until Firefox print/export behavior is validated.",
-    cliCommands: ["pdf"],
-  },
-  {
-    command: "set",
-    status: "prototype-gated",
-    reason:
-      "viewport and emulation commands are prototype-gated until window sizing is implemented.",
-    cliCommands: ["set"],
-  },
-  {
-    command: "diff",
-    status: "prototype-gated",
-    reason: "diff commands are prototype-gated until baseline persistence is implemented.",
-    cliCommands: ["diff"],
-  },
-  {
-    command: "wait --load networkidle",
-    status: "prototype-gated",
-    reason:
-      "wait --load networkidle is prototype-gated until network instrumentation is implemented.",
+      "full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
   },
   {
     command: "close",

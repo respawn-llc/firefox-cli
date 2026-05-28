@@ -269,6 +269,8 @@ function describeWait(params: WaitParams): string {
       return `${params.durationMs ?? 0}ms`;
     case "url":
       return `URL ${JSON.stringify(params.urlGlob ?? "")}`;
+    case "download":
+      return "download";
   }
 }
 

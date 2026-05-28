@@ -92,9 +92,10 @@ Element getters accept `--generation id` for refs and `--max-output bytes` for l
 | `firefox-cli wait --text <text> [--json]` | Wait for visible text. |
 | `firefox-cli wait --url <glob> [--json]` | Wait for target URL match. |
 | `firefox-cli wait --fn <js> [--json]` | Poll a page function until it returns a truthy value. |
-| `firefox-cli wait --load domcontentloaded\|complete [--json]` | Wait for document readiness. |
+| `firefox-cli wait --load domcontentloaded\|complete\|networkidle [--json]` | Wait for document readiness or background network idle. |
+| `firefox-cli wait --download [id\|filename-glob] [--json]` | Wait for a download to complete. |
 
-Waits accept `--timeout ms` and `--interval ms`. `wait --load networkidle` and `wait --download` return `UNSUPPORTED_CAPABILITY`.
+Waits accept `--timeout ms` and `--interval ms`.
 
 ## Interactions
 
@@ -112,6 +113,10 @@ Waits accept `--timeout ms` and `--interval ms`. `wait --load networkidle` and `
 | `firefox-cli select <selector\|@ref> <value...> [--json]` | Select option values. |
 | `firefox-cli scroll|swipe up|down|left|right [px] [selector\|@ref] [--json]` | Scroll page or element. |
 | `firefox-cli scrollintoview <selector\|@ref> [--json]` | Scroll an element into view. |
+| `firefox-cli drag <source-selector\|@ref> <target-selector\|@ref> [--json]` | Dispatch a drag/drop sequence. |
+| `firefox-cli upload <selector\|@ref> <file...> [--json]` | Set files on a file input and dispatch change events. |
+| `firefox-cli mouse move|down|up|wheel [selector\|@ref] [--json]` | Dispatch mouse or wheel events. |
+| `firefox-cli keydown|keyup <key> [selector\|@ref] [--json]` | Dispatch key events. |
 
 Element interactions accept `--generation id` for refs. They use WebExtension/content-script events, not OS-level input emulation.
 
@@ -121,11 +126,11 @@ Element interactions accept `--generation id` for refs. They use WebExtension/co
 firefox-cli eval <js> [--timeout ms] [--max-output bytes] [--json]
 firefox-cli eval --stdin [--json]
 firefox-cli eval --base64 <base64-js> [--json]
-firefox-cli screenshot [path] [--timeout ms] [--max-output bytes] [--json]
+firefox-cli screenshot [path] [--format png|jpeg] [--screenshot-quality 1-100] [--timeout ms] [--max-output bytes] [--json]
 firefox-cli batch <json> | --stdin [--bail] [--timeout ms] [--max-output bytes] [--json]
 ```
 
-`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output is visible-tab PNG only; full-page and JPEG options return `UNSUPPORTED_CAPABILITY`.
+`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output captures the visible tab as PNG or JPEG; `--full` returns `UNSUPPORTED_CAPABILITY`.
 
 `batch` accepts an array of protocol command objects or CLI argv arrays. Steps run serially. With `--bail`, execution stops after the first failed step; without it, later steps continue and the batch result reports failures.
 
@@ -139,6 +144,26 @@ Example:
 ]
 ```
 
+## Page And Browser Utilities
+
+| Command | Behavior |
+| --- | --- |
+| `firefox-cli find role|text|label|placeholder|alt|title|testid <value> [--first\|--last\|--nth n] [--json]` | Find elements by semantic locator. |
+| `firefox-cli frame [--json]` | List main-frame iframe diagnostics. |
+| `firefox-cli download <url> [filename] [--save-as] [--json]` | Start a Firefox download. |
+| `firefox-cli dialog status|accept|dismiss [--json]` | Report dialog command status; native modal accept/dismiss is not available through content scripts. |
+| `firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]` | Read/write clipboard text or copy/paste element text. |
+| `firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]` | Manage cookies for a URL. |
+| `firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]` | Manage page local/session storage. |
+| `firefox-cli network list|clear [--url glob] [--json]` | List or clear observed web requests. |
+| `firefox-cli console|errors list|clear [--json]` | List or clear page console/error capture buffers. |
+| `firefox-cli highlight <selector\|@ref> [--json]` | Outline an element. |
+| `firefox-cli set viewport <width> <height> [--json]` | Resize the target browser window. |
+| `firefox-cli diff url|title|snapshot <expected> [--json]` | Compare URL, title, or snapshot text with an expected value. |
+| `firefox-cli pdf <path> [--json]` | Returns `UNSUPPORTED_CAPABILITY`; Firefox saves PDFs through a browser dialog rather than a requested CLI path. |
+
+Network route/mock/block and HAR export are unsupported.
+
 ## Unsupported Families
 
-The CLI returns `UNSUPPORTED_CAPABILITY` for prototype-gated or unsupported command families, including `upload`, `mouse`, `keydown`, `keyup`, `find`, `frame`, `download`, `dialog`, `clipboard`, `cookies`, `storage`, `network`, `console`, `errors`, `highlight`, `pdf`, `set`, `diff`, `connect`, `inspect`, top-level `close`, `quit`, and `exit`.
+The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `connect`, `inspect`, top-level `close`, `quit`, and `exit`.

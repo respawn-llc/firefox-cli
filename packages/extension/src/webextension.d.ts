@@ -42,7 +42,10 @@ declare const browser: {
   readonly windows: {
     getAll(options: { readonly populate: true }): Promise<readonly BrowserWindow[]>;
     create(options: { readonly url?: string }): Promise<BrowserWindow>;
-    update(windowId: number, options: { readonly focused?: boolean }): Promise<BrowserWindow>;
+    update(
+      windowId: number,
+      options: { readonly focused?: boolean; readonly width?: number; readonly height?: number },
+    ): Promise<BrowserWindow>;
     remove(windowId: number): Promise<void>;
   };
   readonly tabs: {
@@ -99,4 +102,55 @@ declare const browser: {
     contains(permissions: { readonly origins: readonly string[] }): Promise<boolean>;
     request(permissions: { readonly origins: readonly string[] }): Promise<boolean>;
   };
+  readonly downloads: {
+    download(options: {
+      readonly url: string;
+      readonly filename?: string;
+      readonly saveAs?: boolean;
+    }): Promise<number>;
+    search(options: {
+      readonly id?: number;
+    }): Promise<
+      readonly { readonly id?: number; readonly filename?: string; readonly state?: string }[]
+    >;
+  };
+  readonly cookies: {
+    getAll(options: {
+      readonly url: string;
+      readonly name?: string;
+    }): Promise<readonly BrowserCookie[]>;
+    set(options: {
+      readonly url: string;
+      readonly name: string;
+      readonly value: string;
+      readonly domain?: string;
+      readonly path?: string;
+    }): Promise<BrowserCookie>;
+    remove(options: { readonly url: string; readonly name: string }): Promise<unknown>;
+  };
+  readonly webRequest?: {
+    readonly onBeforeRequest?: BrowserWebRequestEvent;
+    readonly onCompleted?: BrowserWebRequestEvent;
+    readonly onErrorOccurred?: BrowserWebRequestEvent;
+  };
+};
+
+type BrowserCookie = {
+  readonly name: string;
+  readonly value: string;
+  readonly domain?: string;
+  readonly path?: string;
+};
+
+type BrowserWebRequestEvent = {
+  addListener(
+    listener: (details: {
+      readonly requestId: string | number;
+      readonly url: string;
+      readonly method?: string;
+      readonly type?: string;
+      readonly statusCode?: number;
+    }) => void,
+    filter: { readonly urls: readonly string[] },
+  ): void;
 };

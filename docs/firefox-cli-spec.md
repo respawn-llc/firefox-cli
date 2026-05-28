@@ -197,7 +197,7 @@ Protocol rules:
 - Validate every incoming message at every process/browser boundary.
 - Include a protocol version in every message.
 - Return structured errors with stable codes such as `EXTENSION_NOT_CONNECTED`, `NOT_APPROVED`, `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`, `NO_ACTIVE_TAB`, `REF_NOT_FOUND`, `NAVIGATION_TIMEOUT`, `SCRIPT_INJECTION_BLOCKED`, and `VERSION_MISMATCH`.
-- Include capability metadata so `firefox-cli capabilities` reports implemented, prototype-gated, deferred, and unsupported command groups.
+- Include capability metadata so `firefox-cli capabilities` reports implemented and unsupported command groups.
 - Keep command requests under the native app-to-extension message limit. Eval scripts support stdin/base64 but still enforce a documented max request size.
 
 Startup handshake:
@@ -241,7 +241,7 @@ Ref registry:
 - `batch` shares refs created earlier in the same batch transaction.
 - Stale refs return `REF_NOT_FOUND` with "run `firefox-cli snapshot -i` again" guidance.
 - MVP refs are actionable only in the main frame.
-- Iframe content, frame-scoped snapshots, and actionable iframe refs are prototype-gated. Until they graduate, iframe output is diagnostic/read-only and interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
+- Iframe output is diagnostic/read-only in `snapshot` and `frame`; interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
 
 Implementation approach:
 
@@ -256,8 +256,7 @@ MVP starts with WebExtension/content-script actions:
 
 - Pointer actions are implemented through DOM element resolution, scrolling into view, focus, and synthetic mouse/pointer/click events where needed.
 - Text entry uses value-setting plus input/change events for form controls, and keyboard/input event simulation for editable content where feasible.
-- Click, hover, press, keyboard, fill, and type are MVP for normal main-frame web controls with target-site limitations recorded in `docs/target-site-qa.md`.
-- Drag, upload, direct mouse commands, and rich editor behavior stay prototype-gated until target-site tests prove fidelity.
+- Click, hover, press, keyboard, fill, type, drag, upload, direct mouse commands, and raw key events are available for normal main-frame web controls with target-site limitations recorded in `docs/target-site-qa.md`.
 
 Generated DOM events are not trusted user input. Sites that check `event.isTrusted`, require browser user activation, use complex editors, or implement anti-abuse controls may reject content-script actions. Track concrete failures; add OS-level input emulation only if these failures block the product.
 
@@ -282,8 +281,8 @@ Start with visible-tab screenshots.
 - If a non-active target is requested, the command may activate the target tab/window before capture and must report that side effect in diagnostics.
 - If activation is impossible or would require unsupported user activation, return `UNSUPPORTED_CAPABILITY`.
 - Write image bytes through the native host to the requested path; JSON output should include path, format, dimensions when known, and diagnostics.
-- Support PNG first. JPEG quality and full-page screenshots require prototype validation.
-- `--full` depends on reliable scroll-and-stitch and stays prototype-gated until proven.
+- Support visible-tab PNG and JPEG captures with JPEG quality.
+- `--full` returns `UNSUPPORTED_CAPABILITY` because Firefox WebExtensions expose visible-tab capture APIs rather than a full-page file API.
 
 ## Batch And Concurrency
 
@@ -312,16 +311,16 @@ Agent-browser family compatibility summary:
 | --- | --- |
 | Navigation: `open`, `back`, `forward`, `reload` | MVP |
 | Browser/session close: `close`, `quit`, `exit`, `close --all` | Unsupported; use explicit `tab close` or `window close` |
-| Snapshot/refs: `snapshot` | MVP for main-frame refs; iframe refs prototype-gated |
+| Snapshot/refs: `snapshot`, `frame` | MVP for main-frame refs and iframe diagnostics; actionable iframe refs unsupported |
 | Core actions: `click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`, `swipe` | MVP for normal main-frame controls; target-site QA covers representative public click/fill/type/scroll actions and records x.com unauthenticated-headless limits |
-| Advanced input: `drag`, `upload`, direct `mouse`, `keydown`, `keyup`, rich-editor fidelity | Prototype-gated |
-| Semantic locators: `find ...` | Prototype-gated |
-| Read/check/wait: `get`, `is`, selector/text/URL/function/load waits | MVP except `networkidle`, which is prototype-gated |
+| Advanced input: `drag`, `upload`, direct `mouse`, `keydown`, `keyup` | MVP with content-script event fidelity |
+| Semantic locators: `find ...` | MVP |
+| Read/check/wait: `get`, `is`, selector/text/URL/function/load/networkidle/download waits | MVP |
 | Tabs/windows: `tab`, `window` | MVP |
-| Capture: `screenshot` | MVP for visible-tab PNG; full-page/JPEG/PDF/video prototype or deferred |
+| Capture: `screenshot` | MVP for visible-tab PNG/JPEG; full-page/PDF/video unsupported or deferred |
 | Eval and batch: `eval`, `batch` | MVP |
-| Dialogs, downloads, clipboard, cookies, storage, network, HAR | Prototype-gated |
-| Debug/repro: console/errors, `highlight`, diff, trace/profiler, vitals | Prototype-gated or deferred as listed below |
+| Dialogs, downloads, clipboard, cookies, storage, network list/clear | MVP with Firefox/WebExtension limits; HAR unsupported |
+| Debug/repro: console/errors, `highlight`, diff, trace/profiler, vitals | MVP for listed commands; deferred as listed below |
 | Auth/state/session/profile/security gates/content boundaries | Deferred or unsupported in MVP because this controls the existing Firefox session after pairing |
 | Chrome/CDP/provider/browser-install features: `connect`, `get cdp-url`, `inspect`, `--extension`, external providers, iOS, Chrome profile import, browser install/upgrade | Unsupported unless Firefox provides an equivalent |
 
@@ -357,27 +356,31 @@ MVP:
 - Eval: `eval <js>`, `eval --stdin`, `eval -b <base64>`.
 - Batch: `batch` with JSON input and `--bail`.
 
-Prototype before marking stable:
+Implemented with Firefox/WebExtension limits:
 
 - `drag`.
 - `upload`.
 - Direct mouse commands: `mouse move`, `mouse down`, `mouse up`, `mouse wheel`.
 - `keydown` and `keyup`.
 - Semantic locators: `find role/text/label/placeholder/alt/title/testid/first/last/nth`.
-- Frame command and cross-frame direct refs.
-- Full-page screenshot stitching and JPEG options.
+- Frame listing. Cross-frame direct refs are unsupported.
+- JPEG screenshot options.
 - File downloads: `download`, `wait --download`.
 - Dialogs: `dialog accept`, `dialog dismiss`, `dialog status`.
 - Clipboard: `clipboard read/write/copy/paste`.
 - Cookies and storage commands.
-- Network request listing/filtering and route/mock/block.
-- Network request detail and HAR capture.
+- Network request listing/filtering.
 - `wait --load networkidle`.
 - Console/error capture after injected instrumentation.
 - `highlight`.
-- PDF export.
+- PDF export returns `UNSUPPORTED_CAPABILITY` because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.
 - Viewport/window sizing commands.
 - Diff snapshot/screenshot/url.
+
+Unsupported:
+
+- Full-page screenshot stitching.
+- Network route/mock/block, network request detail, and HAR capture.
 
 Defer:
 
@@ -445,7 +448,8 @@ Waits:
 - `wait --url <glob>`: waits for target tab URL to match. Result is final URL and elapsed time.
 - `wait --fn <js>`: evaluates until truthy in the same execution mode as `eval`. Result is elapsed time and final truthy value when serializable.
 - `wait --state hidden <selector|ref>`: waits for element to be absent or not visible. Result is elapsed time.
-- `wait --load domcontentloaded|complete`: waits for document readiness. `networkidle` is prototype-gated.
+- `wait --load domcontentloaded|complete|networkidle`: waits for document readiness or background network idle.
+- `wait --download [id|filename-glob]`: waits for a download to complete.
 
 Tabs and windows:
 
@@ -480,7 +484,7 @@ Errors should be concise and actionable:
 - If first-use approval is pending: tell the user to open the extension popup and approve.
 - If a page is restricted: name the restriction and suggest trying a normal web page/tab.
 - If a ref is stale: tell the user to run `firefox-cli snapshot -i` again.
-- If a command is prototype-gated or unsupported: name the Firefox limitation or missing implementation gate.
+- If a command is unsupported: name the Firefox limitation or missing implementation gate.
 
 Default text output is for agents. JSON output is for programmatic scripts.
 

@@ -1,11 +1,15 @@
 import type {
   ActionResult,
+  DragParams,
   ElementActionParams,
   KeyboardTextActionParams,
+  KeyEventParams,
+  MouseParams,
   PressParams,
   ScrollParams,
   SelectParams,
   TextActionParams,
+  UploadParams,
 } from "@firefox-cli/protocol";
 import type {
   ActionOptions,
@@ -50,7 +54,104 @@ function createContentActionResult(options: ActionOptions): ContentActionResult 
       return scrollAction(options, options.params as ScrollParams);
     case "scrollintoview":
       return scrollIntoViewAction(options);
+    case "drag":
+      return dragAction(options, options.params as DragParams);
+    case "upload":
+      return uploadAction(options, options.params as UploadParams);
+    case "mouse":
+      return directMouseAction(options, options.params as MouseParams);
+    case "keydown":
+    case "keyup":
+      return keyEventAction(options, options.params as KeyEventParams);
   }
+}
+
+function dragAction(options: ActionOptions, params: DragParams): ContentActionResult {
+  const source = resolveRequiredDragElement(options, params, "source");
+  const target = resolveRequiredDragElement(options, params, "target");
+  assertActionableElement(options, source.element);
+  assertActionableElement(options, target.element);
+  const dataTransfer = createDataTransfer(source.element);
+  dispatchDragEvent(source.element, "dragstart", dataTransfer);
+  dispatchDragEvent(target.element, "dragenter", dataTransfer);
+  dispatchDragEvent(target.element, "dragover", dataTransfer);
+  dispatchDragEvent(target.element, "drop", dataTransfer);
+  dispatchDragEvent(source.element, "dragend", dataTransfer);
+  return {
+    action: "drag",
+    ok: true,
+    element: options.summarizeElement(target.element),
+  };
+}
+
+function uploadAction(options: ActionOptions, params: UploadParams): ContentActionResult {
+  const resolution = resolveRequiredElement(options, params);
+  assertVisible(options, resolution.element);
+  assertEnabled(options, resolution.element);
+  const view = requireElementWindow(resolution.element);
+  if (
+    !(resolution.element instanceof view.HTMLInputElement) ||
+    resolution.element.type !== "file"
+  ) {
+    throw options.createError("ACTION_REJECTED", "Upload action requires a file input.");
+  }
+  const dataTransfer = createDataTransfer(resolution.element);
+  const files: File[] = [];
+  for (const file of params.files) {
+    const bytes = Uint8Array.from(view.atob(file.dataBase64), (char) => char.charCodeAt(0));
+    const uploaded = new view.File([bytes], file.name, { type: file.mimeType ?? "" });
+    files.push(uploaded);
+    dataTransfer.items.add(uploaded);
+  }
+  assignFiles(
+    resolution.element,
+    dataTransfer.files.length > 0 ? dataTransfer.files : createFileList(files),
+  );
+  dispatchInputEvents(resolution.element);
+  return {
+    ...elementActionResult(options, resolution),
+    action: "upload",
+    valueLength: params.files.length,
+  };
+}
+
+function directMouseAction(options: ActionOptions, params: MouseParams): ContentActionResult {
+  const resolution = resolveOptionalElement(options, params);
+  const element =
+    resolution?.element ?? options.document.elementFromPoint(params.x ?? 0, params.y ?? 0);
+  if (element === null) {
+    throw options.createError("SELECTOR_NOT_FOUND", "Mouse target was not found.");
+  }
+  const pointerOptions = {
+    ...(params.x === undefined ? {} : { x: params.x }),
+    ...(params.y === undefined ? {} : { y: params.y }),
+    ...(params.button === undefined ? {} : { button: params.button }),
+  };
+  if (params.action === "wheel") {
+    dispatchWheelEvent(element, params.deltaX ?? 0, params.deltaY ?? 0, pointerOptions);
+  } else {
+    dispatchMouseEvent(
+      element,
+      params.action === "move" ? "mousemove" : params.action === "down" ? "mousedown" : "mouseup",
+      pointerOptions,
+    );
+  }
+  return {
+    action: "mouse",
+    ok: true,
+    element: options.summarizeElement(element),
+  };
+}
+
+function keyEventAction(options: ActionOptions, params: KeyEventParams): ContentActionResult {
+  const resolution = resolveOptionalElement(options, params);
+  const element = resolution?.element ?? requireFocusedElement(options);
+  dispatchKeyboardEvent(element, options.command, params.key);
+  return {
+    action: options.command,
+    ok: true,
+    element: options.summarizeElement(element),
+  };
 }
 
 function mouseAction(
@@ -237,7 +338,7 @@ function scrollIntoViewAction(options: ActionOptions): ContentActionResult {
 
 function resolveRequiredElement(
   options: ActionOptions,
-  params: ElementActionParams | TextActionParams | SelectParams,
+  params: ElementActionParams | TextActionParams | SelectParams | UploadParams,
 ): ElementResolution {
   const resolution = resolveOptionalElement(options, params);
   if (resolution === undefined) {
@@ -252,6 +353,7 @@ function resolveOptionalElement(
     | ElementActionParams
     | TextActionParams
     | SelectParams
+    | UploadParams
     | Pick<ScrollParams, "selector" | "ref" | "generationId">,
 ): ElementResolution | undefined {
   if (params.ref !== undefined) {
@@ -271,6 +373,25 @@ function resolveOptionalElement(
     throw options.createError("SELECTOR_NOT_FOUND", `Selector not found: ${params.selector}`);
   }
   return { element };
+}
+
+function resolveRequiredDragElement(
+  options: ActionOptions,
+  params: DragParams,
+  role: "source" | "target",
+): ElementResolution {
+  const selector = role === "source" ? params.sourceSelector : params.targetSelector;
+  const ref = role === "source" ? params.sourceRef : params.targetRef;
+  const generationId = role === "source" ? params.sourceGenerationId : params.targetGenerationId;
+  const resolution = resolveOptionalElement(options, {
+    ...(selector === undefined ? {} : { selector }),
+    ...(ref === undefined ? {} : { ref }),
+    ...(generationId === undefined ? {} : { generationId }),
+  });
+  if (resolution === undefined) {
+    throw options.createError("SELECTOR_NOT_FOUND", `Drag ${role} is required.`);
+  }
+  return resolution;
 }
 
 function elementActionResult(
@@ -508,15 +629,138 @@ function dispatchChangeEvent(element: Element): void {
   element.dispatchEvent(new view.Event("change", { bubbles: true, cancelable: false }));
 }
 
-function dispatchMouseEvent(element: Element, type: string): void {
+function dispatchMouseEvent(
+  element: Element,
+  type: string,
+  options: {
+    readonly x?: number;
+    readonly y?: number;
+    readonly button?: number;
+  } = {},
+): void {
   const view = requireElementWindow(element);
   element.dispatchEvent(
     new view.MouseEvent(type, {
       bubbles: true,
       cancelable: true,
       view,
+      ...(options.x === undefined ? {} : { clientX: options.x }),
+      ...(options.y === undefined ? {} : { clientY: options.y }),
+      ...(options.button === undefined ? {} : { button: options.button }),
     }),
   );
+}
+
+function dispatchWheelEvent(
+  element: Element,
+  deltaX: number,
+  deltaY: number,
+  options: {
+    readonly x?: number;
+    readonly y?: number;
+  } = {},
+): void {
+  const view = requireElementWindow(element);
+  element.dispatchEvent(
+    new view.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX,
+      deltaY,
+      view,
+      ...(options.x === undefined ? {} : { clientX: options.x }),
+      ...(options.y === undefined ? {} : { clientY: options.y }),
+    }),
+  );
+}
+
+function dispatchDragEvent(element: Element, type: string, dataTransfer: DataTransfer): void {
+  const view = requireElementWindow(element);
+  const DragEventConstructor = view.DragEvent;
+  const event =
+    typeof DragEventConstructor === "function"
+      ? new DragEventConstructor(type, {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        })
+      : new view.Event(type, {
+          bubbles: true,
+          cancelable: true,
+        });
+  if (!("dataTransfer" in event)) {
+    Object.defineProperty(event, "dataTransfer", {
+      configurable: true,
+      enumerable: true,
+      value: dataTransfer,
+    });
+  }
+  element.dispatchEvent(event);
+}
+
+function createDataTransfer(element: Element): DataTransfer {
+  const view = requireElementWindow(element);
+  const DataTransferConstructor = view.DataTransfer;
+  if (typeof DataTransferConstructor === "function") {
+    return new DataTransferConstructor();
+  }
+
+  const files: File[] = [];
+  return {
+    dropEffect: "none",
+    effectAllowed: "all",
+    get files() {
+      return createFileList(files);
+    },
+    items: {
+      add: (file: File) => {
+        files.push(file);
+        return file;
+      },
+      clear: () => {
+        files.length = 0;
+      },
+      get length() {
+        return files.length;
+      },
+      remove: () => undefined,
+    },
+    types: [],
+    clearData: () => undefined,
+    getData: () => "",
+    setData: () => undefined,
+    setDragImage: () => undefined,
+  } as unknown as DataTransfer;
+}
+
+function assignFiles(input: HTMLInputElement, files: FileList): void {
+  try {
+    input.files = files;
+    return;
+  } catch {
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: files,
+    });
+  }
+}
+
+function createFileList(files: readonly File[]): FileList {
+  const list = {
+    length: files.length,
+    item: (index: number) => files[index] ?? null,
+    [Symbol.iterator]: function* iterator() {
+      yield* files;
+    },
+  };
+  for (const [index, file] of files.entries()) {
+    Object.defineProperty(list, index, {
+      configurable: true,
+      enumerable: true,
+      value: file,
+    });
+  }
+  return list as unknown as FileList;
 }
 
 function dispatchKeyboardEvent(element: Element, type: string, key: string): void {

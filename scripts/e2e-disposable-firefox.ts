@@ -1,9 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import {
   getBinaryName,
   getPlatformKey,
+  type NativeMessagingManifestPlan,
   planNativeMessagingManifest,
   writeNativeMessagingManifest,
 } from "@firefox-cli/native-host";
@@ -63,15 +65,16 @@ let webExt: ChildProcess | undefined;
 let lastDoctorStatus = "<not run>";
 let approvalResult: MarionetteApprovalResult | undefined;
 let failed = false;
+let restoreFirefoxVisibleManifest: (() => Promise<void>) | undefined;
 
 try {
-  await writeNativeMessagingManifest(
-    planNativeMessagingManifest({
-      binaryPath,
-      platform: process.platform,
-      homeDir,
-    }),
-  );
+  const manifestPlan = planNativeMessagingManifest({
+    binaryPath,
+    platform: process.platform,
+    homeDir,
+  });
+  await writeNativeMessagingManifest(manifestPlan);
+  restoreFirefoxVisibleManifest = await installFirefoxVisibleManifest(manifestPlan, homeDir);
 
   const launchArgs = [
     "run",
@@ -160,11 +163,74 @@ try {
 } finally {
   await stopProcess(webExt);
   await stopFirefoxProcessesForProfile(profileDir);
+  await restoreFirefoxVisibleManifest?.();
   await new Promise<void>((resolveClose) => fixture.server.close(() => resolveClose()));
   const output = webExtOutput.join("").trim();
   if (output.length > 0 && (failed || process.env.FIREFOX_CLI_E2E_DEBUG === "1")) {
     console.error(tail(output, 12_000));
   }
+}
+
+async function installFirefoxVisibleManifest(
+  plan: NativeMessagingManifestPlan,
+  disposableHomeDir: string,
+): Promise<() => Promise<void>> {
+  if (process.platform !== "darwin") {
+    return async () => undefined;
+  }
+
+  const firefoxHomeDir = homedir();
+  if (firefoxHomeDir === disposableHomeDir) {
+    return async () => undefined;
+  }
+
+  const firefoxPlan = planNativeMessagingManifest({
+    binaryPath: plan.manifest.path,
+    platform: process.platform,
+    homeDir: firefoxHomeDir,
+  });
+  if (firefoxPlan.manifestPath === plan.manifestPath) {
+    return async () => undefined;
+  }
+
+  const original = await readOptionalFile(firefoxPlan.manifestPath);
+  const temporary = `${JSON.stringify(firefoxPlan.manifest, null, 2)}\n`;
+  await mkdir(dirname(firefoxPlan.manifestPath), { recursive: true });
+  await writeFile(firefoxPlan.manifestPath, temporary);
+
+  return async () => {
+    const current = await readOptionalFile(firefoxPlan.manifestPath);
+    if (current !== temporary) {
+      console.error(
+        `Disposable Firefox E2E left ${firefoxPlan.manifestPath} unchanged because it was modified during the run.`,
+      );
+      return;
+    }
+    if (original === null) {
+      await unlink(firefoxPlan.manifestPath).catch((error: unknown) => {
+        if (!isNodeErrorCode(error, "ENOENT")) {
+          throw error;
+        }
+      });
+      return;
+    }
+    await writeFile(firefoxPlan.manifestPath, original);
+  };
+}
+
+async function readOptionalFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 async function waitForDoctorStatus(options: {

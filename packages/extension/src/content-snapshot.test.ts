@@ -803,6 +803,172 @@ describe("content snapshot", () => {
     expect(result.text).toContain("iframe");
   });
 
+  it("finds elements by Phase 8 locators and lists frames through the command boundary", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button>First</button>
+        <button aria-label="Second action">Second</button>
+        <label for="email">Email address</label>
+        <input id="email">
+        <section data-testid="account-card">Account</section>
+        <iframe title="Child frame" src="https://frame.test/app"></iframe>
+      </main>`,
+      { url: "https://example.test/" },
+    );
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("find", { kind: "role", value: "button", nth: 1 }, "find-role-1"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        elements: [{ role: "button", name: "Second action" }],
+      },
+    });
+    expect(
+      handleContentScriptRequest(
+        createRequest("find", { kind: "label", value: "email" }, "find-label-1"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        elements: [{ tagName: "input", name: "Email address" }],
+      },
+    });
+    expect(
+      handleContentScriptRequest(
+        createRequest("find", { kind: "testid", value: "account-card", first: true }, "find-tid-1"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        elements: [{ tagName: "section", text: "Account" }],
+      },
+    });
+    expect(handleContentScriptRequest(createRequest("frame", {}, "frame-1"), base)).toMatchObject({
+      ok: true,
+      result: {
+        frames: [
+          {
+            index: 0,
+            selector: "iframe:nth-of-type(1)",
+            title: "Child frame",
+            url: "https://frame.test/app",
+          },
+        ],
+      },
+    });
+  });
+
+  it("handles clipboard, storage, dialog status, logs, errors, and highlight commands", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <input id="clip" value="copied">
+        <button id="highlight">Highlight me</button>
+      </main>`,
+      { url: "https://example.test/", pretendToBeVisual: true },
+    );
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("clipboard", { action: "copy", selector: "#clip" }, "copy-1"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "copy", ok: true, text: "copied" } });
+    expect(
+      handleContentScriptRequest(
+        createRequest(
+          "clipboard",
+          { action: "paste", selector: "#clip", text: "pasted" },
+          "paste-1",
+        ),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "paste", ok: true } });
+    expect(window.document.querySelector<HTMLInputElement>("#clip")?.value).toBe("pasted");
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("storage", { area: "local", action: "set", key: "phase", value: "8" }, "s1"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { area: "local", action: "set", ok: true } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("storage", { area: "local", action: "get", key: "phase" }, "s2"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { area: "local", action: "get", value: "8" } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("storage", { area: "local", action: "get" }, "s3"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { entries: { phase: "8" } } });
+
+    expect(
+      handleContentScriptRequest(createRequest("dialog", { action: "status" }, "dialog-1"), base),
+    ).toMatchObject({ ok: true, result: { action: "status", handled: false } });
+
+    handleContentScriptRequest(
+      createRequest("console", { action: "clear" }, "console-clear"),
+      base,
+    );
+    captureConsoleLogWithoutStdout("phase8-log", 42);
+    expect(
+      handleContentScriptRequest(
+        createRequest("console", { action: "list" }, "console-list"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        entries: [expect.objectContaining({ level: "log", text: "phase8-log 42" })],
+      },
+    });
+
+    handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
+    window.dispatchEvent(new window.ErrorEvent("error", { message: "phase8-error" }));
+    expect(
+      handleContentScriptRequest(createRequest("errors", { action: "list" }, "errors-list"), base),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        errors: [expect.objectContaining({ level: "error", text: "phase8-error" })],
+      },
+    });
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("highlight", { selector: "#highlight", durationMs: 1000 }, "highlight-1"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        element: { role: "button", name: "Highlight me" },
+      },
+    });
+    const highlighted = window.document.querySelector<HTMLElement>("#highlight");
+    expect(highlighted?.dataset.firefoxCliHighlight).toBe("true");
+    expect(highlighted?.style.outline).toContain("#ff9500");
+  });
+
   it("returns an async protocol envelope for browser.tabs.sendMessage", async () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
@@ -825,3 +991,13 @@ describe("content snapshot", () => {
     }
   });
 });
+
+function captureConsoleLogWithoutStdout(...args: readonly unknown[]): void {
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (() => true) as typeof process.stdout.write;
+  try {
+    console.log(...args);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+}

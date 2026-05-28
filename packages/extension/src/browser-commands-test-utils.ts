@@ -20,8 +20,22 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   readonly evalRequests: { readonly tabId: number; readonly payload: EvalExecutorPayload }[] = [];
   readonly captureRequests: {
     readonly windowId: number;
-    readonly options: { readonly format: "png" };
+    readonly options: { readonly format: "png" | "jpeg"; readonly quality?: number };
   }[] = [];
+  readonly downloads: {
+    readonly url: string;
+    readonly filename?: string;
+    readonly saveAs?: boolean;
+  }[] = [];
+  readonly downloadWaits: {
+    readonly downloadId?: number;
+    readonly filenameGlob?: string;
+    readonly timeoutMs: number;
+    readonly intervalMs: number;
+  }[] = [];
+  readonly networkIdleWaits: { readonly timeoutMs: number; readonly idleMs: number }[] = [];
+  clipboardText = "";
+  networkRequests: { readonly id: string; readonly url: string }[] = [];
   contentFailure: Error | undefined;
   evalFailure: Error | undefined;
   captureFailure: Error | undefined;
@@ -178,6 +192,81 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       });
     }
 
+    if (request.command === "find") {
+      return createOkResponse(request as RequestEnvelope<"find">, {
+        elements: [
+          {
+            tagName: "button",
+            role: "button",
+            visible: true,
+            name: "Submit",
+          },
+        ],
+      });
+    }
+
+    if (request.command === "frame") {
+      return createOkResponse(request as RequestEnvelope<"frame">, {
+        frames: [{ index: 0, title: "Frame", url: "https://frame.test/" }],
+      });
+    }
+
+    if (request.command === "dialog") {
+      const dialog = request as RequestEnvelope<"dialog">;
+      return createOkResponse(dialog, {
+        action: dialog.params.action,
+        handled: false,
+      });
+    }
+
+    if (request.command === "clipboard") {
+      const clipboard = request as RequestEnvelope<"clipboard">;
+      return createOkResponse(clipboard, {
+        action: clipboard.params.action,
+        ok: true,
+        ...(clipboard.params.action === "copy" ? { text: "Copied" } : {}),
+      });
+    }
+
+    if (request.command === "storage") {
+      const storage = request as RequestEnvelope<"storage">;
+      return createOkResponse(storage, {
+        area: storage.params.area,
+        action: storage.params.action,
+        ok: true,
+      });
+    }
+
+    if (request.command === "console") {
+      const consoleRequest = request as RequestEnvelope<"console">;
+      return createOkResponse(consoleRequest, {
+        action: consoleRequest.params.action,
+        ok: true,
+        entries: [],
+      });
+    }
+
+    if (request.command === "errors") {
+      const errorsRequest = request as RequestEnvelope<"errors">;
+      return createOkResponse(errorsRequest, {
+        action: errorsRequest.params.action,
+        ok: true,
+        errors: [],
+      });
+    }
+
+    if (request.command === "highlight") {
+      return createOkResponse(request as RequestEnvelope<"highlight">, {
+        ok: true,
+        element: {
+          tagName: "button",
+          role: "button",
+          visible: true,
+          name: "Submit",
+        },
+      });
+    }
+
     if (isActionCommand(request.command)) {
       return fakeActionResponse(request.command, request.id);
     }
@@ -207,7 +296,10 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     };
   }
 
-  async captureVisibleTab(windowId: number, options: { readonly format: "png" }): Promise<string> {
+  async captureVisibleTab(
+    windowId: number,
+    options: { readonly format: "png" | "jpeg"; readonly quality?: number },
+  ): Promise<string> {
     this.captureRequests.push({ windowId, options });
     if (this.captureFailure !== undefined) {
       throw this.captureFailure;
@@ -217,6 +309,86 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     }
 
     return this.screenshotDataUrl;
+  }
+
+  async download(options: {
+    readonly url: string;
+    readonly filename?: string;
+    readonly saveAs?: boolean;
+  }) {
+    this.downloads.push(options);
+    return { id: this.downloads.length, filename: options.filename, state: "complete" };
+  }
+
+  async waitForDownload(options: {
+    readonly downloadId?: number;
+    readonly filenameGlob?: string;
+    readonly timeoutMs: number;
+    readonly intervalMs: number;
+  }) {
+    this.downloadWaits.push(options);
+    return {
+      id: options.downloadId ?? 1,
+      ...(options.filenameGlob === undefined ? {} : { filename: options.filenameGlob }),
+      state: "complete",
+    };
+  }
+
+  async readClipboard(): Promise<string> {
+    return this.clipboardText;
+  }
+
+  async writeClipboard(text: string): Promise<void> {
+    this.clipboardText = text;
+  }
+
+  async listCookies(options: { readonly url: string; readonly name?: string }) {
+    return [
+      {
+        name: options.name ?? "session",
+        value: "test",
+        domain: new URL(options.url).hostname,
+        path: "/",
+      },
+    ];
+  }
+
+  async setCookie(options: { readonly name: string; readonly value: string }) {
+    return { name: options.name, value: options.value, path: "/" };
+  }
+
+  async removeCookie(): Promise<void> {}
+
+  async listNetworkRequests(options: { readonly urlGlob?: string }) {
+    return this.networkRequests.filter(
+      (request) => options.urlGlob === undefined || request.url.includes(options.urlGlob),
+    );
+  }
+
+  async clearNetworkRequests(): Promise<void> {
+    this.networkRequests = [];
+  }
+
+  async waitForNetworkIdle(options: {
+    readonly timeoutMs: number;
+    readonly idleMs: number;
+  }): Promise<void> {
+    this.networkIdleWaits.push(options);
+  }
+
+  async resizeWindow(
+    windowId: number,
+    size: { readonly width: number; readonly height: number },
+  ): Promise<BrowserWindowSnapshot> {
+    const window = this.#windows.find((candidate) => candidate.id === windowId);
+    if (window === undefined) {
+      throw new Error("window not found");
+    }
+    const resized = { ...window, width: size.width, height: size.height };
+    this.#windows = this.#windows.map((candidate) =>
+      candidate.id === windowId ? resized : candidate,
+    );
+    return resized;
   }
 
   #navigationNoop(tabId: number): BrowserWindowSnapshot["tabs"][number] {

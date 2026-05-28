@@ -16,6 +16,11 @@ export const ACTION_COMMANDS: ReadonlySet<string> = new Set([
   "scroll",
   "scrollintoview",
   "swipe",
+  "drag",
+  "upload",
+  "mouse",
+  "keydown",
+  "keyup",
 ]);
 
 export function isActionCommand(command: string): command is ActionKind {

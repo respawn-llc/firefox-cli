@@ -95,7 +95,7 @@ async function createPackageRoot(
       {
         version: options.extensionVersion ?? rootPackage.version,
         background: { scripts: ["background.js"] },
-        content_scripts: [{ js: ["content.js"] }],
+        permissions: ["scripting"],
         action: { default_popup: "popup.html" },
       },
       null,

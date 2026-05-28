@@ -6,6 +6,16 @@ import {
   createOkResponse,
   type BatchResult,
   type BatchStepResult,
+  type ClipboardResult,
+  type ConsoleResult,
+  type CookieResult,
+  type DialogResult,
+  type DiffResult,
+  type DownloadResult,
+  type ErrorsResult,
+  type FindResult,
+  type FrameResult,
+  type HighlightResult,
   type ActionResult,
   type ActionKind,
   type CommandId,
@@ -17,6 +27,9 @@ import {
   type ResponseEnvelope,
   type ResolvedTarget,
   type ScreenshotResult,
+  type SetViewportResult,
+  type StorageResult,
+  type NetworkResult,
   type SnapshotResult,
   type TabSummary,
   type TargetSelector,
@@ -57,7 +70,47 @@ export type BackgroundBrowserAdapter = {
   reload(tabId: number): Promise<TabSummary>;
   sendContentRequest(tabId: number, request: RequestEnvelope): Promise<unknown>;
   executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult>;
-  captureVisibleTab(windowId: number, options: { readonly format: "png" }): Promise<string>;
+  captureVisibleTab(
+    windowId: number,
+    options: { readonly format: "png" | "jpeg"; readonly quality?: number },
+  ): Promise<string>;
+  download(options: {
+    readonly url: string;
+    readonly filename?: string;
+    readonly saveAs?: boolean;
+  }): Promise<DownloadResult>;
+  waitForDownload(options: {
+    readonly downloadId?: number;
+    readonly filenameGlob?: string;
+    readonly timeoutMs: number;
+    readonly intervalMs: number;
+  }): Promise<DownloadResult>;
+  readClipboard(): Promise<string>;
+  writeClipboard(text: string): Promise<void>;
+  listCookies(options: {
+    readonly url: string;
+    readonly name?: string;
+  }): Promise<CookieResult["cookies"]>;
+  setCookie(options: {
+    readonly url: string;
+    readonly name: string;
+    readonly value: string;
+    readonly domain?: string;
+    readonly path?: string;
+  }): Promise<NonNullable<CookieResult["cookie"]>>;
+  removeCookie(options: { readonly url: string; readonly name: string }): Promise<void>;
+  listNetworkRequests(options: {
+    readonly urlGlob?: string;
+  }): Promise<NonNullable<NetworkResult["requests"]>>;
+  clearNetworkRequests(): Promise<void>;
+  waitForNetworkIdle(options: {
+    readonly timeoutMs: number;
+    readonly idleMs: number;
+  }): Promise<void>;
+  resizeWindow(
+    windowId: number,
+    size: { readonly width: number; readonly height: number },
+  ): Promise<BrowserWindowSnapshot>;
 };
 
 type OrderedWindow = BrowserWindowSnapshot & {
@@ -310,10 +363,46 @@ async function handleBrowserRequestOrThrow(
       });
     }
 
+    if (command.params.kind === "download") {
+      const startedAt = Date.now();
+      const timeoutMs = command.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+      const download = await adapter.waitForDownload({
+        ...(command.params.downloadId === undefined
+          ? {}
+          : { downloadId: command.params.downloadId }),
+        ...(command.params.filenameGlob === undefined
+          ? {}
+          : { filenameGlob: command.params.filenameGlob }),
+        timeoutMs,
+        intervalMs: command.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
+      });
+      return createOkResponse(command, {
+        kind: "download",
+        matched: true,
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+        download,
+      });
+    }
+
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     if (command.params.kind === "url") {
       const result = await waitForUrl(adapter, resolved.tab.id, command.params);
       return createOkResponse(command, result);
+    }
+
+    if (command.params.kind === "load-state" && command.params.state === "networkidle") {
+      const startedAt = Date.now();
+      const timeoutMs = command.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+      await adapter.waitForNetworkIdle({
+        timeoutMs,
+        idleMs: command.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
+      });
+      return createOkResponse(command, {
+        kind: "load-state",
+        matched: true,
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+        target: resolved.target,
+      });
     }
 
     const waitResponse = await sendContentCommand(adapter, resolved.tab.id, command);
@@ -360,6 +449,13 @@ async function handleBrowserRequestOrThrow(
 
   if (request.command === "screenshot") {
     const command = request as RequestEnvelope<"screenshot">;
+    if (command.params.fullPage === true) {
+      return createErrorResponse(command.id, {
+        code: "UNSUPPORTED_CAPABILITY",
+        message:
+          "Full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
+      });
+    }
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const tabActivated = !resolved.tab.active;
     const windowFocused = !resolved.window.focused;
@@ -382,7 +478,10 @@ async function handleBrowserRequestOrThrow(
     let dataUrl: string;
     try {
       dataUrl = await withTimeout(
-        adapter.captureVisibleTab(target.windowId, { format: command.params.format }),
+        adapter.captureVisibleTab(target.windowId, {
+          format: command.params.format,
+          ...(command.params.quality === undefined ? {} : { quality: command.params.quality }),
+        }),
         command.params.timeoutMs ?? DEFAULT_SCREENSHOT_TIMEOUT_MS,
       );
     } catch (error) {
@@ -393,7 +492,11 @@ async function handleBrowserRequestOrThrow(
       );
     }
 
-    const image = parsePngDataUrl(dataUrl, command.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES);
+    const image = parseImageDataUrl(
+      dataUrl,
+      command.params.format,
+      command.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES,
+    );
     const result: ScreenshotResult = {
       path: command.params.path,
       format: command.params.format,
@@ -403,6 +506,203 @@ async function handleBrowserRequestOrThrow(
       activation: { tabActivated, windowFocused },
       imageBase64: image.base64,
       target,
+    };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "find") {
+    const command = request as RequestEnvelope<"find">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const findResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!findResponse.ok) {
+      return createErrorResponse(command.id, findResponse.error);
+    }
+    const result: FindResult = { ...findResponse.result, target: resolved.target };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "frame") {
+    const command = request as RequestEnvelope<"frame">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const frameResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!frameResponse.ok) {
+      return createErrorResponse(command.id, frameResponse.error);
+    }
+    const result: FrameResult = { ...frameResponse.result, target: resolved.target };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "download") {
+    const command = request as RequestEnvelope<"download">;
+    const result = await adapter.download({
+      url: command.params.url,
+      ...(command.params.filename === undefined ? {} : { filename: command.params.filename }),
+      ...(command.params.saveAs === undefined ? {} : { saveAs: command.params.saveAs }),
+    });
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "dialog") {
+    const command = request as RequestEnvelope<"dialog">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const dialogResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!dialogResponse.ok) {
+      return createErrorResponse(command.id, dialogResponse.error);
+    }
+    const result: DialogResult = dialogResponse.result;
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "clipboard") {
+    const command = request as RequestEnvelope<"clipboard">;
+    if (command.params.action === "read") {
+      const result: ClipboardResult = {
+        action: "read",
+        ok: true,
+        text: await adapter.readClipboard(),
+      };
+      return createOkResponse(command, result);
+    }
+    if (command.params.action === "write") {
+      await adapter.writeClipboard(command.params.text ?? "");
+      return createOkResponse(command, { action: "write", ok: true });
+    }
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const contentCommand: RequestEnvelope<"clipboard"> =
+      command.params.action === "paste"
+        ? {
+            ...command,
+            params: { ...command.params, text: await adapter.readClipboard() },
+          }
+        : command;
+    const clipboardResponse = await sendContentCommand(adapter, resolved.tab.id, contentCommand);
+    if (!clipboardResponse.ok) {
+      return createErrorResponse(command.id, clipboardResponse.error);
+    }
+    if (command.params.action === "copy" && clipboardResponse.result.text !== undefined) {
+      await adapter.writeClipboard(clipboardResponse.result.text);
+    }
+    return createOkResponse(command, clipboardResponse.result);
+  }
+
+  if (request.command === "cookies") {
+    const command = request as RequestEnvelope<"cookies">;
+    if (command.params.action === "set") {
+      if (command.params.name === undefined || command.params.value === undefined) {
+        throw new BrowserCommandError("INVALID_TARGET", "Cookie set requires name and value.");
+      }
+      const cookie = await adapter.setCookie({
+        url: command.params.url,
+        name: command.params.name,
+        value: command.params.value,
+        ...(command.params.domain === undefined ? {} : { domain: command.params.domain }),
+        ...(command.params.path === undefined ? {} : { path: command.params.path }),
+      });
+      return createOkResponse(command, { action: "set", ok: true, cookie });
+    }
+    if (command.params.action === "remove") {
+      if (command.params.name === undefined) {
+        throw new BrowserCommandError("INVALID_TARGET", "Cookie remove requires name.");
+      }
+      await adapter.removeCookie({ url: command.params.url, name: command.params.name });
+      return createOkResponse(command, { action: "remove", ok: true });
+    }
+    const cookies = await adapter.listCookies({
+      url: command.params.url,
+      ...(command.params.name === undefined ? {} : { name: command.params.name }),
+    });
+    return createOkResponse(command, {
+      action: command.params.action,
+      ok: true,
+      ...(command.params.action === "get" ? { cookie: cookies?.[0] ?? null } : { cookies }),
+    });
+  }
+
+  if (request.command === "storage") {
+    const command = request as RequestEnvelope<"storage">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const storageResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!storageResponse.ok) {
+      return createErrorResponse(command.id, storageResponse.error);
+    }
+    const result: StorageResult = storageResponse.result;
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "network") {
+    const command = request as RequestEnvelope<"network">;
+    if (command.params.action === "clear") {
+      await adapter.clearNetworkRequests();
+      return createOkResponse(command, { action: "clear", ok: true });
+    }
+    return createOkResponse(command, {
+      action: "list",
+      ok: true,
+      requests: await adapter.listNetworkRequests({
+        ...(command.params.urlGlob === undefined ? {} : { urlGlob: command.params.urlGlob }),
+      }),
+    });
+  }
+
+  if (request.command === "console" || request.command === "errors") {
+    const command = request as RequestEnvelope<"console" | "errors">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const logResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!logResponse.ok) {
+      return createErrorResponse(command.id, logResponse.error);
+    }
+    return createOkResponse(command, logResponse.result as ConsoleResult | ErrorsResult);
+  }
+
+  if (request.command === "highlight") {
+    const command = request as RequestEnvelope<"highlight">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const highlightResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    if (!highlightResponse.ok) {
+      return createErrorResponse(command.id, highlightResponse.error);
+    }
+    const result: HighlightResult = { ...highlightResponse.result, target: resolved.target };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "pdf") {
+    const command = request as RequestEnvelope<"pdf">;
+    return createErrorResponse(command.id, {
+      code: "UNSUPPORTED_CAPABILITY",
+      message:
+        "PDF export is unsupported because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.",
+    });
+  }
+
+  if (request.command === "set.viewport") {
+    const command = request as RequestEnvelope<"set.viewport">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const window = await adapter.resizeWindow(resolved.window.id, {
+      width: command.params.width,
+      height: command.params.height,
+    });
+    const ordered = toOrderedWindows([window])[0];
+    if (ordered === undefined) {
+      throw new BrowserCommandError("INVALID_TARGET", "Firefox did not return the resized window.");
+    }
+    const result: SetViewportResult = { window: toWindowSummary(ordered) };
+    return createOkResponse(command, result);
+  }
+
+  if (request.command === "diff") {
+    const command = request as RequestEnvelope<"diff">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const actual =
+      command.params.kind === "url"
+        ? (resolved.tab.url ?? "")
+        : command.params.kind === "title"
+          ? (resolved.tab.title ?? "")
+          : await snapshotTextForDiff(adapter, resolved.tab.id, command);
+    const result: DiffResult = {
+      kind: command.params.kind,
+      expected: command.params.expected,
+      actual,
+      matches: actual === command.params.expected,
     };
     return createOkResponse(command, result);
   }
@@ -442,6 +742,14 @@ async function sendContentCommand<
     | "get"
     | "is"
     | "wait"
+    | "find"
+    | "frame"
+    | "dialog"
+    | "clipboard"
+    | "storage"
+    | "console"
+    | "errors"
+    | "highlight"
     | "click"
     | "dblclick"
     | "focus"
@@ -457,6 +765,11 @@ async function sendContentCommand<
     | "scroll"
     | "scrollintoview"
     | "swipe"
+    | "drag"
+    | "upload"
+    | "mouse"
+    | "keydown"
+    | "keyup"
   >,
 >(
   adapter: BackgroundBrowserAdapter,
@@ -503,7 +816,7 @@ async function waitForUrl(
     const url = match.tab.url ?? "";
     if (matchesGlob(url, params.urlGlob ?? "")) {
       return {
-        kind: params.kind,
+        kind: "url",
         matched: true,
         elapsedMs: Math.max(0, Date.now() - startedAt),
         value: url,
@@ -669,6 +982,16 @@ function acceptsBatchDefaultTarget(command: string): boolean {
     command === "wait" ||
     command === "eval" ||
     command === "screenshot" ||
+    command === "find" ||
+    command === "frame" ||
+    command === "dialog" ||
+    command === "clipboard" ||
+    command === "storage" ||
+    command === "console" ||
+    command === "errors" ||
+    command === "highlight" ||
+    command === "set.viewport" ||
+    command === "diff" ||
     isActionCommand(command)
   );
 }
@@ -711,6 +1034,30 @@ function stripScreenshotImageBytes(
 ): Omit<ScreenshotResult, "imageBase64"> {
   const { imageBase64: _imageBase64, ...publicResult } = result;
   return publicResult;
+}
+
+async function snapshotTextForDiff(
+  adapter: BackgroundBrowserAdapter,
+  tabId: number,
+  command: RequestEnvelope<"diff">,
+): Promise<string> {
+  const snapshotRequest: RequestEnvelope<"snapshot"> = {
+    protocolVersion: command.protocolVersion,
+    id: `${command.id}:snapshot`,
+    command: "snapshot",
+    params: {
+      compact: true,
+      ...(command.params.selector === undefined ? {} : { selector: command.params.selector }),
+    },
+  };
+  const snapshotResponse = await sendContentCommand(adapter, tabId, snapshotRequest);
+  if (!snapshotResponse.ok) {
+    throw new BrowserCommandError(
+      snapshotResponse.error.code as BrowserCommandError["code"],
+      snapshotResponse.error.message,
+    );
+  }
+  return snapshotResponse.result.text;
 }
 
 function firstFailedIndex(steps: readonly BatchStepResult[]): number | undefined {
@@ -942,8 +1289,9 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise
   }
 }
 
-function parsePngDataUrl(
+function parseImageDataUrl(
   dataUrl: string,
+  format: "png" | "jpeg",
   maxImageBytes: number,
 ): {
   readonly base64: string;
@@ -951,9 +1299,12 @@ function parsePngDataUrl(
   readonly width?: number;
   readonly height?: number;
 } {
-  const prefix = "data:image/png;base64,";
+  const prefix = `data:image/${format};base64,`;
   if (!dataUrl.startsWith(prefix)) {
-    throw new BrowserCommandError("CAPTURE_FAILED", "Firefox did not return a PNG screenshot.");
+    throw new BrowserCommandError(
+      "CAPTURE_FAILED",
+      `Firefox did not return a ${format.toUpperCase()} screenshot.`,
+    );
   }
 
   const base64 = dataUrl.slice(prefix.length);
@@ -971,7 +1322,7 @@ function parsePngDataUrl(
   return {
     base64,
     bytes,
-    ...parsePngDimensions(base64),
+    ...(format === "png" ? parsePngDimensions(base64) : {}),
   };
 }
 

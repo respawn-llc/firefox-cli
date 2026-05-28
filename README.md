@@ -37,14 +37,15 @@ Most commands accept `--tab active|<index>|id:<firefox-tab-id>` and `--window ac
 
 ## Command Surface
 
-The command set covers setup/diagnostics, tab and window listing/selection/open/close, navigation, snapshots and refs, getters, state checks, waits, element interactions, keyboard text, visible PNG screenshots, eval, and serial batches.
+The command set covers setup/diagnostics, tab and window listing/selection/open/close, navigation, snapshots and refs, getters, state checks, waits, element interactions, direct mouse/key events, uploads, downloads, clipboard, cookies/storage, network logs, console/error capture, highlights, viewport sizing, diffs, visible PNG/JPEG screenshots, eval, and serial batches.
 
 Firefox-specific limits are explicit:
 
 - Private windows are readable, but mutating commands are rejected.
 - Snapshots and element refs target the main frame; cross-origin iframes are diagnostic only.
-- Screenshots are visible-tab PNG captures and may activate the target tab/window.
-- Rich editors, uploads, direct mouse events, raw keydown/keyup, full-page/JPEG screenshots, downloads, dialogs, clipboard, cookies/storage, network/HAR, console/error capture, PDF export, viewport/emulation, and diff commands return `UNSUPPORTED_CAPABILITY`.
+- Screenshots are visible-tab captures and may activate the target tab/window; full-page screenshots return `UNSUPPORTED_CAPABILITY`.
+- PDF export returns `UNSUPPORTED_CAPABILITY` because Firefox's WebExtension PDF API opens a browser save dialog instead of writing a requested CLI path.
+- Network commands expose list/clear and network-idle waits; route/mock/block and HAR capture are unsupported.
 
 See `docs/commands.md` for command syntax and `docs/architecture.md` for the transport and security model.
 

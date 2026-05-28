@@ -2,8 +2,15 @@ import {
   createErrorResponse,
   createOkResponse,
   type ActionKind,
+  type ClipboardResult,
+  type ConsoleResult,
+  type DialogResult,
   type ErrorCode,
   type ElementSummary,
+  type ErrorsResult,
+  type FindParams,
+  type FindResult,
+  type FrameResult,
   type GetBoxValue,
   type GetParams,
   type GetResult,
@@ -16,6 +23,7 @@ import {
   type SnapshotFrameDiagnostic,
   type SnapshotParams,
   type SnapshotResult,
+  type StorageResult,
   type WaitParams,
   type WaitElementSummary,
 } from "@firefox-cli/protocol";
@@ -26,6 +34,12 @@ import { type ElementRefRegistry, ElementRefRegistryError } from "./element-ref-
 export { ElementRefRegistry } from "./element-ref-registry.js";
 
 const DEFAULT_MAX_OUTPUT_BYTES = 60_000;
+const LOG_CAPTURE_INSTALLED_KEY = Symbol.for("firefox-cli.contentSnapshot.logCaptureInstalled");
+const consoleEntries: { level: string; text: string; timestamp: number }[] = [];
+const errorEntries: { level: string; text: string; timestamp: number }[] = [];
+const capturedWindows = new WeakSet<Window>();
+
+installLogCapture();
 
 type SnapshotEntry = {
   readonly element: Element;
@@ -80,6 +94,8 @@ export function handleContentScriptRequest(
     readonly sleep?: (durationMs: number) => Promise<void>;
   },
 ): ResponseEnvelope | Promise<ResponseEnvelope> {
+  installWindowLogCapture(options.document.defaultView);
+
   if (request.command === "snapshot") {
     try {
       return createOkResponse(
@@ -164,6 +180,103 @@ export function handleContentScriptRequest(
       .catch((error: unknown) => createContentErrorResponse(request.id, error));
   }
 
+  if (request.command === "find") {
+    try {
+      return createOkResponse(
+        request,
+        createFindResult(options.document, request.params as FindParams),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
+  }
+
+  if (request.command === "frame") {
+    return createOkResponse(request, createFrameResult(options.document));
+  }
+
+  if (request.command === "dialog") {
+    const command = request as RequestEnvelope<"dialog">;
+    return createOkResponse(command, createDialogResult(command.params.action));
+  }
+
+  if (request.command === "clipboard") {
+    const command = request as RequestEnvelope<"clipboard">;
+    try {
+      return createOkResponse(
+        command,
+        createClipboardResult(
+          options.document,
+          command.params.action,
+          {
+            ...(command.params.selector === undefined ? {} : { selector: command.params.selector }),
+            ...(command.params.ref === undefined ? {} : { ref: command.params.ref }),
+            ...(command.params.generationId === undefined
+              ? {}
+              : { generationId: command.params.generationId }),
+            ...(command.params.text === undefined ? {} : { text: command.params.text }),
+          },
+          options.registry,
+          options.now,
+        ),
+      );
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
+  }
+
+  if (request.command === "storage") {
+    const command = request as RequestEnvelope<"storage">;
+    return createOkResponse(
+      command,
+      createStorageResult(options.document, {
+        area: command.params.area,
+        action: command.params.action,
+        ...(command.params.key === undefined ? {} : { key: command.params.key }),
+        ...(command.params.value === undefined ? {} : { value: command.params.value }),
+      }),
+    );
+  }
+
+  if (request.command === "console") {
+    const command = request as RequestEnvelope<"console">;
+    return createOkResponse(command, createConsoleResult(command.params.action));
+  }
+
+  if (request.command === "errors") {
+    const command = request as RequestEnvelope<"errors">;
+    return createOkResponse(command, createErrorsResult(command.params.action));
+  }
+
+  if (request.command === "highlight") {
+    const command = request as RequestEnvelope<"highlight">;
+    try {
+      const params = command.params;
+      const element = resolveElement(
+        options.document,
+        {
+          ...(params.selector === undefined ? {} : { selector: params.selector }),
+          ...(params.ref === undefined ? {} : { ref: params.ref }),
+          ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
+        },
+        options.registry,
+        options.now,
+      );
+      const view = options.document.defaultView;
+      if (view !== null && element instanceof view.HTMLElement) {
+        element.dataset.firefoxCliHighlight = "true";
+        element.style.outline = "3px solid #ff9500";
+        element.style.outlineOffset = "2px";
+      }
+      return createOkResponse(command, {
+        ok: true,
+        element: summarizeWaitElement(element),
+      });
+    } catch (error) {
+      return createContentErrorResponse(request.id, error);
+    }
+  }
+
   if (isActionCommand(request.command)) {
     const command = request as RequestEnvelope<ActionKind>;
     try {
@@ -196,6 +309,267 @@ export function handleContentScriptRequest(
   return createErrorResponse(request.id, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported content command: ${request.command}`,
+  });
+}
+
+function createFindResult(document: Document, params: FindParams): FindResult {
+  const matches = Array.from(document.querySelectorAll("*")).filter((element) =>
+    matchesFindParams(element, params),
+  );
+  const selected =
+    params.nth !== undefined
+      ? matches.slice(params.nth, params.nth + 1)
+      : params.first === true
+        ? matches.slice(0, 1)
+        : params.last === true
+          ? matches.slice(-1)
+          : matches;
+  return {
+    elements: selected.map((element) => summarizeWaitElement(element)),
+  };
+}
+
+function matchesFindParams(element: Element, params: FindParams): boolean {
+  const value = params.value.toLowerCase();
+  if (params.kind === "role") {
+    return getRole(element).toLowerCase() === value;
+  }
+  if (params.kind === "text") {
+    return (element.textContent ?? "").toLowerCase().includes(value);
+  }
+  if (params.kind === "label") {
+    return findLabelText(element).toLowerCase().includes(value);
+  }
+  if (params.kind === "placeholder") {
+    return (element.getAttribute("placeholder") ?? "").toLowerCase().includes(value);
+  }
+  if (params.kind === "alt") {
+    return (element.getAttribute("alt") ?? "").toLowerCase().includes(value);
+  }
+  if (params.kind === "title") {
+    return (element.getAttribute("title") ?? "").toLowerCase().includes(value);
+  }
+  return (element.getAttribute("data-testid") ?? "").toLowerCase() === value;
+}
+
+function createFrameResult(document: Document): FrameResult {
+  return {
+    frames: Array.from(document.querySelectorAll("iframe")).map((frame, index) => ({
+      index,
+      selector: `iframe:nth-of-type(${index + 1})`,
+      ...(frame.getAttribute("title") === null ? {} : { title: frame.getAttribute("title") ?? "" }),
+      ...(frame.getAttribute("src") === null ? {} : { url: frame.getAttribute("src") ?? "" }),
+    })),
+  };
+}
+
+function createDialogResult(action: DialogResult["action"]): DialogResult {
+  return {
+    action,
+    handled: false,
+  };
+}
+
+function createClipboardResult(
+  document: Document,
+  action: ClipboardResult["action"],
+  params: {
+    readonly selector?: string;
+    readonly ref?: string;
+    readonly generationId?: string;
+    readonly text?: string;
+  },
+  registry: ElementRefRegistry<Element>,
+  now = Date.now(),
+): ClipboardResult {
+  if (action === "copy") {
+    const element = resolveElement(document, params, registry, now);
+    return {
+      action,
+      ok: true,
+      text: getElementText(element),
+    };
+  }
+  if (action === "paste") {
+    const element = resolveElement(document, params, registry, now);
+    setElementText(element, params.text ?? "");
+    return { action, ok: true };
+  }
+  return { action, ok: true, ...(params.text === undefined ? {} : { text: params.text }) };
+}
+
+function createStorageResult(
+  document: Document,
+  params: {
+    readonly area: "local" | "session";
+    readonly action: "get" | "set" | "remove" | "clear";
+    readonly key?: string;
+    readonly value?: string;
+  },
+): StorageResult {
+  const storage =
+    params.area === "local"
+      ? document.defaultView?.localStorage
+      : document.defaultView?.sessionStorage;
+  if (storage === undefined) {
+    throw new ContentSnapshotError("ACTION_REJECTED", "Storage is unavailable.");
+  }
+  if (params.action === "set") {
+    if (params.key === undefined) {
+      throw new ContentSnapshotError("ACTION_REJECTED", "Storage set requires a key.");
+    }
+    storage.setItem(params.key, params.value ?? "");
+    return { area: params.area, action: params.action, ok: true };
+  }
+  if (params.action === "remove") {
+    if (params.key === undefined) {
+      throw new ContentSnapshotError("ACTION_REJECTED", "Storage remove requires a key.");
+    }
+    storage.removeItem(params.key);
+    return { area: params.area, action: params.action, ok: true };
+  }
+  if (params.action === "clear") {
+    storage.clear();
+    return { area: params.area, action: params.action, ok: true };
+  }
+  if (params.key !== undefined) {
+    return {
+      area: params.area,
+      action: params.action,
+      ok: true,
+      value: storage.getItem(params.key),
+    };
+  }
+  return {
+    area: params.area,
+    action: params.action,
+    ok: true,
+    entries: Object.fromEntries(
+      Array.from({ length: storage.length }, (_, index) => {
+        const key = storage.key(index) ?? "";
+        return [key, storage.getItem(key) ?? ""];
+      }),
+    ),
+  };
+}
+
+function createConsoleResult(action: ConsoleResult["action"]): ConsoleResult {
+  if (action === "clear") {
+    consoleEntries.length = 0;
+    return { action, ok: true };
+  }
+  return { action, ok: true, entries: [...consoleEntries] };
+}
+
+function createErrorsResult(action: ErrorsResult["action"]): ErrorsResult {
+  if (action === "clear") {
+    errorEntries.length = 0;
+    return { action, ok: true };
+  }
+  return { action, ok: true, errors: [...errorEntries] };
+}
+
+function resolveElement(
+  document: Document,
+  params: { readonly selector?: string; readonly ref?: string; readonly generationId?: string },
+  registry: ElementRefRegistry<Element>,
+  now = Date.now(),
+): Element {
+  if (params.ref !== undefined) {
+    return registry.resolveRef(params.ref, {
+      ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
+      now,
+    }).element;
+  }
+  if (params.selector === undefined) {
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", "Selector or ref is required.");
+  }
+  const element = queryOptionalElement(document, params.selector);
+  if (element === null) {
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector not found: ${params.selector}`);
+  }
+  return element;
+}
+
+function getElementText(element: Element): string {
+  const value = getElementValue(element);
+  return value ?? collapseWhitespace(element.textContent ?? "");
+}
+
+function setElementText(element: Element, text: string): void {
+  const view = element.ownerDocument.defaultView;
+  if (view !== null && element instanceof view.HTMLInputElement) {
+    element.value = text;
+  } else if (view !== null && element instanceof view.HTMLTextAreaElement) {
+    element.value = text;
+  } else {
+    element.textContent = text;
+  }
+  element.dispatchEvent(new (view?.Event ?? Event)("input", { bubbles: true }));
+  element.dispatchEvent(new (view?.Event ?? Event)("change", { bubbles: true }));
+}
+
+function findLabelText(element: Element): string {
+  if (element.localName === "label") {
+    return "";
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view !== null && element instanceof view.HTMLInputElement && element.labels !== null) {
+    return Array.from(element.labels)
+      .map((label) => label.textContent ?? "")
+      .join(" ");
+  }
+  return element.closest("label")?.textContent ?? "";
+}
+
+function installLogCapture(): void {
+  const global = globalThis as typeof globalThis & {
+    [LOG_CAPTURE_INSTALLED_KEY]?: true;
+    readonly addEventListener?: typeof addEventListener;
+  };
+  if (global[LOG_CAPTURE_INSTALLED_KEY] === true) {
+    return;
+  }
+  global[LOG_CAPTURE_INSTALLED_KEY] = true;
+
+  for (const level of ["log", "info", "warn", "error"] as const) {
+    const original = console[level]?.bind(console);
+    console[level] = (...args: unknown[]) => {
+      consoleEntries.push({
+        level,
+        text: args.map(String).join(" "),
+        timestamp: Date.now(),
+      });
+      original?.(...args);
+    };
+  }
+  installErrorListeners(global);
+}
+
+function installWindowLogCapture(view: Window | null): void {
+  if (view === null || capturedWindows.has(view)) {
+    return;
+  }
+  capturedWindows.add(view);
+  installErrorListeners(view);
+}
+
+function installErrorListeners(target: {
+  readonly addEventListener?: typeof addEventListener;
+}): void {
+  target.addEventListener?.("error", (event) => {
+    errorEntries.push({
+      level: "error",
+      text: event.message,
+      timestamp: Date.now(),
+    });
+  });
+  target.addEventListener?.("unhandledrejection", (event) => {
+    errorEntries.push({
+      level: "unhandledrejection",
+      text: String(event.reason),
+      timestamp: Date.now(),
+    });
   });
 }
 

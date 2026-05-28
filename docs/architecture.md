@@ -33,7 +33,7 @@ Firefox-restricted pages and some privileged pages reject script injection. The 
 
 ## Capability Metadata
 
-The protocol package is the single source of truth for shipped and gated capabilities. `firefox-cli capabilities --json` reports both supported commands and prototype-gated command families.
+The protocol package is the single source of truth for shipped and unsupported capabilities. `firefox-cli capabilities --json` reports both supported commands and explicit Firefox/API limits.
 
 Unsupported command families fail with `UNSUPPORTED_CAPABILITY`. They are not silently mapped to browser-specific fallbacks.
 

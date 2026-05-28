@@ -101,6 +101,124 @@ describe("content actions", () => {
     expect(feed.scrollLeft).toBe(25);
   });
 
+  it("drags between elements, uploads files, and dispatches direct pointer/key events", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="source">Card</button>
+        <div id="drop">Drop target</div>
+        <input id="file" type="file">
+        <input id="keys">
+      </main>`,
+      {
+        url: "https://example.test/",
+        pretendToBeVisual: true,
+      },
+    );
+    const source = window.document.querySelector("#source");
+    const drop = window.document.querySelector("#drop");
+    const file = window.document.querySelector<HTMLInputElement>("#file");
+    const keys = window.document.querySelector<HTMLInputElement>("#keys");
+    if (source === null || drop === null || file === null || keys === null) {
+      throw new Error("fixture missing Phase 8 action elements");
+    }
+
+    const events: string[] = [];
+    source.addEventListener("dragstart", (event) => {
+      events.push(`dragstart:${"dataTransfer" in event}`);
+    });
+    drop.addEventListener("drop", (event) => {
+      events.push(`drop:${"dataTransfer" in event}`);
+    });
+    drop.addEventListener("mousedown", (event) => {
+      const mouse = event as MouseEvent;
+      events.push(`down:${mouse.clientX}:${mouse.button}`);
+    });
+    drop.addEventListener("wheel", (event) => {
+      const wheel = event as WheelEvent;
+      events.push(`wheel:${wheel.deltaY}`);
+    });
+    file.addEventListener("change", () => {
+      events.push("upload-change");
+    });
+    keys.addEventListener("keydown", (event) => {
+      events.push(`keydown:${event.key}`);
+    });
+    keys.addEventListener("keyup", (event) => {
+      events.push(`keyup:${event.key}`);
+    });
+
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("drag", { sourceSelector: "#source", targetSelector: "#drop" }, "drag-1"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "drag", element: { text: "Drop target" } } });
+    expect(
+      handleContentScriptRequest(
+        createRequest(
+          "upload",
+          {
+            selector: "#file",
+            files: [
+              {
+                name: "fixture.txt",
+                mimeType: "text/plain",
+                dataBase64: window.btoa("hello"),
+              },
+            ],
+          },
+          "upload-1",
+        ),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "upload", valueLength: 1 } });
+    expect(
+      handleContentScriptRequest(
+        createRequest(
+          "mouse",
+          { action: "down", selector: "#drop", x: 12, y: 34, button: 1 },
+          "m1",
+        ),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "mouse" } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("mouse", { action: "wheel", selector: "#drop", deltaY: 120 }, "m2"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "mouse" } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("keydown", { key: "A", selector: "#keys" }, "key-1"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "keydown" } });
+    expect(
+      handleContentScriptRequest(
+        createRequest("keyup", { key: "A", selector: "#keys" }, "key-2"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { action: "keyup" } });
+
+    expect(file.files?.item(0)?.name).toBe("fixture.txt");
+    expect(events).toEqual([
+      "dragstart:true",
+      "drop:true",
+      "upload-change",
+      "down:12:1",
+      "wheel:120",
+      "keydown:A",
+      "keyup:A",
+    ]);
+  });
+
   it("fills editable controls and rejects disabled or non-editable elements", () => {
     const { window } = new JSDOM(
       `<main>

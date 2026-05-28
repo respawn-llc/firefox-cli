@@ -6,7 +6,9 @@ import {
   createOkResponse,
   gatedCapabilities,
   kernelCapabilities,
+  type CommandId,
   type RequestEnvelope,
+  type ResponseEnvelope,
   type WaitResult,
 } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
@@ -827,6 +829,23 @@ describe("runCli", () => {
         result: { kind: "load-state", matched: true, elapsedMs: 6 },
         stdout: "matched in 6ms\n",
       },
+      {
+        args: ["wait", "--load", "networkidle"],
+        params: { kind: "load-state", state: "networkidle" },
+        result: { kind: "load-state", matched: true, elapsedMs: 7 },
+        stdout: "matched in 7ms\n",
+      },
+      {
+        args: ["wait", "--download", "file.zip"],
+        params: { kind: "download", filenameGlob: "file.zip" },
+        result: {
+          kind: "download",
+          matched: true,
+          elapsedMs: 8,
+          download: { id: 9, filename: "file.zip", state: "complete" },
+        },
+        stdout: "download 9 complete in 8ms\n",
+      },
     ];
 
     for (const testCase of cases) {
@@ -897,12 +916,6 @@ describe("runCli", () => {
       exitCode: 1,
       stdout: "",
       stderr: "Invalid timeout: 0\n",
-    });
-    await expect(runCli(["wait", "--load", "networkidle"], baseDependencies())).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: wait --load networkidle is prototype-gated until network instrumentation is implemented.\n",
     });
   });
 
@@ -1156,6 +1169,42 @@ describe("runCli", () => {
     });
   });
 
+  it("sends screenshot format, full-page, and quality options through the protocol", async () => {
+    const output = await runCli(
+      ["screenshot", "page.jpg", "--full", "--format", "jpeg", "--screenshot-quality", "80"],
+      {
+        ...baseDependencies(),
+        cwd: "/work",
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({
+            command: "screenshot",
+            params: {
+              path: "/work/page.jpg",
+              format: "jpeg",
+              fullPage: true,
+              quality: 80,
+            },
+          });
+          return createOkResponse(request, {
+            path: "/work/page.jpg",
+            format: "jpeg",
+            bytes: 128,
+            activation: {
+              tabActivated: false,
+              windowFocused: false,
+            },
+          });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "/work/page.jpg 128 bytes\n",
+      stderr: "",
+    });
+  });
+
   it("runs batch command objects with bail, target, timeout, and result limits", async () => {
     const output = await runCli(
       [
@@ -1394,6 +1443,11 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Specify at most one screenshot path.\n",
     });
+    await expect(runCli(["screenshot", "--format", "webp"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Only PNG and JPEG screenshots are supported.\n",
+    });
   });
 
   it("runs element actions by selector and ref", async () => {
@@ -1627,6 +1681,139 @@ describe("runCli", () => {
     }
   });
 
+  it("sends Phase 8 command families through protocol requests", async () => {
+    const cwd = await createTempDir("firefox-cli-phase8-cli");
+    await writeFile(join(cwd, "fixture.txt"), "upload body");
+    const cases: readonly {
+      readonly argv: readonly string[];
+      readonly expected: {
+        readonly command: CommandId;
+        readonly params: Record<string, unknown>;
+      };
+    }[] = [
+      {
+        argv: ["drag", "#source", "#target", "--tab", "id:42", "--json"],
+        expected: {
+          command: "drag",
+          params: {
+            sourceSelector: "#source",
+            targetSelector: "#target",
+            target: { tab: { kind: "id", id: 42 } },
+          },
+        },
+      },
+      {
+        argv: ["upload", "#file", "fixture.txt", "--json"],
+        expected: {
+          command: "upload",
+          params: {
+            selector: "#file",
+            files: [{ name: "fixture.txt", dataBase64: "dXBsb2FkIGJvZHk=" }],
+          },
+        },
+      },
+      {
+        argv: ["mouse", "wheel", "#feed", "--delta-y", "120", "--x", "5", "--json"],
+        expected: {
+          command: "mouse",
+          params: { action: "wheel", selector: "#feed", deltaY: 120, x: 5 },
+        },
+      },
+      {
+        argv: ["keydown", "A", "#keys", "--json"],
+        expected: { command: "keydown", params: { key: "A", selector: "#keys" } },
+      },
+      {
+        argv: ["keyup", "A", "#keys", "--json"],
+        expected: { command: "keyup", params: { key: "A", selector: "#keys" } },
+      },
+      {
+        argv: ["find", "text", "Ready", "--first", "--json"],
+        expected: { command: "find", params: { kind: "text", value: "Ready", first: true } },
+      },
+      {
+        argv: ["frame", "--json"],
+        expected: { command: "frame", params: {} },
+      },
+      {
+        argv: ["download", "https://example.test/file.txt", "file.txt", "--save-as", "--json"],
+        expected: {
+          command: "download",
+          params: { url: "https://example.test/file.txt", filename: "file.txt", saveAs: true },
+        },
+      },
+      {
+        argv: ["dialog", "accept", "yes", "--json"],
+        expected: { command: "dialog", params: { action: "accept", promptText: "yes" } },
+      },
+      {
+        argv: ["clipboard", "copy", "#copy", "--json"],
+        expected: { command: "clipboard", params: { action: "copy", selector: "#copy" } },
+      },
+      {
+        argv: ["cookies", "set", "https://example.test/", "sid", "1", "--json"],
+        expected: {
+          command: "cookies",
+          params: { action: "set", url: "https://example.test/", name: "sid", value: "1" },
+        },
+      },
+      {
+        argv: ["storage", "local", "set", "phase", "8", "--json"],
+        expected: {
+          command: "storage",
+          params: { area: "local", action: "set", key: "phase", value: "8" },
+        },
+      },
+      {
+        argv: ["network", "list", "--url", "example.test", "--json"],
+        expected: { command: "network", params: { action: "list", urlGlob: "example.test" } },
+      },
+      {
+        argv: ["console", "list", "--json"],
+        expected: { command: "console", params: { action: "list" } },
+      },
+      {
+        argv: ["errors", "clear", "--json"],
+        expected: { command: "errors", params: { action: "clear" } },
+      },
+      {
+        argv: ["highlight", "#save", "--duration", "1000", "--json"],
+        expected: { command: "highlight", params: { selector: "#save", durationMs: 1000 } },
+      },
+      {
+        argv: ["pdf", "page.pdf", "--json"],
+        expected: { command: "pdf", params: { path: join(cwd, "page.pdf") } },
+      },
+      {
+        argv: ["set", "viewport", "1200", "800", "--json"],
+        expected: { command: "set.viewport", params: { width: 1200, height: 800 } },
+      },
+      {
+        argv: ["diff", "title", "Expected title", "--json"],
+        expected: { command: "diff", params: { kind: "title", expected: "Expected title" } },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const requests: RequestEnvelope[] = [];
+      const output = await runCli(testCase.argv, {
+        ...baseDependencies(),
+        cwd,
+        sendRequest: async (request) => {
+          requests.push(request);
+          return createOkResponse(
+            request as RequestEnvelope<CommandId>,
+            phase8CliResultFor(request) as never,
+          ) as ResponseEnvelope;
+        },
+      });
+
+      expect(output.exitCode).toBe(0);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject(testCase.expected);
+    }
+  });
+
   it("rejects malformed interaction arguments at the CLI boundary", async () => {
     await expect(runCli(["click"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
@@ -1672,7 +1859,7 @@ describe("runCli", () => {
     expect(output.stdout).toContain("Usage:");
   });
 
-  it("returns explicit unsupported-capability errors for prototype-gated command families", async () => {
+  it("returns explicit unsupported-capability errors for gated CLI command families", async () => {
     for (const capability of gatedCapabilities) {
       for (const command of capability.cliCommands ?? []) {
         await expect(runCli([command], baseDependencies())).resolves.toEqual({
@@ -1682,49 +1869,6 @@ describe("runCli", () => {
         });
       }
     }
-  });
-
-  it("returns explicit unsupported-capability errors for prototype-gated options", async () => {
-    await expect(runCli(["wait", "--load", "networkidle"], baseDependencies())).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: wait --load networkidle is prototype-gated until network instrumentation is implemented.\n",
-    });
-    await expect(runCli(["wait", "--download", "file.zip"], baseDependencies())).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: wait --download is prototype-gated until download lifecycle support is implemented.\n",
-    });
-    await expect(runCli(["screenshot", "--full"], baseDependencies())).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: full-page screenshots are prototype-gated until scroll-and-stitch is validated.\n",
-    });
-    await expect(runCli(["screenshot", "--format", "jpeg"], baseDependencies())).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
-    });
-    await expect(
-      runCli(["screenshot", "--screenshot-format", "jpeg"], baseDependencies()),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
-    });
-    await expect(
-      runCli(["screenshot", "--screenshot-quality", "80"], baseDependencies()),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "UNSUPPORTED_CAPABILITY: JPEG screenshots are prototype-gated until format and quality options are validated.\n",
-    });
   });
 });
 
@@ -1754,6 +1898,54 @@ function actionElement(role: string, name: string) {
     visible: true,
     name,
   };
+}
+
+function phase8CliResultFor(request: RequestEnvelope): unknown {
+  const element = actionElement("button", "Submit");
+  switch (request.command) {
+    case "drag":
+    case "mouse":
+    case "keydown":
+    case "keyup":
+      return { action: request.command, ok: true, element };
+    case "upload":
+      return { action: request.command, ok: true, element, valueLength: 1 };
+    case "find":
+      return { elements: [element] };
+    case "frame":
+      return { frames: [] };
+    case "download":
+      return { id: 1, filename: "file.txt", state: "complete" };
+    case "dialog":
+      return { action: "accept", handled: true };
+    case "clipboard":
+      return { action: "copy", ok: true, text: "Copied" };
+    case "cookies":
+      return { action: "set", ok: true, cookie: { name: "sid", value: "1" } };
+    case "storage":
+      return { area: "local", action: "set", ok: true };
+    case "network":
+      return { action: "list", ok: true, requests: [] };
+    case "console":
+      return { action: "list", ok: true, entries: [] };
+    case "errors":
+      return { action: "clear", ok: true };
+    case "highlight":
+      return { ok: true, element };
+    case "pdf":
+      return { path: "/work/page.pdf" };
+    case "set.viewport":
+      return { window: { id: 7, index: 0, focused: true, tabCount: 1 } };
+    case "diff":
+      return {
+        kind: "title",
+        expected: "Expected title",
+        actual: "Expected title",
+        matches: true,
+      };
+    default:
+      throw new Error(`Unexpected Phase 8 CLI test command: ${request.command}`);
+  }
 }
 
 function targetSummary() {

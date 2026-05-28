@@ -120,6 +120,33 @@ export class FirefoxCliBackgroundController {
       captureVisibleTab: async () => {
         throw new Error("Browser adapter is not configured.");
       },
+      download: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      waitForDownload: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      readClipboard: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      writeClipboard: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      listCookies: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      setCookie: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      removeCookie: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
+      listNetworkRequests: async () => [],
+      clearNetworkRequests: async () => undefined,
+      waitForNetworkIdle: async () => undefined,
+      resizeWindow: async () => {
+        throw new Error("Browser adapter is not configured.");
+      },
     };
     this.#storageAdapter = options.storageAdapter ?? {
       getPairToken: async () => null,

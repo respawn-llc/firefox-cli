@@ -1,5 +1,5 @@
 import { access, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import {
   FilePairStateStore,
   FileLocalIpcAuthTokenStore,
@@ -152,6 +152,78 @@ async function runCliOrThrow(
     return screenshot(args.slice(1), dependencies);
   }
 
+  if (args[0] === "drag") {
+    return drag(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "upload") {
+    return upload(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "mouse") {
+    return mouse(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "keydown" || args[0] === "keyup") {
+    return keyEvent(args[0], args.slice(1), dependencies);
+  }
+
+  if (args[0] === "find") {
+    return find(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "frame") {
+    return frame(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "download") {
+    return download(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "dialog") {
+    return dialog(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "clipboard") {
+    return clipboard(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "cookies") {
+    return cookies(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "storage") {
+    return storage(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "network") {
+    return network(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "console") {
+    return consoleCommand(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "errors") {
+    return errors(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "highlight") {
+    return highlight(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "pdf") {
+    return pdf(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "set") {
+    return setCommand(args.slice(1), dependencies);
+  }
+
+  if (args[0] === "diff") {
+    return diffCommand(args.slice(1), dependencies);
+  }
+
   if (args[0] === "batch") {
     return batch(args.slice(1), dependencies);
   }
@@ -217,6 +289,23 @@ export function renderHelp(): string {
     "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
     "  firefox-cli eval <js> | --stdin | -b base64 [--json]",
     "  firefox-cli screenshot [path] [--json]",
+    "  firefox-cli drag <source-selector|@ref> <target-selector|@ref> [--json]",
+    "  firefox-cli upload <selector|@ref> <file...> [--json]",
+    "  firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]",
+    "  firefox-cli keydown|keyup <key> [selector|@ref] [--json]",
+    "  firefox-cli find role|text|label|placeholder|alt|title|testid <value> [--json]",
+    "  firefox-cli frame [--json]",
+    "  firefox-cli download <url> [filename] [--json]",
+    "  firefox-cli dialog status|accept|dismiss [--json]",
+    "  firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]",
+    "  firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]",
+    "  firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]",
+    "  firefox-cli network list|clear [--json]",
+    "  firefox-cli console|errors list|clear [--json]",
+    "  firefox-cli highlight <selector|@ref> [--json]",
+    "  firefox-cli pdf <path> [--json]",
+    "  firefox-cli set viewport <width> <height> [--json]",
+    "  firefox-cli diff url|title|snapshot <expected> [--json]",
     "  firefox-cli batch <json> | --stdin [--bail] [--json]",
     "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
     "  firefox-cli fill|type <selector|@ref> <text> [--json]",
@@ -778,7 +867,11 @@ async function screenshot(
     dependencies,
     createRequest("screenshot", {
       path: outputPath,
-      format: "png",
+      format: parsedArgs.format,
+      ...(parsedArgs.fullPage ? { fullPage: true } : {}),
+      ...(parsedArgs.quality === undefined
+        ? {}
+        : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
       ...(parsedArgs.timeout === undefined
         ? {}
         : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
@@ -796,6 +889,411 @@ async function screenshot(
   return parsedArgs.json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
     : ok(`${formatScreenshotResult(response.result)}\n`);
+}
+
+async function drag(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePositionalsAndOptions(args);
+  const [source, target] = parsed.positionals;
+  if (source === undefined || target === undefined) {
+    return error("Missing drag source or target.\n");
+  }
+  return formatActionResponse(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("drag", {
+        ...sourceDragTarget(source, "source"),
+        ...sourceDragTarget(target, "target"),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function upload(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePositionalsAndOptions(args, { preserveUnknownOptions: true });
+  const [elementTarget, ...paths] = parsed.positionals;
+  if (elementTarget === undefined || paths.length === 0) {
+    return error("Missing upload selector/ref or file path.\n");
+  }
+  const files = await Promise.all(
+    paths.map(async (path) => {
+      const absolutePath = resolve(dependencies.cwd ?? process.cwd(), path);
+      return {
+        name: basename(path),
+        dataBase64: (await readFile(absolutePath)).toString("base64"),
+      };
+    }),
+  );
+  return formatActionResponse(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("upload", {
+        ...parseElementTarget(elementTarget),
+        files,
+        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function mouse(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePositionalsAndOptions(args);
+  const action = parsed.positionals[0];
+  if (action !== "move" && action !== "down" && action !== "up" && action !== "wheel") {
+    return error("Missing or invalid mouse action.\n");
+  }
+  const maybeTarget = parsed.positionals[1];
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("mouse", {
+      action,
+      ...parseElementTarget(maybeTarget),
+      ...optionalNumberOption(parsed.optionArgs, ["--x"], "x"),
+      ...optionalNumberOption(parsed.optionArgs, ["--y"], "y"),
+      ...optionalNumberOption(parsed.optionArgs, ["--button"], "button"),
+      ...optionalNumberOption(parsed.optionArgs, ["--delta-x"], "deltaX"),
+      ...optionalNumberOption(parsed.optionArgs, ["--delta-y"], "deltaY"),
+      ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+    }),
+  );
+  return formatActionResponse(response, parsed.optionArgs.includes("--json"));
+}
+
+async function keyEvent(
+  command: "keydown" | "keyup",
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsed = parsePositionalsAndOptions(args);
+  const key = parsed.positionals[0];
+  if (key === undefined) {
+    return error("Missing key.\n");
+  }
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest(command, {
+      key,
+      ...parseElementTarget(parsed.positionals[1]),
+      ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+    }),
+  );
+  return formatActionResponse(response, parsed.optionArgs.includes("--json"));
+}
+
+async function find(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 2,
+  });
+  const [kind, value] = parsed.positionals;
+  if (!isFindKind(kind) || value === undefined) {
+    return error("Missing or invalid find kind/value.\n");
+  }
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("find", {
+      kind,
+      value,
+      ...optionalBooleanFlag(parsed.optionArgs, "--first", "first"),
+      ...optionalBooleanFlag(parsed.optionArgs, "--last", "last"),
+      ...optionalPositiveInteger(parsed.optionArgs, ["--nth"], "nth", "nth"),
+      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+    }),
+  );
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+  return parsed.optionArgs.includes("--json")
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        response.result.elements
+          .map(
+            (element) =>
+              `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
+          )
+          .join(""),
+      );
+}
+
+async function frame(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("frame", { ...optionalTarget(parseTargetOptions(args)) }),
+  );
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        response.result.frames
+          .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
+          .join(""),
+      );
+}
+
+async function download(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const json = args.includes("--json");
+  const positional = getPositionals(args);
+  const url = normalizeOptionalUrl(positional[0]);
+  if (url === undefined) {
+    return error("Missing download URL.\n");
+  }
+  const response = await sendOrUnavailable(
+    dependencies,
+    createRequest("download", {
+      url,
+      ...(positional[1] === undefined ? {} : { filename: positional[1] }),
+      saveAs: args.includes("--save-as"),
+    }),
+  );
+  return formatJsonOrObject(response, json);
+}
+
+async function dialog(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const positional = getPositionals(args, { preserveUnknownOptions: true });
+  const action = positional[0] ?? "status";
+  if (action !== "status" && action !== "accept" && action !== "dismiss") {
+    return error("Missing or invalid dialog action.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("dialog", {
+        action,
+        ...(positional[1] === undefined ? {} : { promptText: positional[1] }),
+        ...optionalTarget(parseTargetOptions(args)),
+      }),
+    ),
+    json,
+  );
+}
+
+async function clipboard(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsed = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 1,
+  });
+  const action = parsed.positionals[0] ?? "read";
+  if (action !== "read" && action !== "write" && action !== "copy" && action !== "paste") {
+    return error("Missing or invalid clipboard action.\n");
+  }
+  const value = parsed.positionals[1];
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("clipboard", {
+        action,
+        ...(action === "write" ? { text: value ?? "" } : parseElementTarget(value)),
+        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function cookies(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 2,
+    minPositionals: 2,
+  });
+  const [action, url, name, value] = parsed.positionals;
+  if (
+    (action !== "list" && action !== "get" && action !== "set" && action !== "remove") ||
+    url === undefined
+  ) {
+    return error("Missing or invalid cookies action/url.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("cookies", {
+        action,
+        url: normalizeOptionalUrl(url) ?? url,
+        ...(name === undefined ? {} : { name }),
+        ...(value === undefined ? {} : { value }),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function storage(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const parsed = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 2,
+    minPositionals: 2,
+  });
+  const [area, action, key, value] = parsed.positionals;
+  if (
+    (area !== "local" && area !== "session") ||
+    (action !== "get" && action !== "set" && action !== "remove" && action !== "clear")
+  ) {
+    return error("Missing or invalid storage area/action.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("storage", {
+        area,
+        action,
+        ...(key === undefined ? {} : { key }),
+        ...(value === undefined ? {} : { value }),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function network(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const json = args.includes("--json");
+  const positional = getPositionals(args);
+  const action = positional[0] ?? "list";
+  if (action !== "list" && action !== "clear") {
+    return error("Missing or invalid network action.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("network", {
+        action,
+        ...optionalStringOption(args, ["--url"], "urlGlob"),
+      }),
+    ),
+    json,
+  );
+}
+
+async function consoleCommand(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  return logCommand("console", args, dependencies);
+}
+
+async function errors(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  return logCommand("errors", args, dependencies);
+}
+
+async function logCommand(
+  command: "console" | "errors",
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const action = getPositionals(args)[0] ?? "list";
+  if (action !== "list" && action !== "clear") {
+    return error(`Missing or invalid ${command} action.\n`);
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest(command, { action, ...optionalTarget(parseTargetOptions(args)) }),
+    ),
+    args.includes("--json"),
+  );
+}
+
+async function highlight(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsed = parsePositionalsAndOptions(args);
+  const elementTarget = parsed.positionals[0];
+  if (elementTarget === undefined) {
+    return error("Missing selector or ref.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("highlight", {
+        ...parseElementTarget(elementTarget),
+        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+        ...optionalPositiveInteger(parsed.optionArgs, ["--duration"], "duration", "durationMs"),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
+}
+
+async function pdf(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  const path = getPositionals(args)[0];
+  if (path === undefined) {
+    return error("Missing PDF path.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("pdf", {
+        path: resolve(dependencies.cwd ?? process.cwd(), path),
+        ...optionalTarget(parseTargetOptions(args)),
+      }),
+    ),
+    args.includes("--json"),
+  );
+}
+
+async function setCommand(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const positional = getPositionals(args);
+  if (positional[0] !== "viewport") {
+    return error("Missing or invalid set command.\n");
+  }
+  const width = parsePositiveIntegerValue(positional[1] ?? "", "width");
+  const height = parsePositiveIntegerValue(positional[2] ?? "", "height");
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("set.viewport", {
+        width,
+        height,
+        ...optionalTarget(parseTargetOptions(args)),
+      }),
+    ),
+    args.includes("--json"),
+  );
+}
+
+async function diffCommand(
+  args: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const parsed = parsePayloadPositionalsAndOptions(args, {
+    payloadStartPositionals: 1,
+    minPositionals: 2,
+  });
+  const [kind, expected] = parsed.positionals;
+  if ((kind !== "url" && kind !== "title" && kind !== "snapshot") || expected === undefined) {
+    return error("Missing or invalid diff kind/expected value.\n");
+  }
+  return formatJsonOrObject(
+    await sendOrUnavailable(
+      dependencies,
+      createRequest("diff", {
+        kind,
+        expected,
+        ...optionalStringOption(parsed.optionArgs, ["--selector"], "selector"),
+        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+      }),
+    ),
+    parsed.optionArgs.includes("--json"),
+  );
 }
 
 async function batch(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
@@ -1227,6 +1725,20 @@ function isScrollDirection(value: string | undefined): value is "up" | "down" | 
   return value === "up" || value === "down" || value === "left" || value === "right";
 }
 
+function isFindKind(
+  value: string | undefined,
+): value is "role" | "text" | "label" | "placeholder" | "alt" | "title" | "testid" {
+  return (
+    value === "role" ||
+    value === "text" ||
+    value === "label" ||
+    value === "placeholder" ||
+    value === "alt" ||
+    value === "title" ||
+    value === "testid"
+  );
+}
+
 function isPotentialBatchCliCommand(value: string | undefined): boolean {
   return (
     value === "tab" ||
@@ -1242,6 +1754,25 @@ function isPotentialBatchCliCommand(value: string | undefined): boolean {
     value === "wait" ||
     value === "eval" ||
     value === "screenshot" ||
+    value === "drag" ||
+    value === "upload" ||
+    value === "mouse" ||
+    value === "keydown" ||
+    value === "keyup" ||
+    value === "find" ||
+    value === "frame" ||
+    value === "download" ||
+    value === "dialog" ||
+    value === "clipboard" ||
+    value === "cookies" ||
+    value === "storage" ||
+    value === "network" ||
+    value === "console" ||
+    value === "errors" ||
+    value === "highlight" ||
+    value === "pdf" ||
+    value === "set" ||
+    value === "diff" ||
     value === "click" ||
     value === "dblclick" ||
     value === "focus" ||
@@ -1265,6 +1796,7 @@ type ParsedWaitArguments = {
   readonly urlGlob?: string;
   readonly expression?: string;
   readonly loadState?: string;
+  readonly download?: string;
   readonly state?: string;
   readonly generationId?: string;
   readonly timeout?: string;
@@ -1284,6 +1816,9 @@ type ParsedEvalArguments = {
 type ParsedScreenshotArguments = {
   readonly optionArgs: readonly string[];
   readonly outputPath?: string;
+  readonly format: "png" | "jpeg";
+  readonly fullPage: boolean;
+  readonly quality?: string;
   readonly timeout?: string;
   readonly maxImageBytes?: string;
   readonly json: boolean;
@@ -1383,10 +1918,13 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
   const optionArgs: string[] = [];
   const parsed: {
     outputPath?: string;
+    format: "png" | "jpeg";
+    fullPage: boolean;
+    quality?: string;
     timeout?: string;
     maxImageBytes?: string;
     json: boolean;
-  } = { json: false };
+  } = { format: "png", fullPage: false, json: false };
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -1408,15 +1946,22 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
         index += 1;
         break;
       case "--full":
-        throw new CliUsageError(formatGatedCapability("screenshot --full").trim());
+        parsed.fullPage = true;
+        break;
       case "--format":
-      case "--screenshot-format":
-        if (readFlagValue(args, index, arg).toLowerCase() === "jpeg") {
-          throw new CliUsageError(formatGatedCapability("screenshot --format jpeg").trim());
+      case "--screenshot-format": {
+        const format = readFlagValue(args, index, arg).toLowerCase();
+        if (format !== "png" && format !== "jpeg") {
+          throw new CliUsageError("Only PNG and JPEG screenshots are supported.");
         }
-        throw new CliUsageError("Only PNG screenshots are supported.");
+        parsed.format = format;
+        index += 1;
+        break;
+      }
       case "--screenshot-quality":
-        throw new CliUsageError(formatGatedCapability("screenshot --format jpeg").trim());
+        parsed.quality = readFlagValue(args, index, arg);
+        index += 1;
+        break;
       case "--window":
       case "--tab": {
         const value = readFlagValue(args, index, arg);
@@ -1439,6 +1984,9 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
   return {
     optionArgs,
     ...(parsed.outputPath === undefined ? {} : { outputPath: parsed.outputPath }),
+    format: parsed.format,
+    fullPage: parsed.fullPage,
+    ...(parsed.quality === undefined ? {} : { quality: parsed.quality }),
     ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
     ...(parsed.maxImageBytes === undefined ? {} : { maxImageBytes: parsed.maxImageBytes }),
     json: parsed.json,
@@ -1692,21 +2240,30 @@ function decodeBase64(value: string): string {
 }
 
 function parseWaitParams(waitArgs: ParsedWaitArguments): {
-  readonly kind: "ms" | "element" | "text" | "url" | "function" | "load-state";
+  readonly kind: "ms" | "element" | "text" | "url" | "function" | "load-state" | "download";
   readonly durationMs?: number;
   readonly selector?: string;
   readonly ref?: string;
   readonly generationId?: string;
-  readonly state?: "visible" | "hidden" | "attached" | "domcontentloaded" | "complete";
+  readonly state?:
+    | "visible"
+    | "hidden"
+    | "attached"
+    | "domcontentloaded"
+    | "complete"
+    | "networkidle";
   readonly text?: string;
   readonly urlGlob?: string;
   readonly expression?: string;
+  readonly downloadId?: number;
+  readonly filenameGlob?: string;
 } {
   const conditionCount = [
     waitArgs.text,
     waitArgs.urlGlob,
     waitArgs.expression,
     waitArgs.loadState,
+    waitArgs.download,
   ].filter((value) => value !== undefined).length;
   if (conditionCount > 1) {
     throw new CliUsageError("Specify exactly one wait condition.");
@@ -1737,13 +2294,23 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
   }
 
   if (waitArgs.loadState !== undefined) {
-    if (waitArgs.loadState === "networkidle") {
-      throw new CliUsageError(formatGatedCapability("wait --load networkidle").trim());
-    }
-    if (waitArgs.loadState !== "domcontentloaded" && waitArgs.loadState !== "complete") {
+    if (
+      waitArgs.loadState !== "domcontentloaded" &&
+      waitArgs.loadState !== "complete" &&
+      waitArgs.loadState !== "networkidle"
+    ) {
       throw new CliUsageError(`Invalid load state: ${waitArgs.loadState}`);
     }
     return { kind: "load-state", state: waitArgs.loadState };
+  }
+
+  if (waitArgs.download !== undefined) {
+    if (waitArgs.download.length === 0) {
+      return { kind: "download" };
+    }
+    return /^\d+$/u.test(waitArgs.download)
+      ? { kind: "download", downloadId: Number(waitArgs.download) }
+      : { kind: "download", filenameGlob: waitArgs.download };
   }
 
   const target = waitArgs.positionals[0];
@@ -1789,6 +2356,7 @@ function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {
     urlGlob?: string;
     expression?: string;
     loadState?: string;
+    download?: string;
     state?: string;
     generationId?: string;
     timeout?: string;
@@ -1825,7 +2393,16 @@ function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {
         index += 1;
         break;
       case "--download":
-        throw new CliUsageError(formatGatedCapability("wait --download").trim());
+        {
+          const downloadTarget = args[index + 1];
+          if (downloadTarget !== undefined && !downloadTarget.startsWith("-")) {
+            parsed.download = downloadTarget;
+            index += 1;
+          } else {
+            parsed.download = "";
+          }
+        }
+        break;
       case "--state":
         parsed.state = readFlagValue(args, index, arg);
         index += 1;
@@ -1897,6 +2474,10 @@ function formatWaitResult(result: WaitResult): string {
     return `${formatGetValue(result.value)} ${suffix}`;
   }
 
+  if (result.kind === "download") {
+    return `download ${result.download.id} ${result.download.state ?? "matched"} ${suffix}`;
+  }
+
   return `matched ${suffix}`;
 }
 
@@ -1955,6 +2536,11 @@ function formatActionResponse(
     | "dblclick"
     | "focus"
     | "hover"
+    | "drag"
+    | "upload"
+    | "mouse"
+    | "keydown"
+    | "keyup"
     | "fill"
     | "type"
     | "press"
@@ -1976,6 +2562,19 @@ function formatActionResponse(
   return json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
     : ok(`${formatActionResult(response.result)}\n`);
+}
+
+function formatJsonOrObject<C extends CommandId>(
+  response: ResponseEnvelope<C>,
+  json: boolean,
+): CliResult {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${JSON.stringify(response.result)}\n`);
 }
 
 function getPositionals(
@@ -2088,7 +2687,9 @@ function isBooleanPositionalOption(arg: string): boolean {
     arg === "--interactive" ||
     arg === "-c" ||
     arg === "--compact" ||
-    arg === "--verbose"
+    arg === "--verbose" ||
+    arg === "--first" ||
+    arg === "--last"
   );
 }
 
@@ -2105,6 +2706,12 @@ function isValuePositionalOption(arg: string): boolean {
     arg === "--state" ||
     arg === "--text" ||
     arg === "--url" ||
+    arg === "--x" ||
+    arg === "--y" ||
+    arg === "--button" ||
+    arg === "--delta-x" ||
+    arg === "--delta-y" ||
+    arg === "--duration" ||
     arg === "--fn" ||
     arg === "--load" ||
     arg === "--timeout" ||
@@ -2213,6 +2820,50 @@ function hasOption(args: readonly string[], option: string): boolean {
   return args.includes(option);
 }
 
+function optionalBooleanFlag<K extends string>(
+  args: readonly string[],
+  flag: string,
+  outputKey: K,
+): { readonly [P in K]?: true } {
+  return args.includes(flag) ? ({ [outputKey]: true } as { readonly [P in K]?: true }) : {};
+}
+
+function optionalNumberOption<K extends string>(
+  args: readonly string[],
+  names: readonly string[],
+  outputKey: K,
+): { readonly [P in K]?: number } {
+  const value = getOptionValue(args, names);
+  if (value === undefined) {
+    return {};
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new CliUsageError(`Invalid ${outputKey}: ${value}`);
+  }
+  return { [outputKey]: parsed } as { readonly [P in K]?: number };
+}
+
+function sourceDragTarget(
+  value: string,
+  role: "source" | "target",
+): {
+  readonly sourceSelector?: string;
+  readonly sourceRef?: string;
+  readonly targetSelector?: string;
+  readonly targetRef?: string;
+} {
+  const parsed = parseElementTarget(value);
+  if (role === "source") {
+    return parsed.ref === undefined
+      ? { sourceSelector: parsed.selector ?? value }
+      : { sourceRef: parsed.ref };
+  }
+  return parsed.ref === undefined
+    ? { targetSelector: parsed.selector ?? value }
+    : { targetRef: parsed.ref };
+}
+
 function optionalTarget(target: TargetSelector): { readonly target?: TargetSelector } {
   return target.window === undefined && target.tab === undefined ? {} : { target };
 }
@@ -2238,8 +2889,13 @@ function optionalStringOption(
 function optionalStringOption(
   args: readonly string[],
   names: readonly string[],
-  outputKey: "selector" | "generationId",
-): { readonly selector?: string; readonly generationId?: string } {
+  outputKey: "urlGlob",
+): { readonly urlGlob?: string };
+function optionalStringOption(
+  args: readonly string[],
+  names: readonly string[],
+  outputKey: "selector" | "generationId" | "urlGlob",
+): { readonly selector?: string; readonly generationId?: string; readonly urlGlob?: string } {
   const value = getOptionValue(args, names);
   if (value === undefined) {
     return {};
@@ -2257,7 +2913,30 @@ function optionalPositiveInteger(
   names: readonly string[],
   label: string,
   outputKey: "maxDepth" | "maxOutputBytes",
-): { readonly maxDepth?: number; readonly maxOutputBytes?: number } {
+): { readonly maxDepth?: number; readonly maxOutputBytes?: number };
+function optionalPositiveInteger(
+  args: readonly string[],
+  names: readonly string[],
+  label: string,
+  outputKey: "durationMs",
+): { readonly durationMs?: number };
+function optionalPositiveInteger(
+  args: readonly string[],
+  names: readonly string[],
+  label: string,
+  outputKey: "nth",
+): { readonly nth?: number };
+function optionalPositiveInteger(
+  args: readonly string[],
+  names: readonly string[],
+  label: string,
+  outputKey: "maxDepth" | "maxOutputBytes" | "nth" | "durationMs",
+): {
+  readonly maxDepth?: number;
+  readonly maxOutputBytes?: number;
+  readonly nth?: number;
+  readonly durationMs?: number;
+} {
   const value = getOptionValue(args, names);
   if (value === undefined) {
     return {};

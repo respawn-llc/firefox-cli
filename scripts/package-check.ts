@@ -67,7 +67,7 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
       readonly version?: string;
       readonly background?: { readonly scripts?: readonly string[] };
-      readonly content_scripts?: readonly { readonly js?: readonly string[] }[];
+      readonly permissions?: readonly string[];
       readonly action?: { readonly default_popup?: string };
     };
     if (manifest.version !== rootPackage.version) {
@@ -83,7 +83,7 @@ async function verifyDevelopmentExtensionBundle(
   packageRoot: string,
   manifest: {
     readonly background?: { readonly scripts?: readonly string[] };
-    readonly content_scripts?: readonly { readonly js?: readonly string[] }[];
+    readonly permissions?: readonly string[];
     readonly action?: { readonly default_popup?: string };
   },
 ): Promise<void> {
@@ -94,8 +94,8 @@ async function verifyDevelopmentExtensionBundle(
   if (manifest.background?.scripts?.join(",") !== "background.js") {
     throw new Error("Expected extension background script to be background.js");
   }
-  if (manifest.content_scripts?.flatMap((script) => script.js ?? []).join(",") !== "content.js") {
-    throw new Error("Expected extension content script to be content.js");
+  if (manifest.permissions?.includes("scripting") !== true) {
+    throw new Error("Expected extension to request scripting permission for content.js injection");
   }
   if (manifest.action?.default_popup !== "popup.html") {
     throw new Error("Expected extension popup to be popup.html");

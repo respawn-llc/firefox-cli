@@ -1,11 +1,15 @@
 import type {
   ActionKind,
+  DragParams,
   ElementActionParams,
   KeyboardTextActionParams,
+  KeyEventParams,
+  MouseParams,
   PressParams,
   ScrollParams,
   SelectParams,
   TextActionParams,
+  UploadParams,
   WaitElementSummary,
 } from "@firefox-cli/protocol";
 
@@ -41,7 +45,11 @@ export type ActionOptions = {
     | KeyboardTextActionParams
     | PressParams
     | SelectParams
-    | ScrollParams;
+    | ScrollParams
+    | DragParams
+    | UploadParams
+    | MouseParams
+    | KeyEventParams;
   readonly now: number;
   readonly resolveRef: (
     ref: string,

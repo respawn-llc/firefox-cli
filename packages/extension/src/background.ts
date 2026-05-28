@@ -2,6 +2,17 @@ import { FirefoxCliBackgroundController } from "./background-controller.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import manifest from "./manifest.json" with { type: "json" };
 
+const networkRequests: {
+  id: string;
+  url: string;
+  method?: string;
+  type?: string;
+  statusCode?: number;
+  startedAt: number;
+  completedAt?: number;
+}[] = [];
+const MAX_NETWORK_REQUESTS = 1_000;
+
 const controller = new FirefoxCliBackgroundController({
   browserAdapter: {
     listWindows: async () => {
@@ -59,7 +70,86 @@ const controller = new FirefoxCliBackgroundController({
       return toTabSummary(await browser.tabs.get(tabId));
     },
     captureVisibleTab: (windowId, options) =>
-      browser.tabs.captureVisibleTab(windowId, { format: options.format }),
+      browser.tabs.captureVisibleTab(windowId, {
+        format: options.format,
+        ...(options.quality === undefined ? {} : { quality: options.quality }),
+      }),
+    download: async (options) => {
+      const id = await browser.downloads.download({
+        url: options.url,
+        ...(options.filename === undefined ? {} : { filename: options.filename }),
+        ...(options.saveAs === undefined ? {} : { saveAs: options.saveAs }),
+      });
+      const [item] = await browser.downloads.search({ id });
+      return toDownloadResult(item ?? { id });
+    },
+    waitForDownload: async (options) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < options.timeoutMs) {
+        const downloads = await browser.downloads.search(
+          options.downloadId === undefined ? {} : { id: options.downloadId },
+        );
+        const match = downloads.find(
+          (download) =>
+            (options.downloadId === undefined || download.id === options.downloadId) &&
+            (options.filenameGlob === undefined ||
+              matchesGlob(download.filename ?? "", options.filenameGlob)),
+        );
+        if (match?.state === "complete") {
+          return toDownloadResult(match);
+        }
+        if (match?.state === "interrupted") {
+          throw new Error(`Download ${String(match.id)} was interrupted.`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, options.intervalMs));
+      }
+      throw new Error("Timed out waiting for download.");
+    },
+    readClipboard: async () => navigator.clipboard.readText(),
+    writeClipboard: async (text) => {
+      await navigator.clipboard.writeText(text);
+    },
+    listCookies: async (options) => {
+      const cookies = await browser.cookies.getAll({
+        url: options.url,
+        ...(options.name === undefined ? {} : { name: options.name }),
+      });
+      return cookies.map(toCookieSummary);
+    },
+    setCookie: async (options) =>
+      toCookieSummary(
+        await browser.cookies.set({
+          url: options.url,
+          name: options.name,
+          value: options.value,
+          ...(options.domain === undefined ? {} : { domain: options.domain }),
+          ...(options.path === undefined ? {} : { path: options.path }),
+        }),
+      ),
+    removeCookie: async (options) => {
+      await browser.cookies.remove(options);
+    },
+    listNetworkRequests: async (options) =>
+      networkRequests
+        .filter(
+          (request) => options.urlGlob === undefined || matchesGlob(request.url, options.urlGlob),
+        )
+        .map(toNetworkRequestSummary),
+    clearNetworkRequests: async () => {
+      networkRequests.length = 0;
+    },
+    waitForNetworkIdle: async (options) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < options.timeoutMs) {
+        if (isNetworkIdle(options.idleMs)) {
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error("Timed out waiting for network idle.");
+    },
+    resizeWindow: async (windowId, size) =>
+      toWindowSnapshot(await browser.windows.update(windowId, size)),
     sendContentRequest: async (tabId, request) => {
       try {
         return await browser.tabs.sendMessage(tabId, request);
@@ -108,6 +198,80 @@ controller.start();
 browser.runtime.onMessage.addListener((message: { readonly type?: string }) =>
   controller.handleRuntimeMessage(message),
 );
+
+browser.webRequest?.onBeforeRequest?.addListener(
+  (details) => {
+    networkRequests.push({
+      id: String(details.requestId),
+      url: details.url,
+      ...(details.method === undefined ? {} : { method: details.method }),
+      ...(details.type === undefined ? {} : { type: details.type }),
+      startedAt: Date.now(),
+    });
+    pruneNetworkRequests();
+  },
+  { urls: ["<all_urls>"] },
+);
+
+browser.webRequest?.onCompleted?.addListener(markNetworkComplete, { urls: ["<all_urls>"] });
+browser.webRequest?.onErrorOccurred?.addListener(markNetworkComplete, { urls: ["<all_urls>"] });
+
+function markNetworkComplete(details: {
+  readonly requestId: string | number;
+  readonly statusCode?: number;
+}): void {
+  const existing = networkRequests.find((request) => request.id === String(details.requestId));
+  if (existing !== undefined) {
+    if (details.statusCode !== undefined) {
+      existing.statusCode = details.statusCode;
+    }
+    existing.completedAt = Date.now();
+  }
+}
+
+function isNetworkIdle(idleMs: number): boolean {
+  if (networkRequests.some((request) => request.completedAt === undefined)) {
+    return false;
+  }
+
+  const lastActivityAt = Math.max(
+    0,
+    ...networkRequests.map((request) => request.completedAt ?? request.startedAt),
+  );
+  return Date.now() - lastActivityAt >= idleMs;
+}
+
+function pruneNetworkRequests(): void {
+  const extraCount = networkRequests.length - MAX_NETWORK_REQUESTS;
+  if (extraCount > 0) {
+    networkRequests.splice(0, extraCount);
+  }
+}
+
+function toNetworkRequestSummary(request: (typeof networkRequests)[number]) {
+  return {
+    id: request.id,
+    url: request.url,
+    ...(request.method === undefined ? {} : { method: request.method }),
+    ...(request.type === undefined ? {} : { type: request.type }),
+    ...(request.statusCode === undefined ? {} : { statusCode: request.statusCode }),
+  };
+}
+
+function toDownloadResult(item: {
+  readonly id?: number;
+  readonly filename?: string;
+  readonly state?: string;
+}) {
+  if (item.id === undefined) {
+    throw new Error("Firefox did not return a download ID.");
+  }
+  return {
+    id: item.id,
+    ...(item.filename === undefined ? {} : { filename: item.filename }),
+    ...(item.state === undefined ? {} : { state: item.state }),
+  };
+}
 
 function toWindowSnapshot(window: {
   readonly id?: number;
@@ -161,4 +325,25 @@ function toTabSummary(tab: BrowserTab) {
     ...(tab.incognito === undefined ? {} : { private: tab.incognito }),
     ...(tab.cookieStoreId === undefined ? {} : { cookieStoreId: tab.cookieStoreId }),
   };
+}
+
+function toCookieSummary(cookie: {
+  readonly name: string;
+  readonly value: string;
+  readonly domain?: string;
+  readonly path?: string;
+}) {
+  return {
+    name: cookie.name,
+    value: cookie.value,
+    ...(cookie.domain === undefined ? {} : { domain: cookie.domain }),
+    ...(cookie.path === undefined ? {} : { path: cookie.path }),
+  };
+}
+
+function matchesGlob(value: string, glob: string): boolean {
+  return new RegExp(
+    `^${glob.replace(/[|\\{}()[\]^$+?.]/gu, "\\$&").replaceAll("*", ".*")}$`,
+    "u",
+  ).test(value);
 }

@@ -1,5 +1,5 @@
 import { createServer as createHttpServer, type Server } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 
@@ -10,6 +10,12 @@ type TabListPayload = {
     readonly id?: number;
     readonly url?: string;
   }[];
+};
+
+type TabNewPayload = {
+  readonly target?: {
+    readonly tabId?: number;
+  };
 };
 
 type SnapshotPayload = {
@@ -48,6 +54,58 @@ type ScreenshotPayload = {
   readonly bytes?: number;
 };
 
+type FindPayload = {
+  readonly elements?: readonly unknown[];
+};
+
+type FramePayload = {
+  readonly frames?: readonly unknown[];
+};
+
+type DownloadPayload = {
+  readonly id?: number;
+};
+
+type ClipboardPayload = {
+  readonly ok?: boolean;
+  readonly text?: string;
+};
+
+type CookiePayload = {
+  readonly ok?: boolean;
+  readonly cookie?: unknown;
+  readonly cookies?: readonly unknown[];
+};
+
+type StoragePayload = {
+  readonly ok?: boolean;
+  readonly value?: string | null;
+  readonly entries?: Record<string, string>;
+};
+
+type NetworkPayload = {
+  readonly ok?: boolean;
+  readonly requests?: readonly { readonly url?: string }[];
+};
+
+type DiffPayload = {
+  readonly matches?: boolean;
+};
+
+type ViewportPayload = {
+  readonly window?: {
+    readonly width?: number;
+    readonly height?: number;
+  };
+};
+
+type CapabilitiesPayload = {
+  readonly capabilities?: readonly {
+    readonly command?: string;
+    readonly status?: string;
+  }[];
+};
+
 type BatchPayload = {
   readonly ok?: boolean;
   readonly steps?: readonly {
@@ -60,7 +118,27 @@ export async function startWorkflowFixtureServer(): Promise<{
   readonly server: Server;
   readonly url: string;
 }> {
-  const server = createHttpServer((_request, response) => {
+  const server = createHttpServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (url.pathname === "/download.txt") {
+      response.writeHead(200, {
+        "content-type": "text/plain; charset=utf-8",
+        "content-disposition": 'attachment; filename="download.txt"',
+      });
+      response.end("firefox-cli download fixture\n");
+      return;
+    }
+    if (url.pathname === "/api/ping") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (url.pathname === "/frame") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><title>Child frame</title><p>Frame fixture</p>");
+      return;
+    }
+
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(`<!doctype html>
       <html>
@@ -69,6 +147,7 @@ export async function startWorkflowFixtureServer(): Promise<{
           <style>
             #feed { height: 80px; overflow: auto; border: 1px solid #999; }
             #feed-inner { height: 400px; padding-top: 260px; }
+            #drop-target, #mouse-target { min-height: 24px; border: 1px solid #999; margin: 8px 0; }
           </style>
         </head>
         <body>
@@ -87,6 +166,15 @@ export async function startWorkflowFixtureServer(): Promise<{
             </label>
             <button id="submit" type="button">Submit E2E</button>
             <div id="status" role="status">Idle</div>
+            <button id="drag-source" type="button">Drag source</button>
+            <div id="drop-target" data-testid="drop-zone">Drop target</div>
+            <label>Upload <input id="upload" type="file"></label>
+            <div id="upload-status">No upload</div>
+            <input id="key-target" aria-label="Key target">
+            <div id="mouse-target">Mouse target</div>
+            <input id="clipboard-target" value="copy-source">
+            <button id="highlight-target" type="button" data-testid="highlight-target">Highlight target</button>
+            <iframe title="Child frame" src="/frame"></iframe>
             <div id="feed" role="region" aria-label="Activity feed">
               <div id="feed-inner"><button id="feed-bottom">Feed bottom</button></div>
             </div>
@@ -104,6 +192,26 @@ export async function startWorkflowFixtureServer(): Promise<{
               ].join(" ");
             };
             document.querySelector("#submit").addEventListener("click", submit);
+            document.querySelector("#drop-target").addEventListener("drop", (event) => {
+              event.preventDefault();
+              document.body.dataset.dropped = "true";
+            });
+            document.querySelector("#drop-target").addEventListener("dragover", (event) => event.preventDefault());
+            document.querySelector("#upload").addEventListener("change", (event) => {
+              document.querySelector("#upload-status").textContent = event.target.files[0]?.name || "missing";
+            });
+            document.querySelector("#mouse-target").addEventListener("mousedown", () => {
+              document.body.dataset.mouseDown = "true";
+            });
+            document.querySelector("#mouse-target").addEventListener("wheel", () => {
+              document.body.dataset.mouseWheel = "true";
+            });
+            document.querySelector("#key-target").addEventListener("keydown", (event) => {
+              document.body.dataset.keyDown = event.key;
+            });
+            document.querySelector("#key-target").addEventListener("keyup", (event) => {
+              document.body.dataset.keyUp = event.key;
+            });
           </script>
         </body>
       </html>`);
@@ -127,9 +235,31 @@ export async function runAgentWorkflowE2e(
   runCliJson: CliJsonRunner,
   fixtureUrl: string,
 ): Promise<void> {
-  await runCliJson(["window", "new", fixtureUrl, "--json"]);
-  const tab = await waitForFixtureTab(runCliJson, fixtureUrl);
+  const beforeTabs = await runCliJson<TabListPayload>(["tab", "--json"]).catch(() => ({
+    tabs: [],
+  }));
+  const previousTabIds = new Set(
+    beforeTabs.tabs
+      ?.map((candidate) => candidate.id)
+      .filter((id): id is number => typeof id === "number") ?? [],
+  );
+  const created = await runCliJson<TabNewPayload>(["window", "new", fixtureUrl, "--json"]);
+  const tab =
+    created.target?.tabId === undefined
+      ? await waitForFixtureTab(runCliJson, fixtureUrl, previousTabIds)
+      : { id: created.target.tabId };
   const target = `id:${tab.id}`;
+  await runCliJson(["reload", "--tab", target, "--json"]);
+  await expectWait(runCliJson, [
+    "wait",
+    "--load",
+    "complete",
+    "--tab",
+    target,
+    "--timeout",
+    "5000",
+    "--json",
+  ]);
 
   const snapshot = await runCliJson<SnapshotPayload>(["snapshot", "--tab", target, "-i", "--json"]);
   if (snapshot.generationId === undefined || snapshot.text === undefined) {
@@ -201,27 +331,8 @@ export async function runAgentWorkflowE2e(
 
   await expectEvalState(runCliJson, target);
   await expectScreenshot(runCliJson, target);
+  await expectPhase8Commands(runCliJson, target, fixtureUrl);
   await expectBatch(runCliJson, target);
-}
-
-async function waitForFixtureTab(
-  runCliJson: CliJsonRunner,
-  fixtureUrl: string,
-): Promise<{ readonly id: number }> {
-  return pollUntil(
-    async () => {
-      const payload = await runCliJson<TabListPayload>(["tab", "--json"]);
-      const tab = payload.tabs?.find(
-        (candidate) => typeof candidate.id === "number" && candidate.url?.startsWith(fixtureUrl),
-      );
-      return tab?.id === undefined ? false : { id: tab.id };
-    },
-    {
-      timeoutMs: 15_000,
-      intervalMs: 250,
-      timeoutMessage: () => "Timed out waiting for fixture tab in disposable Firefox.",
-    },
-  );
 }
 
 async function expectAction(
@@ -241,6 +352,30 @@ async function expectAction(
     );
   }
   return payload;
+}
+
+async function waitForFixtureTab(
+  runCliJson: CliJsonRunner,
+  fixtureUrl: string,
+  excludedTabIds: ReadonlySet<number>,
+): Promise<{ readonly id: number }> {
+  return pollUntil(
+    async () => {
+      const payload = await runCliJson<TabListPayload>(["tab", "--json"]);
+      const tab = payload.tabs?.find(
+        (candidate) =>
+          typeof candidate.id === "number" &&
+          !excludedTabIds.has(candidate.id) &&
+          candidate.url?.startsWith(fixtureUrl),
+      );
+      return tab?.id === undefined ? false : { id: tab.id };
+    },
+    {
+      timeoutMs: 15_000,
+      intervalMs: 250,
+      timeoutMessage: () => "Timed out waiting for new fixture tab in disposable Firefox.",
+    },
+  );
 }
 
 function refForSnapshotText(text: string, label: string): string | undefined {
@@ -309,6 +444,23 @@ async function expectEvalState(runCliJson: CliJsonRunner, target: string): Promi
   }
 }
 
+async function expectEvalValue(
+  runCliJson: CliJsonRunner,
+  target: string,
+  expression: string,
+  expected: unknown,
+): Promise<void> {
+  const payload = await runCliJson<EvalPayload>(["eval", expression, "--tab", target, "--json"]);
+  const value = payload.value?.value;
+  if (payload.value?.type !== "json" || !deepEqual(value, expected)) {
+    throw new Error(
+      `Expected eval ${expression} to equal ${JSON.stringify(expected)}, got ${JSON.stringify(
+        payload,
+      )}`,
+    );
+  }
+}
+
 async function expectScreenshot(runCliJson: CliJsonRunner, target: string): Promise<void> {
   const screenshotDir = await createTempDir("firefox-cli-e2e-screenshot");
   const screenshotPath = join(screenshotDir, "page.png");
@@ -326,6 +478,285 @@ async function expectScreenshot(runCliJson: CliJsonRunner, target: string): Prom
   const header = await readFile(screenshotPath);
   if (!isPng(header)) {
     throw new Error(`Screenshot file is not a PNG: ${screenshotPath}`);
+  }
+}
+
+async function expectPhase8Commands(
+  runCliJson: CliJsonRunner,
+  target: string,
+  fixtureUrl: string,
+): Promise<void> {
+  await expectCapabilities(runCliJson, ["drag", "download", "network", "set.viewport"]);
+  await expectNetworkClear(runCliJson);
+  await expectAction(
+    runCliJson,
+    ["drag", "#drag-source", "#drop-target", "--tab", target, "--json"],
+    {
+      action: "drag",
+    },
+  );
+  await expectEvalValue(runCliJson, target, "document.body.dataset.dropped", "true");
+
+  const uploadDir = await createTempDir("firefox-cli-e2e-upload");
+  const uploadPath = join(uploadDir, "fixture-upload.txt");
+  await writeFile(uploadPath, "upload fixture\n");
+  await expectAction(runCliJson, ["upload", "#upload", uploadPath, "--tab", target, "--json"], {
+    action: "upload",
+    valueLength: 1,
+  });
+  await expectGetValue(
+    runCliJson,
+    ["get", "text", "#upload-status", "--tab", target, "--json"],
+    "fixture-upload.txt",
+  );
+
+  await expectAction(runCliJson, ["mouse", "down", "#mouse-target", "--tab", target, "--json"], {
+    action: "mouse",
+  });
+  await expectAction(
+    runCliJson,
+    ["mouse", "wheel", "#mouse-target", "--delta-y", "120", "--tab", target, "--json"],
+    { action: "mouse" },
+  );
+  await expectAction(runCliJson, ["keydown", "A", "#key-target", "--tab", target, "--json"], {
+    action: "keydown",
+  });
+  await expectAction(runCliJson, ["keyup", "A", "#key-target", "--tab", target, "--json"], {
+    action: "keyup",
+  });
+  await expectEvalValue(
+    runCliJson,
+    target,
+    `({
+      mouseDown: document.body.dataset.mouseDown,
+      mouseWheel: document.body.dataset.mouseWheel,
+      keyDown: document.body.dataset.keyDown,
+      keyUp: document.body.dataset.keyUp
+    })`,
+    { mouseDown: "true", mouseWheel: "true", keyDown: "A", keyUp: "A" },
+  );
+
+  const find = await runCliJson<FindPayload>([
+    "find",
+    "testid",
+    "highlight-target",
+    "--first",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  if (find.elements?.length !== 1) {
+    throw new Error(`Expected find to return one element, got ${JSON.stringify(find)}`);
+  }
+  const frame = await runCliJson<FramePayload>(["frame", "--tab", target, "--json"]);
+  if (frame.frames?.length !== 1) {
+    throw new Error(`Expected frame to list one iframe, got ${JSON.stringify(frame)}`);
+  }
+
+  const jpegDir = await createTempDir("firefox-cli-e2e-jpeg");
+  const jpegPath = join(jpegDir, "page.jpg");
+  const jpeg = await runCliJson<ScreenshotPayload>([
+    "screenshot",
+    jpegPath,
+    "--format",
+    "jpeg",
+    "--screenshot-quality",
+    "80",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  const jpegFile = await readFile(jpegPath);
+  if (jpeg.path !== jpegPath || jpeg.bytes !== jpegFile.length || !isJpeg(jpegFile)) {
+    throw new Error(`Unexpected JPEG screenshot result: ${JSON.stringify(jpeg)}`);
+  }
+
+  const download = await runCliJson<DownloadPayload>([
+    "download",
+    `${fixtureUrl}download.txt`,
+    "--json",
+  ]);
+  if (typeof download.id !== "number") {
+    throw new Error(`Expected download id, got ${JSON.stringify(download)}`);
+  }
+  await expectWait(runCliJson, [
+    "wait",
+    "--download",
+    String(download.id),
+    "--timeout",
+    "5000",
+    "--json",
+  ]);
+
+  const clipboardWrite = await runCliJson<ClipboardPayload>([
+    "clipboard",
+    "write",
+    "clipboard-e2e",
+    "--json",
+  ]);
+  const clipboardRead = await runCliJson<ClipboardPayload>(["clipboard", "read", "--json"]);
+  if (clipboardWrite.ok !== true || clipboardRead.text !== "clipboard-e2e") {
+    throw new Error(
+      `Unexpected clipboard roundtrip: write=${JSON.stringify(
+        clipboardWrite,
+      )} read=${JSON.stringify(clipboardRead)}`,
+    );
+  }
+
+  const cookieSet = await runCliJson<CookiePayload>([
+    "cookies",
+    "set",
+    fixtureUrl,
+    "phase8",
+    "yes",
+    "--json",
+  ]);
+  const cookieGet = await runCliJson<CookiePayload>([
+    "cookies",
+    "get",
+    fixtureUrl,
+    "phase8",
+    "--json",
+  ]);
+  if (cookieSet.ok !== true || cookieGet.cookie === null || cookieGet.cookie === undefined) {
+    throw new Error(
+      `Unexpected cookie roundtrip: set=${JSON.stringify(cookieSet)} get=${JSON.stringify(cookieGet)}`,
+    );
+  }
+
+  const storageSet = await runCliJson<StoragePayload>([
+    "storage",
+    "local",
+    "set",
+    "phase8",
+    "yes",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  const storageGet = await runCliJson<StoragePayload>([
+    "storage",
+    "local",
+    "get",
+    "phase8",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  if (storageSet.ok !== true || storageGet.value !== "yes") {
+    throw new Error(
+      `Unexpected storage roundtrip: set=${JSON.stringify(
+        storageSet,
+      )} get=${JSON.stringify(storageGet)}`,
+    );
+  }
+
+  await expectNetworkClear(runCliJson);
+  await runCliJson<EvalPayload>([
+    "eval",
+    `fetch(${JSON.stringify(`${fixtureUrl}api/ping`)}).then((response) => response.json())`,
+    "--tab",
+    target,
+    "--json",
+  ]);
+  await expectWait(runCliJson, [
+    "wait",
+    "--load",
+    "networkidle",
+    "--tab",
+    target,
+    "--timeout",
+    "5000",
+    "--json",
+  ]);
+  const network = await runCliJson<NetworkPayload>([
+    "network",
+    "list",
+    "--url",
+    `${fixtureUrl}api/ping`,
+    "--json",
+  ]);
+  if (network.requests?.some((request) => request.url?.includes("/api/ping")) !== true) {
+    throw new Error(`Expected network log to contain api/ping, got ${JSON.stringify(network)}`);
+  }
+
+  await runCliJson(["console", "clear", "--tab", target, "--json"]);
+  await runCliJson(["errors", "clear", "--tab", target, "--json"]);
+  const highlight = await runCliJson<{ readonly ok?: boolean }>([
+    "highlight",
+    "#highlight-target",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  if (highlight.ok !== true) {
+    throw new Error(`Unexpected highlight result: ${JSON.stringify(highlight)}`);
+  }
+  await expectEvalValue(
+    runCliJson,
+    target,
+    `document.querySelector("#highlight-target").dataset.firefoxCliHighlight`,
+    "true",
+  );
+
+  const urlDiff = await runCliJson<DiffPayload>([
+    "diff",
+    "url",
+    fixtureUrl,
+    "--tab",
+    target,
+    "--json",
+  ]);
+  const titleDiff = await runCliJson<DiffPayload>([
+    "diff",
+    "title",
+    "firefox-cli disposable E2E",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  if (urlDiff.matches !== true || titleDiff.matches !== true) {
+    throw new Error(
+      `Unexpected diff results: url=${JSON.stringify(urlDiff)} title=${JSON.stringify(titleDiff)}`,
+    );
+  }
+
+  const viewport = await runCliJson<ViewportPayload>([
+    "set",
+    "viewport",
+    "1000",
+    "700",
+    "--tab",
+    target,
+    "--json",
+  ]);
+  if (typeof viewport.window?.width !== "number" || typeof viewport.window.height !== "number") {
+    throw new Error(`Unexpected viewport result: ${JSON.stringify(viewport)}`);
+  }
+}
+
+async function expectCapabilities(
+  runCliJson: CliJsonRunner,
+  commands: readonly string[],
+): Promise<void> {
+  const payload = await runCliJson<CapabilitiesPayload>(["capabilities", "--json"]);
+  const capabilities = new Map(
+    payload.capabilities?.map((capability) => [capability.command, capability.status]) ?? [],
+  );
+  const missing = commands.filter((command) => capabilities.get(command) !== "mvp");
+  if (missing.length > 0) {
+    throw new Error(
+      `Disposable Firefox capabilities were missing Phase 8 commands ${missing.join(
+        ", ",
+      )}: ${JSON.stringify(payload)}`,
+    );
+  }
+}
+
+async function expectNetworkClear(runCliJson: CliJsonRunner): Promise<void> {
+  const payload = await runCliJson<NetworkPayload>(["network", "clear", "--json"]);
+  if (payload.ok !== true) {
+    throw new Error(`Expected network clear success, got ${JSON.stringify(payload)}`);
   }
 }
 
@@ -356,6 +787,14 @@ async function expectBatch(runCliJson: CliJsonRunner, target: string): Promise<v
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function deepEqual(actual: unknown, expected: unknown): boolean {
+  return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
 async function pollUntil<T>(
   check: () => Promise<T | false>,
   options: {
@@ -380,10 +819,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isPng(buffer: Buffer): boolean {
   return (
     buffer.length >= 8 &&
@@ -396,4 +831,8 @@ function isPng(buffer: Buffer): boolean {
     buffer[6] === 0x1a &&
     buffer[7] === 0x0a
   );
+}
+
+function isJpeg(buffer: Buffer): boolean {
+  return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
 }
