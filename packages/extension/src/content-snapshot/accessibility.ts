@@ -6,6 +6,8 @@ import type {
 } from "@firefox-cli/protocol";
 import { collapseWhitespace, escapeCssString } from "./format.js";
 
+const SIMPLE_CSS_IDENTIFIER = /^-?[A-Za-z_][A-Za-z0-9_-]*$/u;
+
 export function summarizeElement(
   element: Element,
   options: { readonly ref: string; readonly generationId: string },
@@ -207,11 +209,9 @@ export function getAccessibleName(element: Element): string | undefined {
     return collapseWhitespace(labelledText);
   }
 
-  const id = element.getAttribute("id");
-  const label =
-    id === null ? null : element.ownerDocument.querySelector(`label[for="${escapeCssString(id)}"]`);
-  if (label?.textContent !== undefined && label.textContent.trim().length > 0) {
-    return collapseWhitespace(label.textContent);
+  const explicitLabelText = getExplicitLabelText(element);
+  if (explicitLabelText !== undefined) {
+    return explicitLabelText;
   }
 
   const wrappingLabel = element.closest("label");
@@ -228,6 +228,21 @@ export function getAccessibleName(element: Element): string | undefined {
 
   const text = element.textContent ?? "";
   return text.trim().length === 0 ? undefined : collapseWhitespace(text).slice(0, 160);
+}
+
+function getExplicitLabelText(element: Element): string | undefined {
+  const id = element.getAttribute("id");
+  if (id === null) {
+    return undefined;
+  }
+
+  const label = Array.from(element.ownerDocument.getElementsByTagName("label")).find(
+    (candidate) =>
+      candidate.getAttribute("for") === id &&
+      candidate.textContent !== null &&
+      candidate.textContent.trim().length > 0,
+  );
+  return label === undefined ? undefined : collapseWhitespace(label.textContent ?? "");
 }
 
 export function getMetadata(element: Element, role: string): readonly string[] {
@@ -376,7 +391,7 @@ function readInlineStyle(style: string, property: string): string | undefined {
 export function describeFrame(element: Element): string {
   const id = element.getAttribute("id");
   if (id !== null && id.length > 0) {
-    return `iframe#${id}`;
+    return SIMPLE_CSS_IDENTIFIER.test(id) ? `iframe#${id}` : `iframe[id="${escapeCssString(id)}"]`;
   }
 
   const name = element.getAttribute("name");

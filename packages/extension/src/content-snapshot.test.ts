@@ -12,6 +12,8 @@ import {
   createSnapshotResult,
   handleContentScriptRequest,
 } from "./content-snapshot.js";
+import { describeFrame } from "./content-snapshot/accessibility.js";
+import { escapeCssString } from "./content-snapshot/format.js";
 import { createContentMessageHandler } from "./content.js";
 import { BoundedLogBuffer, createConsoleResult } from "./content-snapshot/log-capture.js";
 
@@ -95,6 +97,105 @@ describe("content snapshot", () => {
     expect(result.text).not.toContain("Hidden button");
     expect(result.text).not.toContain("Display none button");
     expect(result.text).not.toContain("secret");
+  });
+
+  it("resolves explicit labels for CSS-special and control IDs without selector fallback", () => {
+    const { window } = new JSDOM(`<main id="main"></main>`, {
+      url: "https://example.test/form",
+    });
+    const main = window.document.querySelector("#main");
+    if (main === null) {
+      throw new Error("fixture missing main");
+    }
+
+    for (const { id, label } of [
+      { id: "space id", label: "Space ID" },
+      { id: "bracket[id]", label: "Bracket ID" },
+      { id: 'quote"id', label: "Quote ID" },
+      { id: "colon:id", label: "Colon ID" },
+      { id: "back\\slash", label: "Backslash ID" },
+      { id: "line\nfeed", label: "Line Feed ID" },
+      { id: "carriage\rreturn", label: "Carriage Return ID" },
+      { id: "form\ffeed", label: "Form Feed ID" },
+      { id: "unit\u001fA", label: "Unit Separator ID" },
+      { id: "del\u007fend", label: "Delete ID" },
+      { id: "nul\0id", label: "Nul ID" },
+    ]) {
+      const labelElement = window.document.createElement("label");
+      labelElement.setAttribute("for", id);
+      labelElement.textContent = label;
+      const input = window.document.createElement("input");
+      input.setAttribute("id", id);
+      main.append(labelElement, input);
+    }
+
+    const missingForLabel = window.document.createElement("label");
+    missingForLabel.textContent = "Should not label an empty ID";
+    const emptyIdInput = window.document.createElement("input");
+    emptyIdInput.setAttribute("id", "");
+    main.append(missingForLabel, emptyIdInput);
+
+    const result = createSnapshotResult(
+      window.document,
+      { interactiveOnly: true, compact: true, maxDepth: 3, maxOutputBytes: 20_000 },
+      new ElementRefRegistry<Element>(),
+      1000,
+    );
+
+    for (const label of [
+      "Space ID",
+      "Bracket ID",
+      "Quote ID",
+      "Colon ID",
+      "Backslash ID",
+      "Line Feed ID",
+      "Carriage Return ID",
+      "Form Feed ID",
+      "Unit Separator ID",
+      "Delete ID",
+      "Nul ID",
+    ]) {
+      expect(result.text).toContain(`textbox "${label}"`);
+    }
+    expect(result.text).not.toContain("Should not label an empty ID");
+  });
+
+  it("escapes CSS string selector values for iframe diagnostics", () => {
+    const { window } = new JSDOM(`<main></main>`);
+    const document = window.document;
+
+    for (const value of [
+      "space id",
+      "bracket[id]",
+      'quote"id',
+      "colon:id",
+      "back\\slash",
+      "line\nfeed",
+      "carriage\rreturn",
+      "form\ffeed",
+      "unit\u001fA",
+      "unit\u001f space",
+      "del\u007fend",
+    ]) {
+      const element = document.createElement("div");
+      element.setAttribute("data-key", value);
+      document.body.append(element);
+      expect(document.querySelector(`[data-key="${escapeCssString(value)}"]`)).toBe(element);
+    }
+
+    const nulElement = document.createElement("div");
+    nulElement.setAttribute("data-key", "nul\0id");
+    document.body.append(nulElement);
+    const nulSelector = `[data-key="${escapeCssString("nul\0id")}"]`;
+    expect(() => document.querySelector(nulSelector)).not.toThrow();
+    expect(document.querySelector(nulSelector)).toBeNull();
+
+    expect(escapeCssString('quote"back\\')).toBe('quote\\"back\\\\');
+    expect(escapeCssString("x\nA")).toBe("x\\a A");
+    expect(escapeCssString("\u001fA")).toBe("\\1f A");
+    expect(escapeCssString("\t space")).toBe("\\9  space");
+    expect(escapeCssString("\u007f")).toBe("\\7f ");
+    expect(escapeCssString("\0")).toBe("\uFFFD");
   });
 
   it("emits scrollable containers as interactive refs for scroll commands", () => {
@@ -808,6 +909,40 @@ describe("content snapshot", () => {
       },
     ]);
     expect(result.text).toContain("iframe");
+  });
+
+  it("emits valid iframe diagnostic selectors for unsafe id and name values", () => {
+    const { window } = new JSDOM(`<main></main>`);
+    const document = window.document;
+
+    const simple = document.createElement("iframe");
+    simple.setAttribute("id", "child");
+    document.body.append(simple);
+    expect(describeFrame(simple)).toBe("iframe#child");
+    expect(document.querySelector(describeFrame(simple))).toBe(simple);
+
+    const unsafeId = 'frame:id[1]"\\\n';
+    const idFrame = document.createElement("iframe");
+    idFrame.setAttribute("id", unsafeId);
+    document.body.append(idFrame);
+    const idSelector = describeFrame(idFrame);
+    expect(idSelector).toBe(`iframe[id="${escapeCssString(unsafeId)}"]`);
+    expect(document.querySelector(idSelector)).toBe(idFrame);
+
+    const unsafeName = 'quote"name\\\nA';
+    const namedFrame = document.createElement("iframe");
+    namedFrame.setAttribute("name", unsafeName);
+    document.body.append(namedFrame);
+    const nameSelector = describeFrame(namedFrame);
+    expect(nameSelector).toBe(`iframe[name="${escapeCssString(unsafeName)}"]`);
+    expect(document.querySelector(nameSelector)).toBe(namedFrame);
+
+    const nulIdFrame = document.createElement("iframe");
+    nulIdFrame.setAttribute("id", "nul\0id");
+    document.body.append(nulIdFrame);
+    const nulIdSelector = describeFrame(nulIdFrame);
+    expect(() => document.querySelector(nulIdSelector)).not.toThrow();
+    expect(document.querySelector(nulIdSelector)).toBeNull();
   });
 
   it("finds elements by Phase 8 locators and lists frames through the command boundary", () => {

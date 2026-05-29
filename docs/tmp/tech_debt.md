@@ -92,7 +92,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
 
 ## Lower Priority
 
-- [ ] Replace incomplete CSS escaping in content snapshot selectors.
+- [x] Replace incomplete CSS escaping in content snapshot selectors.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: label lookup constructs a selector from raw ID text at `packages/extension/src/content-snapshot.ts:1073-1076`; `escapeCssString` only escapes backslashes and quotes at `packages/extension/src/content-snapshot.ts:1296-1298`.
   **Problem:** IDs containing CSS-special characters can break accessible-name lookup.

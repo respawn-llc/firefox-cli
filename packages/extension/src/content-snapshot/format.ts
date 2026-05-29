@@ -43,7 +43,23 @@ function truncateToByteLimit(text: string, maxBytes: number): string {
 }
 
 export function escapeCssString(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  let escaped = "";
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined) {
+      continue;
+    }
+    if (codePoint === 0) {
+      escaped += "\uFFFD";
+    } else if (codePoint <= 0x1f || codePoint === 0x7f) {
+      escaped += `\\${codePoint.toString(16)} `;
+    } else if (character === '"' || character === "\\") {
+      escaped += `\\${character}`;
+    } else {
+      escaped += character;
+    }
+  }
+  return escaped;
 }
 
 export function collapseWhitespace(value: string): string {
