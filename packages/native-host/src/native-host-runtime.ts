@@ -1,6 +1,7 @@
 import type { Readable, Writable } from "node:stream";
 import {
   PROTOCOL_VERSION,
+  PendingRequestTracker,
   createErrorResponse,
   createOkResponse,
   kernelCapabilities,
@@ -19,6 +20,8 @@ import type {
   PairTokenVerification,
 } from "./pair-state.js";
 
+const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
+
 export type NativeMessagingConnection = {
   readonly closed: Promise<void>;
   close(): void;
@@ -31,6 +34,7 @@ export type AttachNativeMessagingConnectionOptions = {
   readonly approved: boolean;
   readonly token?: string;
   readonly productVersion?: string;
+  readonly requestTimeoutMs?: number;
   readonly pairing?: NativeMessagingPairingController;
 };
 
@@ -42,16 +46,22 @@ export type NativeMessagingPairingController = {
   verify(token: string | undefined): Promise<PairTokenVerification> | PairTokenVerification;
 };
 
-type PendingRequest = {
-  readonly command: CommandId;
-  resolve(response: unknown): void;
-  reject(error: unknown): void;
-};
-
 export async function attachNativeMessagingConnection(
   options: AttachNativeMessagingConnectionOptions,
 ): Promise<NativeMessagingConnection> {
-  const pending = new Map<string, PendingRequest>();
+  const pending = new PendingRequestTracker<CommandId, unknown>({
+    timeoutMs: options.requestTimeoutMs ?? DEFAULT_PENDING_REQUEST_TIMEOUT_MS,
+    onDuplicate: (request) =>
+      createErrorResponse(request.id, {
+        code: "INVALID_ENVELOPE",
+        message: `Request ID is already pending: ${request.id}`,
+      }),
+    onTimeout: (request) =>
+      createErrorResponse(request.id, {
+        code: "TIMEOUT",
+        message: `Timed out waiting for extension response to ${request.command}.`,
+      }),
+  });
   const reader = new NativeMessagingFrameReader(options.input);
   const connectionState: {
     approved: boolean;
@@ -68,14 +78,24 @@ export async function attachNativeMessagingConnection(
       return connectionState.token;
     },
     send: async (request: RequestEnvelope): Promise<unknown> => {
-      await writeNativeMessage(options.output, request);
-      return new Promise<unknown>((resolve, reject) => {
-        pending.set(request.id, {
-          command: request.command,
-          resolve,
-          reject,
-        });
-      });
+      const tracked = pending.track(request);
+      if (!tracked.ok) {
+        return tracked.value;
+      }
+
+      try {
+        await writeNativeMessage(options.output, request);
+      } catch {
+        pending.settle(
+          request.id,
+          createErrorResponse(request.id, {
+            code: "EXTENSION_NOT_CONNECTED",
+            message: "Failed to send request to the Firefox extension.",
+          }),
+        );
+      }
+
+      return tracked.promise;
     },
   };
   options.broker.connectExtension(extensionConnection);
@@ -101,10 +121,12 @@ export async function attachNativeMessagingConnection(
     })
     .finally(() => {
       options.broker.disconnectExtension(extensionConnection);
-      for (const pendingRequest of pending.values()) {
-        pendingRequest.reject(new Error("Native messaging connection closed."));
-      }
-      pending.clear();
+      pending.drain((request) =>
+        createErrorResponse(request.id, {
+          code: "EXTENSION_NOT_CONNECTED",
+          message: "Firefox extension disconnected before responding.",
+        }),
+      );
     });
 
   return {
@@ -119,7 +141,7 @@ export async function attachNativeMessagingConnection(
 async function runReadLoop(options: {
   readonly reader: NativeMessagingFrameReader;
   readonly output: Writable;
-  readonly pending: Map<string, PendingRequest>;
+  readonly pending: PendingRequestTracker<CommandId, unknown>;
   readonly productVersion: string;
   readonly pairing: NativeMessagingPairingController | undefined;
   readonly connectionState: {
@@ -134,17 +156,17 @@ async function runReadLoop(options: {
     }
 
     if (isResponseLike(message)) {
-      const pendingRequest = options.pending.get(message.id);
-      if (pendingRequest !== undefined) {
-        options.pending.delete(message.id);
-        const parsed = parseBoundaryResponse("host-to-extension", pendingRequest.command, message);
-        if (parsed.ok) {
-          pendingRequest.resolve(parsed.value);
-        } else {
-          pendingRequest.resolve(createErrorResponse(message.id, parsed.error));
-        }
+      const command = options.pending.getCommand(message.id);
+      if (command === undefined) {
         continue;
       }
+
+      const parsed = parseBoundaryResponse("host-to-extension", command, message);
+      options.pending.settle(
+        message.id,
+        parsed.ok ? parsed.value : createErrorResponse(message.id, parsed.error),
+      );
+      continue;
     }
 
     const response = await handleExtensionRequest({

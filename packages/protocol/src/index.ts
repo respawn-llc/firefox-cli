@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./request-tracker.js";
+
 export const PRODUCT_NAME = "firefox-cli";
 export const NATIVE_HOST_NAME = "firefox_cli";
 export const FIREFOX_CLI_EXTENSION_ID = "firefox-cli@example.invalid";

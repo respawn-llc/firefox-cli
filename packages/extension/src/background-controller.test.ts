@@ -243,6 +243,89 @@ describe("FirefoxCliBackgroundController", () => {
     });
   });
 
+  it("resolves pending popup approval when the native host disconnects", async () => {
+    const port = new FakeNativePort();
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+      reconnectDelaysMs: [],
+    });
+    controller.start();
+
+    const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+    const request = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
+    expect(request.command).toBe("pair.approve");
+
+    port.emitDisconnect({ message: "Native app exited." });
+    await approval;
+
+    expect(controller.getStatus()).toMatchObject({
+      connected: false,
+      approved: false,
+      lastError: "Native host disconnected before responding.",
+    });
+  });
+
+  it("resolves pending popup approval when native host responses time out", async () => {
+    const port = new FakeNativePort();
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+      requestTimeoutMs: 10,
+    });
+    controller.start();
+
+    const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+
+    await sleep(20);
+    await approval;
+
+    expect(controller.getStatus()).toMatchObject({
+      connected: true,
+      approved: false,
+      lastError: "Timed out waiting for native host response to pair.approve.",
+    });
+  });
+
+  it("ignores responses that arrive after request timeout", async () => {
+    const port = new FakeNativePort();
+    const storedTokens: (string | null)[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+      requestTimeoutMs: 10,
+      storageAdapter: {
+        getPairToken: async () => null,
+        setPairToken: async (token) => {
+          storedTokens.push(token);
+        },
+      },
+    });
+    controller.start();
+
+    const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+    const request = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
+
+    await sleep(20);
+    await approval;
+    port.emitMessage(
+      createOkResponse(request, {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+        token: "late-token",
+        generation: 1,
+        approvedAt: "2026-01-02T03:04:05.000Z",
+      }),
+    );
+    await flushPromises();
+
+    expect(controller.getStatus()).toMatchObject({
+      approved: false,
+      lastError: "Timed out waiting for native host response to pair.approve.",
+    });
+    expect(storedTokens).toEqual([]);
+  });
+
   it("reconnects with bounded backoff after native-host disconnect", () => {
     const firstPort = new FakeNativePort();
     const secondPort = new FakeNativePort();
@@ -319,6 +402,10 @@ function createEvent<T>() {
 
 async function flushPromises(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function sleep(delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function createTestBrowserAdapter(

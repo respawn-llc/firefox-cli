@@ -1,5 +1,6 @@
 import {
   NATIVE_HOST_NAME,
+  PendingRequestTracker,
   PROTOCOL_VERSION,
   createErrorResponse,
   createOkResponse,
@@ -18,6 +19,8 @@ import {
 } from "./browser-commands.js";
 
 export type { BackgroundBrowserAdapter, BrowserWindowSnapshot };
+
+const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
 
 export type NativePortLike = {
   readonly onMessage: {
@@ -52,6 +55,7 @@ export class FirefoxCliBackgroundController {
   readonly #productVersion: string;
   readonly #reconnectDelaysMs: readonly number[];
   readonly #scheduleTimer: (callback: () => void, delayMs: number) => void;
+  readonly #pendingCommands: PendingRequestTracker<CommandId, ResponseEnvelope>;
   #port: NativePortLike | null = null;
   #connected = false;
   #approved = false;
@@ -60,14 +64,6 @@ export class FirefoxCliBackgroundController {
   #reconnectAttempt = 0;
   #reconnectScheduled = false;
   #lastError: string | undefined;
-  readonly #pendingCommands = new Map<
-    string,
-    {
-      readonly command: CommandId;
-      resolve?(response: ResponseEnvelope): void;
-    }
-  >();
-
   constructor(options: {
     readonly connectNative: BackgroundRuntimeAdapter["connectNative"];
     readonly browserAdapter?: BackgroundBrowserAdapter;
@@ -75,6 +71,7 @@ export class FirefoxCliBackgroundController {
     readonly productVersion: string;
     readonly reconnectDelaysMs?: readonly number[];
     readonly scheduleTimer?: (callback: () => void, delayMs: number) => void;
+    readonly requestTimeoutMs?: number;
   }) {
     this.#runtime = {
       connectNative: options.connectNative,
@@ -159,6 +156,20 @@ export class FirefoxCliBackgroundController {
       ((callback, delayMs) => {
         setTimeout(callback, delayMs);
       });
+    const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_PENDING_REQUEST_TIMEOUT_MS;
+    this.#pendingCommands = new PendingRequestTracker<CommandId, ResponseEnvelope>({
+      timeoutMs: requestTimeoutMs,
+      onDuplicate: (request) =>
+        createErrorResponse(request.id, {
+          code: "INVALID_ENVELOPE",
+          message: `Request ID is already pending: ${request.id}`,
+        }),
+      onTimeout: (request) =>
+        createErrorResponse(request.id, {
+          code: "TIMEOUT",
+          message: `Timed out waiting for native host response to ${request.command}.`,
+        }),
+    });
   }
 
   start(): void {
@@ -250,9 +261,15 @@ export class FirefoxCliBackgroundController {
       features: [],
       ...(this.#pairToken === null ? {} : { pairToken: this.#pairToken }),
     });
-    this.#sendNativeRequest(request).catch((error: unknown) => {
-      this.#lastError = error instanceof Error ? error.message : String(error);
-    });
+    this.#sendNativeRequest(request)
+      .then((response) => {
+        if (!response.ok) {
+          this.#lastError = response.error.message;
+        }
+      })
+      .catch((error: unknown) => {
+        this.#lastError = error instanceof Error ? error.message : String(error);
+      });
   }
 
   #connectNative(): void {
@@ -269,6 +286,12 @@ export class FirefoxCliBackgroundController {
         this.#connected = false;
         this.#port = null;
         this.#lastError = error?.message ?? "Native host disconnected.";
+        this.#pendingCommands.drain((request) =>
+          createErrorResponse(request.id, {
+            code: "NATIVE_HOST_UNAVAILABLE",
+            message: "Native host disconnected before responding.",
+          }),
+        );
         this.#scheduleReconnect();
       });
       this.#postHello();
@@ -307,30 +330,39 @@ export class FirefoxCliBackgroundController {
       ) as Promise<ResponseEnvelope<C>>;
     }
 
-    return new Promise<ResponseEnvelope<C>>((resolve) => {
-      this.#pendingCommands.set(request.id, {
-        command: request.command,
-        resolve: (response) => resolve(response as ResponseEnvelope<C>),
-      });
-      this.#port?.postMessage(request);
-    });
+    const tracked = this.#pendingCommands.track(request);
+    if (!tracked.ok) {
+      return Promise.resolve(tracked.value as ResponseEnvelope<C>);
+    }
+
+    try {
+      this.#port.postMessage(request);
+    } catch {
+      this.#pendingCommands.settle(
+        request.id,
+        createErrorResponse(request.id, {
+          code: "NATIVE_HOST_UNAVAILABLE",
+          message: "Failed to send request to the native host.",
+        }),
+      );
+    }
+
+    return tracked.promise as Promise<ResponseEnvelope<C>>;
   }
 
   async #handleNativeMessage(message: unknown): Promise<void> {
     if (isResponseLike(message)) {
-      const pending = this.#pendingCommands.get(message.id);
-      if (pending === undefined) {
-        this.#lastError = `Native host returned a response for unknown request ID: ${message.id}`;
+      const command = this.#pendingCommands.getCommand(message.id);
+      if (command === undefined) {
         return;
       }
-      this.#pendingCommands.delete(message.id);
-      const response = parseBoundaryResponse("host-to-extension", pending.command, message);
+      const response = parseBoundaryResponse("host-to-extension", command, message);
       if (!response.ok) {
         this.#lastError = response.error.message;
-        pending.resolve?.(createErrorResponse(message.id, response.error));
+        this.#pendingCommands.settle(message.id, createErrorResponse(message.id, response.error));
         return;
       }
-      if (pending.command === "hello" && response.value.ok) {
+      if (command === "hello" && response.value.ok) {
         const helloResponse = response.value as Extract<ResponseEnvelope<"hello">, { ok: true }>;
         const pairing = helloResponse.result.pairing;
         if (pairing !== undefined) {
@@ -341,7 +373,7 @@ export class FirefoxCliBackgroundController {
           }
         }
       }
-      pending.resolve?.(response.value);
+      this.#pendingCommands.settle(message.id, response.value);
       this.#lastError = undefined;
       return;
     }

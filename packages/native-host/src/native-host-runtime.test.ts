@@ -41,6 +41,102 @@ describe("native host runtime", () => {
     );
   });
 
+  it("rejects duplicate pending request IDs without replacing the first request", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const request = createRequest("noop", {}, "duplicate-id");
+    const firstResponse = broker.handleCliRequest(request);
+    const forwarded = (await extensionReader.read()) as typeof request;
+
+    await expect(broker.handleCliRequest(request)).resolves.toMatchObject({
+      id: "duplicate-id",
+      ok: false,
+      error: { code: "INVALID_ENVELOPE" },
+    });
+
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
+    await expect(firstResponse).resolves.toEqual(createOkResponse(request, { ok: true }));
+  });
+
+  it("resolves pending broker requests with TIMEOUT and ignores late responses", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+      requestTimeoutMs: 10,
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const request = createRequest("noop", {}, "timeout-id");
+    const response = broker.handleCliRequest(request);
+    const forwarded = (await extensionReader.read()) as typeof request;
+
+    await expect(response).resolves.toMatchObject({
+      id: "timeout-id",
+      ok: false,
+      error: { code: "TIMEOUT" },
+    });
+
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
+    const nextRequest = createRequest("noop", {}, "next-id");
+    const nextResponse = broker.handleCliRequest(nextRequest);
+    const nextForwarded = (await extensionReader.read()) as typeof nextRequest;
+
+    expect(nextForwarded).toEqual(nextRequest);
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(nextForwarded, { ok: true })));
+    await expect(nextResponse).resolves.toEqual(createOkResponse(nextRequest, { ok: true }));
+  });
+
+  it("resolves pending broker requests when the extension disconnects", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    const connection = await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const request = createRequest("noop", {}, "disconnect-id");
+    const response = broker.handleCliRequest(request);
+
+    await extensionReader.read();
+    connection.close();
+
+    await expect(response).resolves.toMatchObject({
+      id: "disconnect-id",
+      ok: false,
+      error: { code: "EXTENSION_NOT_CONNECTED" },
+    });
+  });
+
   it("answers extension-initiated hello without corrupting stdout", async () => {
     const extensionInput = new PassThrough();
     const extensionOutput = new PassThrough();
