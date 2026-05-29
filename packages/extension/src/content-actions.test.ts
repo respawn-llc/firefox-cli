@@ -1,11 +1,22 @@
 import { MAX_UPLOAD_FILE_BYTES, createRequest, type ResponseEnvelope } from "@firefox-cli/protocol";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
+import type { ActionOptions, ActionErrorCode } from "./content-action-types.js";
+import { createActionResult } from "./content-actions.js";
 import {
   ElementRefRegistry,
   createSnapshotResult,
   handleContentScriptRequest,
 } from "./content-snapshot.js";
+
+class TestActionError extends Error {
+  constructor(
+    readonly code: ActionErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 describe("content actions", () => {
   it("clicks visible enabled elements and returns an element summary", () => {
@@ -36,6 +47,37 @@ describe("content actions", () => {
         },
       },
     });
+  });
+
+  it("throws a controlled error for forged action commands that bypass type checks", () => {
+    const { window } = new JSDOM(`<button id="save">Save</button>`, {
+      url: "https://example.test/",
+    });
+    const options = {
+      document: window.document,
+      command: "future.action",
+      params: {},
+      now: 1000,
+      resolveRef: () => {
+        throw new Error("unexpected ref resolution");
+      },
+      queryElement: () => null,
+      summarizeElement: () => {
+        throw new Error("unexpected summary");
+      },
+      isVisible: () => true,
+      isDisabled: () => false,
+      createError: (code: ActionErrorCode, message: string) => new TestActionError(code, message),
+    } as unknown as ActionOptions;
+
+    try {
+      createActionResult(options);
+      throw new Error("expected forged action command to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TestActionError);
+      expect((error as TestActionError).code).toBe("ACTION_REJECTED");
+      expect((error as TestActionError).message).toContain("future.action");
+    }
   });
 
   it("handles dblclick, hover, focus, keyboard inserttext, and swipe interactions", () => {

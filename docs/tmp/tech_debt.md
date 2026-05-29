@@ -98,7 +98,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** IDs containing CSS-special characters can break accessible-name lookup.
   **Fix:** Use `CSS.escape` when available and provide a standards-compliant fallback. Add snapshot tests for IDs with spaces, brackets, quotes, colons, and control-like characters.
 
-- [ ] Make content action dispatch explicitly exhaustive.
+- [x] Make content action dispatch explicitly exhaustive.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: `createContentActionResult` switches over command names with no default or `assertNever` branch at `packages/extension/src/content-actions.ts:23-67`.
   **Problem:** If the action command union drifts, invalid values can return `undefined` and fail later at protocol validation.

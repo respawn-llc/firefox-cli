@@ -68,7 +68,13 @@ function createContentActionResult(options: ActionOptions): ContentActionResult 
     case "keydown":
     case "keyup":
       return keyEventAction(options, options.params as KeyEventParams);
+    default:
+      return assertUnhandledAction(options, options.command);
   }
+}
+
+function assertUnhandledAction(options: ActionOptions, command: never): never {
+  throw options.createError("ACTION_REJECTED", `Unsupported content action: ${String(command)}`);
 }
 
 function dragAction(options: ActionOptions, params: DragParams): ContentActionResult {
