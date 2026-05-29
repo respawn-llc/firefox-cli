@@ -10,6 +10,68 @@ import { createHostIdentity } from "./pair-state.js";
 import { NativeHostBroker } from "./host-broker.js";
 
 describe("NativeHostBroker", () => {
+  it("answers CLI hello locally before extension gating", async () => {
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      productVersion: "1.2.3",
+    });
+    const hello = createRequest(
+      "hello",
+      {
+        component: "cli",
+        productName: "firefox-cli",
+        productVersion: "1.2.3",
+        protocolMin: 1,
+        protocolMax: 1,
+        features: [],
+      },
+      "hello-1",
+    );
+
+    await expect(broker.handleCliRequest(hello)).resolves.toMatchObject({
+      id: "hello-1",
+      ok: true,
+      result: {
+        negotiatedProtocolVersion: 1,
+        peer: {
+          component: "native-host",
+          productVersion: "1.2.3",
+        },
+      },
+    });
+  });
+
+  it("rejects CLI-to-host hello from the wrong peer component", async () => {
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+    });
+    const hello = createRequest(
+      "hello",
+      {
+        component: "extension",
+        productName: "firefox-cli",
+        productVersion: "0.0.0",
+        protocolMin: 1,
+        protocolMax: 1,
+        features: [],
+      },
+      "hello-wrong-peer",
+    );
+
+    await expect(broker.handleCliRequest(hello)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_ENVELOPE",
+      },
+    });
+  });
+
   it("forwards CLI requests through host-to-extension validation", async () => {
     const request = createRequest("capabilities", {}, "request-1");
     const broker = new NativeHostBroker({

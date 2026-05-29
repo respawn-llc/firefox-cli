@@ -17,6 +17,7 @@ import {
   MAX_LOCAL_IPC_MESSAGE_BYTES,
   getOrCreateLocalIpcAuthToken,
   planLocalIpcEndpoint,
+  sendNegotiatedLocalIpcRequest,
   sendLocalIpcRequest,
   type LocalIpcEndpoint,
 } from "./local-ipc.js";
@@ -400,6 +401,85 @@ describe("local IPC", () => {
       expect((await stat(dirname(store.filePath))).mode & 0o777).toBe(0o700);
       expect((await stat(store.filePath)).mode & 0o777).toBe(0o600);
     }
+  });
+
+  it("negotiates CLI-to-host protocol and sends the command on the same socket", async () => {
+    const rootDir = await createTempDir("fc-ipc-negotiated");
+    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    let forwardedRequest: unknown;
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      protocolRange: { protocolMin: 1, protocolMax: 1 },
+    });
+    broker.connectExtension({
+      approved: true,
+      token: undefined,
+      send: async (request) => {
+        forwardedRequest = request;
+        return createOkResponse(request, { capabilities: [...kernelCapabilities] });
+      },
+    });
+    const server = new LocalIpcServer({
+      endpoint,
+      enableProtocolNegotiation: true,
+      handleMessage: (message, context) => broker.handleCliRequest(message, context),
+    });
+    servers.push(server);
+    await server.start();
+
+    const request = createRequest("capabilities", {}, "request-1", 2);
+    const response = await sendNegotiatedLocalIpcRequest(endpoint, request, {
+      protocolRange: { protocolMin: 1, protocolMax: 2 },
+    });
+
+    expect(forwardedRequest).toMatchObject({
+      id: request.id,
+      protocolVersion: 1,
+      command: "capabilities",
+    });
+    expect(response).toEqual({
+      protocolVersion: 1,
+      id: request.id,
+      ok: true,
+      result: { capabilities: [...kernelCapabilities] },
+    });
+  });
+
+  it("returns VERSION_MISMATCH when negotiated CLI-to-host ranges do not overlap", async () => {
+    const rootDir = await createTempDir("fc-ipc-no-overlap");
+    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      protocolRange: { protocolMin: 1, protocolMax: 1 },
+    });
+    const server = new LocalIpcServer({
+      endpoint,
+      enableProtocolNegotiation: true,
+      handleMessage: (message, context) => broker.handleCliRequest(message, context),
+    });
+    servers.push(server);
+    await server.start();
+
+    const request = createRequest("noop", {}, "request-1", 2);
+
+    await expect(
+      sendNegotiatedLocalIpcRequest(endpoint, request, {
+        protocolRange: { protocolMin: 2, protocolMax: 2 },
+      }),
+    ).resolves.toMatchObject({
+      protocolVersion: 1,
+      id: request.id,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+      },
+    });
   });
 });
 

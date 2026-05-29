@@ -72,6 +72,7 @@ export {
   getOrCreateLocalIpcAuthToken,
   planLocalIpcEndpoint,
   sendLocalIpcRequest,
+  sendNegotiatedLocalIpcRequest,
   type LocalIpcAuthTokenStore,
   type LocalIpcEndpoint,
   type LocalIpcEndpointOptions,

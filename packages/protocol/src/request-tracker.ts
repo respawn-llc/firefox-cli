@@ -1,6 +1,7 @@
 export type PendingRequestKey<TCommand extends string> = {
   readonly id: string;
   readonly command: TCommand;
+  readonly protocolVersion?: number;
 };
 
 type PendingRequestTimer = ReturnType<typeof setTimeout>;

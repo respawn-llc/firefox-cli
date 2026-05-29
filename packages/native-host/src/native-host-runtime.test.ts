@@ -34,6 +34,7 @@ describe("native host runtime", () => {
       approved: true,
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    await sendExtensionHello(extensionInput, extensionReader);
     const cliRequest = createRequest("capabilities", {}, "request-1");
     const brokerResponse = broker.handleCliRequest(cliRequest);
     const forwarded = (await extensionReader.read()) as typeof cliRequest;
@@ -68,6 +69,7 @@ describe("native host runtime", () => {
       approved: true,
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    await sendExtensionHello(extensionInput, extensionReader);
     const request = createRequest("noop", {}, "duplicate-id");
     const firstResponse = broker.handleCliRequest(request);
     const forwarded = (await extensionReader.read()) as typeof request;
@@ -140,6 +142,7 @@ describe("native host runtime", () => {
       requestTimeoutMs: 10,
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    await sendExtensionHello(extensionInput, extensionReader);
     const request = createRequest("noop", {}, "timeout-id");
     const response = broker.handleCliRequest(request);
     const forwarded = (await extensionReader.read()) as typeof request;
@@ -176,6 +179,7 @@ describe("native host runtime", () => {
       approved: true,
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    await sendExtensionHello(extensionInput, extensionReader);
     const request = createRequest("noop", {}, "disconnect-id");
     const response = broker.handleCliRequest(request);
 
@@ -232,6 +236,77 @@ describe("native host runtime", () => {
     });
   });
 
+  it("rejects broker forwarding until extension protocol negotiation completes", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+    });
+
+    await expect(
+      broker.handleCliRequest(createRequest("noop", {}, "cli-before-hello")),
+    ).resolves.toMatchObject({
+      id: "cli-before-hello",
+      ok: false,
+      error: { code: "EXTENSION_NOT_CONNECTED" },
+    });
+  });
+
+  it("stores incompatible host-extension protocol state after no-overlap hello", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const hello = createRequest(
+      "hello",
+      {
+        component: "extension",
+        productName: "firefox-cli",
+        productVersion: "2.0.0",
+        protocolMin: 2,
+        protocolMax: 2,
+        features: [],
+      },
+      "hello-no-overlap",
+      2,
+    );
+    const helloResponse = extensionReader.read();
+    extensionInput.write(encodeNativeMessageFrame(hello));
+
+    await expect(helloResponse).resolves.toMatchObject({
+      id: "hello-no-overlap",
+      ok: false,
+      error: { code: "VERSION_MISMATCH" },
+    });
+    await expect(
+      broker.handleCliRequest(createRequest("noop", {}, "cli-after-mismatch")),
+    ).resolves.toMatchObject({
+      id: "cli-after-mismatch",
+      ok: false,
+      error: { code: "VERSION_MISMATCH" },
+    });
+  });
+
   it("approves pairing requests and then gates broker forwarding by the returned token", async () => {
     const extensionInput = new PassThrough();
     const extensionOutput = new PassThrough();
@@ -270,6 +345,7 @@ describe("native host runtime", () => {
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
     const cliRequest = createRequest("noop", {}, "cli-1");
+    await sendExtensionHello(extensionInput, extensionReader);
 
     await expect(broker.handleCliRequest(cliRequest)).resolves.toMatchObject({
       ok: false,
@@ -396,3 +472,26 @@ describe("native host runtime", () => {
     });
   });
 });
+
+async function sendExtensionHello(
+  extensionInput: PassThrough,
+  extensionReader: NativeMessagingFrameReader,
+  options: { readonly id?: string; readonly pairToken?: string } = {},
+): Promise<unknown> {
+  const hello = createRequest(
+    "hello",
+    {
+      component: "extension",
+      productName: "firefox-cli",
+      productVersion: "0.0.0",
+      protocolMin: 1,
+      protocolMax: 1,
+      features: [],
+      ...(options.pairToken === undefined ? {} : { pairToken: options.pairToken }),
+    },
+    options.id ?? "hello-negotiate",
+  );
+  const response = extensionReader.read();
+  extensionInput.write(encodeNativeMessageFrame(hello));
+  return response;
+}

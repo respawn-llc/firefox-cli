@@ -3,7 +3,14 @@ import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer, createConnection, type Server, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import {
+  createErrorResponse,
+  createLocalComponentIdentity,
+  createProtocolSession,
+  createRequest,
+  localProtocolVersionRange,
   parseBoundaryResponse,
+  type ProtocolSession,
+  type ProtocolVersionRange,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
@@ -17,6 +24,7 @@ import {
   isMessageTooLargeError,
   LocalIpcFrameError,
   readOneJsonLine,
+  writeSocketJsonLine,
 } from "./local-ipc-frame.js";
 
 export { MAX_LOCAL_IPC_MESSAGE_BYTES } from "./local-ipc-frame.js";
@@ -41,8 +49,12 @@ export type LocalIpcEndpointOptions = {
 export type LocalIpcServerOptions = {
   readonly endpoint: LocalIpcEndpoint;
   readonly authToken?: string;
+  readonly enableProtocolNegotiation?: boolean;
   readonly requestLineTimeoutMs?: number;
-  handleMessage(message: unknown): Promise<unknown> | unknown;
+  handleMessage(
+    message: unknown,
+    context?: { readonly protocolSession?: ProtocolSession },
+  ): Promise<unknown> | unknown;
 };
 
 export type LocalIpcAuthTokenStore = {
@@ -68,6 +80,7 @@ export class LocalIpcError extends Error {
 export class LocalIpcServer {
   readonly #endpoint: LocalIpcEndpoint;
   readonly #authToken: string | undefined;
+  readonly #enableProtocolNegotiation: boolean;
   readonly #requestLineTimeoutMs: number;
   readonly #handleMessage: LocalIpcServerOptions["handleMessage"];
   #server: Server | null = null;
@@ -75,6 +88,7 @@ export class LocalIpcServer {
   constructor(options: LocalIpcServerOptions) {
     this.#endpoint = options.endpoint;
     this.#authToken = options.authToken;
+    this.#enableProtocolNegotiation = options.enableProtocolNegotiation ?? false;
     this.#requestLineTimeoutMs =
       options.requestLineTimeoutMs ?? DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS;
     this.#handleMessage = options.handleMessage;
@@ -164,6 +178,11 @@ export class LocalIpcServer {
         return;
       }
 
+      if (this.#enableProtocolNegotiation && isHelloRequestLike(authorizedMessage.message)) {
+        await this.#handleNegotiatedSocket(socket, authorizedMessage.message);
+        return;
+      }
+
       const response = await this.#handleMessage(authorizedMessage.message);
       await endSocketWithResponse(socket, response, getRequestId(authorizedMessage.message));
     } catch (error) {
@@ -181,6 +200,77 @@ export class LocalIpcServer {
             protocolError.message,
             protocolError.details,
           ),
+          getRequestIdFromFrameError(error),
+        );
+        return;
+      }
+
+      socket.destroy(error instanceof Error ? error : undefined);
+    }
+  }
+
+  async #handleNegotiatedSocket(socket: Socket, helloMessage: unknown): Promise<void> {
+    const helloResponse = await this.#handleMessage(helloMessage);
+    try {
+      await writeSocketJsonLine(socket, helloResponse);
+    } catch (error) {
+      if (!isMessageTooLargeError(error)) {
+        throw error;
+      }
+      await endSocketWithResponse(socket, helloResponse, getRequestId(helloMessage));
+      return;
+    }
+
+    const hello = parseBoundaryResponse("cli-to-host", "hello", helloResponse, {
+      hello: {
+        local: localProtocolVersionRange,
+        expectedPeerComponent: "native-host",
+      },
+    });
+    if (!hello.ok || !hello.value.ok) {
+      socket.end();
+      socket.destroySoon();
+      return;
+    }
+
+    const protocolSession = createProtocolSession(hello.value.protocolVersion);
+    let readErrorHandled = false;
+    try {
+      const message = await readOneJsonLine(socket, {
+        timeoutMs: this.#requestLineTimeoutMs,
+        onFrameError: (error) => {
+          readErrorHandled = true;
+          const protocolError = frameErrorToProtocolError(error);
+          endSocketWithResponseSync(
+            socket,
+            protocolSession.createErrorResponse(getRequestIdFromFrameError(error), protocolError),
+            getRequestIdFromFrameError(error),
+          );
+        },
+      });
+      const requestId = getRequestId(message);
+      const authorizedMessage = unwrapAuthorizedMessage(
+        message,
+        this.#authToken,
+        protocolSession.protocolVersion,
+      );
+      if (!authorizedMessage.ok) {
+        await endSocketWithResponse(socket, authorizedMessage.response, requestId);
+        return;
+      }
+
+      const response = await this.#handleMessage(authorizedMessage.message, { protocolSession });
+      await endSocketWithResponse(socket, response, getRequestId(authorizedMessage.message));
+    } catch (error) {
+      if (error instanceof LocalIpcFrameError) {
+        if (readErrorHandled) {
+          return;
+        }
+
+        const protocolError = frameErrorToProtocolError(error);
+        await endSocketWithResponse(
+          socket,
+          protocolSession.createErrorResponse(getRequestIdFromFrameError(error), protocolError),
           getRequestIdFromFrameError(error),
         );
         return;
@@ -211,17 +301,9 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
   request: RequestEnvelope<C>,
   options: { readonly authToken?: string | null } = {},
 ): Promise<ResponseEnvelope<C>> {
-  const wireMessage =
-    options.authToken === undefined || options.authToken === null
-      ? request
-      : {
-          authToken: options.authToken,
-          message: request,
-        };
-
   let encodedRequest: Buffer;
   try {
-    encodedRequest = encodeLocalIpcJsonLine(wireMessage);
+    encodedRequest = encodeLocalIpcJsonLine(wrapAuthorizedMessage(request, options.authToken));
   } catch (error) {
     if (isMessageTooLargeError(error)) {
       return createLocalIpcErrorResponse(request.id, "OUTPUT_TOO_LARGE", error.message, {
@@ -231,35 +313,13 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
     throw error;
   }
 
-  const socket = createConnection(endpoint.path);
-  const rawResponse = await new Promise<unknown>((resolve, reject) => {
-    socket.once("error", (error) => {
-      reject(
-        new LocalIpcError("CONNECTION_FAILED", "Failed to connect to firefox-cli native host.", {
-          cause: error,
-        }),
-      );
-    });
-    socket.once("connect", () => {
-      socket.write(encodedRequest);
-    });
-    readOneJsonLine(socket).then(resolve, (error: unknown) => {
-      if (error instanceof LocalIpcFrameError) {
-        socket.destroy();
-        const protocolError = frameErrorToProtocolError(error);
-        resolve(
-          createLocalIpcErrorResponse(
-            request.id,
-            protocolError.code,
-            protocolError.message,
-            protocolError.details,
-          ),
-        );
-        return;
-      }
-
-      reject(error);
-    });
+  const socket = await connectLocalIpcSocket(endpoint);
+  const rawResponse = await writeAndReadLocalIpcResponse(
+    socket,
+    encodedRequest,
+    request.id,
+  ).finally(() => {
+    socket.destroy();
   });
 
   const parsed = parseBoundaryResponse("cli-to-host", request.command, rawResponse);
@@ -268,6 +328,88 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
   }
 
   return parsed.value as ResponseEnvelope<C>;
+}
+
+export async function sendNegotiatedLocalIpcRequest<C extends RequestEnvelope["command"]>(
+  endpoint: LocalIpcEndpoint,
+  request: RequestEnvelope<C>,
+  options: {
+    readonly authToken?: string | null;
+    readonly productVersion?: string;
+    readonly protocolRange?: ProtocolVersionRange;
+  } = {},
+): Promise<ResponseEnvelope<C>> {
+  const protocolRange = options.protocolRange ?? localProtocolVersionRange;
+  const hello = createRequest(
+    "hello",
+    {
+      ...createLocalComponentIdentity("cli", options.productVersion ?? "0.0.0"),
+      protocolMin: protocolRange.protocolMin,
+      protocolMax: protocolRange.protocolMax,
+    },
+    `${request.id}:hello`,
+    protocolRange.protocolMin,
+  );
+  let encodedHello: Buffer;
+  try {
+    encodedHello = encodeLocalIpcJsonLine(wrapAuthorizedMessage(hello, options.authToken));
+  } catch (error) {
+    if (isMessageTooLargeError(error)) {
+      return createLocalIpcErrorResponse(request.id, "OUTPUT_TOO_LARGE", error.message, {
+        ...error.details,
+      }) as ResponseEnvelope<C>;
+    }
+    throw error;
+  }
+
+  const socket = await connectLocalIpcSocket(endpoint);
+  try {
+    const rawHelloResponse = await writeAndReadLocalIpcResponse(socket, encodedHello, hello.id);
+    const parsedHello = parseBoundaryResponse("cli-to-host", "hello", rawHelloResponse, {
+      hello: {
+        local: protocolRange,
+        expectedPeerComponent: "native-host",
+      },
+    });
+    if (!parsedHello.ok) {
+      throw new LocalIpcError("INVALID_IPC_RESPONSE", parsedHello.error.message);
+    }
+    if (!parsedHello.value.ok) {
+      return createErrorResponse(
+        request.id,
+        parsedHello.value.error,
+        parsedHello.value.protocolVersion,
+      ) as ResponseEnvelope<C>;
+    }
+
+    const protocolSession = createProtocolSession(parsedHello.value.protocolVersion);
+    let encodedRequest: Buffer;
+    try {
+      encodedRequest = encodeLocalIpcJsonLine(
+        wrapAuthorizedMessage(protocolSession.withRequestVersion(request), options.authToken),
+      );
+    } catch (error) {
+      if (isMessageTooLargeError(error)) {
+        return protocolSession.createErrorResponse(request.id, {
+          code: "OUTPUT_TOO_LARGE",
+          message: error.message,
+          details: { ...error.details },
+        }) as ResponseEnvelope<C>;
+      }
+      throw error;
+    }
+
+    socket.write(encodedRequest);
+    const rawResponse = await readLocalIpcResponse(socket, request.id);
+    const parsed = protocolSession.parseResponse("cli-to-host", request.command, rawResponse);
+    if (!parsed.ok) {
+      throw new LocalIpcError("INVALID_IPC_RESPONSE", parsed.error.message);
+    }
+
+    return parsed.value as ResponseEnvelope<C>;
+  } finally {
+    socket.destroy();
+  }
 }
 
 export class FileLocalIpcAuthTokenStore implements LocalIpcAuthTokenStore {
@@ -312,6 +454,7 @@ export async function getOrCreateLocalIpcAuthToken(store: LocalIpcAuthTokenStore
 function unwrapAuthorizedMessage(
   raw: unknown,
   expectedAuthToken: string | undefined,
+  protocolVersion = localProtocolVersionRange.protocolMax,
 ):
   | {
       readonly ok: true;
@@ -337,16 +480,71 @@ function unwrapAuthorizedMessage(
 
   return {
     ok: false,
-    response: {
-      protocolVersion: 1,
-      id: getRequestId(raw),
-      ok: false,
-      error: {
+    response: createErrorResponse(
+      getRequestId(raw),
+      {
         code: "PERMISSION_DENIED",
         message: "Local IPC authentication failed.",
       },
-    },
+      protocolVersion,
+    ),
   };
+}
+
+function wrapAuthorizedMessage(message: unknown, authToken: string | null | undefined): unknown {
+  return authToken === undefined || authToken === null ? message : { authToken, message };
+}
+
+function isHelloRequestLike(raw: unknown): boolean {
+  return typeof raw === "object" && raw !== null && "command" in raw && raw.command === "hello";
+}
+
+function connectLocalIpcSocket(endpoint: LocalIpcEndpoint): Promise<Socket> {
+  const socket = createConnection(endpoint.path);
+  return new Promise<Socket>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      socket.off("connect", onConnect);
+      reject(
+        new LocalIpcError("CONNECTION_FAILED", "Failed to connect to firefox-cli native host.", {
+          cause: error,
+        }),
+      );
+    };
+    const onConnect = (): void => {
+      socket.off("error", onError);
+      resolve(socket);
+    };
+
+    socket.once("error", onError);
+    socket.once("connect", onConnect);
+  });
+}
+
+async function writeAndReadLocalIpcResponse(
+  socket: Socket,
+  message: Buffer,
+  fallbackRequestId: string,
+): Promise<unknown> {
+  socket.write(message);
+  return readLocalIpcResponse(socket, fallbackRequestId);
+}
+
+async function readLocalIpcResponse(socket: Socket, fallbackRequestId: string): Promise<unknown> {
+  try {
+    return await readOneJsonLine(socket);
+  } catch (error) {
+    if (error instanceof LocalIpcFrameError) {
+      const protocolError = frameErrorToProtocolError(error);
+      return createLocalIpcErrorResponse(
+        fallbackRequestId,
+        protocolError.code,
+        protocolError.message,
+        protocolError.details,
+      );
+    }
+
+    throw error;
+  }
 }
 
 function getRequestId(raw: unknown): string {

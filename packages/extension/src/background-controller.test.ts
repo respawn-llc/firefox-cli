@@ -156,6 +156,7 @@ describe("FirefoxCliBackgroundController", () => {
       productVersion: "0.0.0",
     });
     controller.start();
+    await completeNativeHello(port);
 
     const noop = createRequest("noop", {}, "request-1");
     port.emitMessage(noop);
@@ -169,6 +170,57 @@ describe("FirefoxCliBackgroundController", () => {
         code: "NOT_APPROVED",
         message: "Approve firefox-cli in the extension popup before running CLI commands.",
       },
+    });
+  });
+
+  it("rejects native-host requests before protocol negotiation completes", async () => {
+    const port = new FakeNativePort();
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+    });
+    controller.start();
+
+    const noop = createRequest("noop", {}, "request-1");
+    port.emitMessage(noop);
+    await Promise.resolve();
+
+    expect(port.messages[1]).toMatchObject({
+      protocolVersion: noop.protocolVersion,
+      id: "request-1",
+      ok: false,
+      error: {
+        code: "NATIVE_HOST_UNAVAILABLE",
+      },
+    });
+  });
+
+  it("records incompatible native-host protocol state after no-overlap hello response", async () => {
+    const port = new FakeNativePort();
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+    });
+    controller.start();
+    const hello = port.messages[0] as ReturnType<typeof createRequest<"hello">>;
+
+    port.emitMessage({
+      protocolVersion: 2,
+      id: hello.id,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        message: "Protocol version ranges do not overlap.",
+      },
+    });
+    await flushPromises();
+
+    const approvalStatus = await controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+
+    expect(approvalStatus).toMatchObject({
+      connected: true,
+      approved: false,
+      lastError: "Protocol version ranges do not overlap.",
     });
   });
 
@@ -298,6 +350,7 @@ describe("FirefoxCliBackgroundController", () => {
       reconnectDelaysMs: [],
     });
     controller.start();
+    await completeNativeHello(port);
 
     const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
     const request = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
@@ -321,6 +374,7 @@ describe("FirefoxCliBackgroundController", () => {
       requestTimeoutMs: 10,
     });
     controller.start();
+    await completeNativeHello(port);
 
     const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
 
@@ -349,6 +403,7 @@ describe("FirefoxCliBackgroundController", () => {
       },
     });
     controller.start();
+    await completeNativeHello(port);
 
     const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
     const request = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
@@ -412,6 +467,62 @@ describe("FirefoxCliBackgroundController", () => {
       connected: true,
     });
     expect(secondPort.messages[0]).toMatchObject({ command: "hello" });
+  });
+
+  it("clears incompatible protocol state on reconnect", async () => {
+    const firstPort = new FakeNativePort();
+    const secondPort = new FakeNativePort();
+    const ports = [firstPort, secondPort];
+    const scheduled: { readonly callback: () => void }[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => {
+        const port = ports.shift();
+        if (port === undefined) {
+          throw new Error("unexpected reconnect");
+        }
+        return port;
+      },
+      productVersion: "0.0.0",
+      reconnectDelaysMs: [1],
+      scheduleTimer: (callback) => {
+        scheduled.push({ callback });
+      },
+    });
+    controller.start();
+    const firstHello = firstPort.messages[0] as ReturnType<typeof createRequest<"hello">>;
+    firstPort.emitMessage({
+      protocolVersion: 2,
+      id: firstHello.id,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        message: "Protocol version ranges do not overlap.",
+      },
+    });
+    await flushPromises();
+
+    firstPort.emitDisconnect({ message: "Native app exited." });
+    scheduled[0]?.callback();
+    await completeNativeHello(secondPort);
+    const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+    const approve = secondPort.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
+
+    expect(approve.command).toBe("pair.approve");
+    secondPort.emitMessage(
+      createOkResponse(approve, {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+        token: "paired-token",
+        generation: 1,
+        approvedAt: "2026-01-02T03:04:05.000Z",
+      }),
+    );
+    await approval;
+
+    expect(controller.getStatus()).toMatchObject({
+      connected: true,
+      approved: true,
+    });
   });
 });
 
@@ -529,6 +640,7 @@ async function approveWithNativeHost(
   controller: FirefoxCliBackgroundController,
   port: FakeNativePort,
 ): Promise<void> {
+  await completeNativeHello(port);
   const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
   const request = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
   expect(request.command).toBe("pair.approve");
@@ -542,4 +654,28 @@ async function approveWithNativeHost(
     }),
   );
   await approval;
+}
+
+async function completeNativeHello(port: FakeNativePort): Promise<void> {
+  const latest = port.messages.at(-1) as ReturnType<typeof createRequest> | undefined;
+  if (latest?.command !== "hello") {
+    return;
+  }
+
+  const hello = latest as ReturnType<typeof createRequest<"hello">>;
+  port.emitMessage(
+    createOkResponse(hello, {
+      accepted: true,
+      negotiatedProtocolVersion: hello.protocolVersion,
+      peer: {
+        component: "native-host",
+        productName: "firefox-cli",
+        productVersion: "0.0.0",
+        protocolMin: 1,
+        protocolMax: 1,
+        features: [],
+      },
+    }),
+  );
+  await flushPromises();
 }

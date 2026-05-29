@@ -2,13 +2,17 @@ import {
   NATIVE_HOST_NAME,
   PendingRequestTracker,
   PROTOCOL_VERSION,
+  createLocalComponentIdentity,
   createErrorResponse,
-  createOkResponse,
+  createProtocolSession,
   createRequest,
   kernelCapabilities,
+  localProtocolVersionRange,
   parseBoundaryRequest,
   parseBoundaryResponse,
   type CommandId,
+  type ProtocolError,
+  type ProtocolSession,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
@@ -64,6 +68,7 @@ export class FirefoxCliBackgroundController {
   #reconnectAttempt = 0;
   #reconnectScheduled = false;
   #lastError: string | undefined;
+  #nativeProtocolState: NativeProtocolState = { state: "disconnected" };
   constructor(options: {
     readonly connectNative: BackgroundRuntimeAdapter["connectNative"];
     readonly browserAdapter?: BackgroundBrowserAdapter;
@@ -160,15 +165,23 @@ export class FirefoxCliBackgroundController {
     this.#pendingCommands = new PendingRequestTracker<CommandId, ResponseEnvelope>({
       timeoutMs: requestTimeoutMs,
       onDuplicate: (request) =>
-        createErrorResponse(request.id, {
-          code: "INVALID_ENVELOPE",
-          message: `Request ID is already pending: ${request.id}`,
-        }),
+        createErrorResponse(
+          request.id,
+          {
+            code: "INVALID_ENVELOPE",
+            message: `Request ID is already pending: ${request.id}`,
+          },
+          request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+        ),
       onTimeout: (request) =>
-        createErrorResponse(request.id, {
-          code: "TIMEOUT",
-          message: `Timed out waiting for native host response to ${request.command}.`,
-        }),
+        createErrorResponse(
+          request.id,
+          {
+            code: "TIMEOUT",
+            message: `Timed out waiting for native host response to ${request.command}.`,
+          },
+          request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+        ),
     });
   }
 
@@ -204,6 +217,7 @@ export class FirefoxCliBackgroundController {
           lastError: this.#lastError,
           nativeHostName: NATIVE_HOST_NAME,
           protocolVersion: PROTOCOL_VERSION,
+          nativeProtocolState: this.#nativeProtocolState.state,
         },
         null,
         2,
@@ -252,15 +266,19 @@ export class FirefoxCliBackgroundController {
   }
 
   #postHello(): void {
-    const request = createRequest("hello", {
-      component: "extension",
-      productName: "firefox-cli",
-      productVersion: this.#productVersion,
-      protocolMin: PROTOCOL_VERSION,
-      protocolMax: PROTOCOL_VERSION,
-      features: [],
-      ...(this.#pairToken === null ? {} : { pairToken: this.#pairToken }),
-    });
+    const request = createRequest(
+      "hello",
+      {
+        ...createLocalComponentIdentity("extension", this.#productVersion),
+        productVersion: this.#productVersion,
+        protocolMin: localProtocolVersionRange.protocolMin,
+        protocolMax: localProtocolVersionRange.protocolMax,
+        ...(this.#pairToken === null ? {} : { pairToken: this.#pairToken }),
+      },
+      undefined,
+      localProtocolVersionRange.protocolMin,
+    );
+    this.#nativeProtocolState = { state: "negotiating" };
     this.#sendNativeRequest(request)
       .then((response) => {
         if (!response.ok) {
@@ -276,6 +294,7 @@ export class FirefoxCliBackgroundController {
     try {
       this.#port = this.#runtime.connectNative(NATIVE_HOST_NAME);
       this.#connected = true;
+      this.#nativeProtocolState = { state: "negotiating" };
       this.#reconnectAttempt = 0;
       this.#reconnectScheduled = false;
       this.#lastError = undefined;
@@ -285,12 +304,17 @@ export class FirefoxCliBackgroundController {
       this.#port.onDisconnect.addListener((error) => {
         this.#connected = false;
         this.#port = null;
+        this.#nativeProtocolState = { state: "disconnected" };
         this.#lastError = error?.message ?? "Native host disconnected.";
         this.#pendingCommands.drain((request) =>
-          createErrorResponse(request.id, {
-            code: "NATIVE_HOST_UNAVAILABLE",
-            message: "Native host disconnected before responding.",
-          }),
+          createErrorResponse(
+            request.id,
+            {
+              code: "NATIVE_HOST_UNAVAILABLE",
+              message: "Native host disconnected before responding.",
+            },
+            request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+          ),
         );
         this.#scheduleReconnect();
       });
@@ -323,27 +347,46 @@ export class FirefoxCliBackgroundController {
   ): Promise<ResponseEnvelope<C>> {
     if (this.#port === null || !this.#connected) {
       return Promise.resolve(
-        createErrorResponse(request.id, {
-          code: "EXTENSION_NOT_CONNECTED",
-          message: "Native host is not connected.",
-        }),
+        createErrorResponse(
+          request.id,
+          {
+            code: "EXTENSION_NOT_CONNECTED",
+            message: "Native host is not connected.",
+          },
+          request.protocolVersion,
+        ),
       ) as Promise<ResponseEnvelope<C>>;
     }
 
-    const tracked = this.#pendingCommands.track(request);
+    const session =
+      request.command === "hello"
+        ? undefined
+        : getNegotiatedNativeSession(this.#nativeProtocolState);
+    if (session !== undefined && !session.ok) {
+      return Promise.resolve(
+        createErrorResponse(request.id, session.error, request.protocolVersion),
+      ) as Promise<ResponseEnvelope<C>>;
+    }
+
+    const wireRequest = session === undefined ? request : session.value.withRequestVersion(request);
+    const tracked = this.#pendingCommands.track(wireRequest);
     if (!tracked.ok) {
       return Promise.resolve(tracked.value as ResponseEnvelope<C>);
     }
 
     try {
-      this.#port.postMessage(request);
+      this.#port.postMessage(wireRequest);
     } catch {
       this.#pendingCommands.settle(
-        request.id,
-        createErrorResponse(request.id, {
-          code: "NATIVE_HOST_UNAVAILABLE",
-          message: "Failed to send request to the native host.",
-        }),
+        wireRequest.id,
+        createErrorResponse(
+          wireRequest.id,
+          {
+            code: "NATIVE_HOST_UNAVAILABLE",
+            message: "Failed to send request to the native host.",
+          },
+          wireRequest.protocolVersion,
+        ),
       );
     }
 
@@ -356,29 +399,59 @@ export class FirefoxCliBackgroundController {
       if (command === undefined) {
         return;
       }
-      const response = parseBoundaryResponse("host-to-extension", command, message);
+      const response =
+        command === "hello"
+          ? parseBoundaryResponse("host-to-extension", command, message, {
+              hello: {
+                local: localProtocolVersionRange,
+                expectedPeerComponent: "native-host",
+              },
+            })
+          : parseBoundaryResponse("host-to-extension", command, message, {
+              protocolVersion:
+                this.#nativeProtocolState.state === "negotiated"
+                  ? this.#nativeProtocolState.session.protocolVersion
+                  : localProtocolVersionRange.protocolMax,
+            });
       if (!response.ok) {
         this.#lastError = response.error.message;
-        this.#pendingCommands.settle(message.id, createErrorResponse(message.id, response.error));
+        if (command === "hello") {
+          this.#nativeProtocolState = { state: "incompatible", error: response.error };
+        }
+        this.#pendingCommands.settle(
+          message.id,
+          createErrorResponse(message.id, response.error, getMessageProtocolVersion(message)),
+        );
         return;
       }
       let helloPairingError: string | undefined;
-      if (command === "hello" && response.value.ok) {
-        const helloResponse = response.value as Extract<ResponseEnvelope<"hello">, { ok: true }>;
-        const pairing = helloResponse.result.pairing;
-        if (pairing !== undefined) {
-          this.#approved = pairing.approved;
-          if (
-            !pairing.approved &&
-            pairing.status !== "invalid-pair-state" &&
-            this.#pairToken !== null
-          ) {
-            this.#pairToken = null;
-            await this.#storageAdapter.setPairToken(null);
+      if (command === "hello") {
+        if (response.value.ok) {
+          this.#nativeProtocolState = {
+            state: "negotiated",
+            session: createProtocolSession(response.value.protocolVersion),
+          };
+          const helloResponse = response.value as Extract<ResponseEnvelope<"hello">, { ok: true }>;
+          const pairing = helloResponse.result.pairing;
+          if (pairing !== undefined) {
+            this.#approved = pairing.approved;
+            if (
+              !pairing.approved &&
+              pairing.status !== "invalid-pair-state" &&
+              this.#pairToken !== null
+            ) {
+              this.#pairToken = null;
+              await this.#storageAdapter.setPairToken(null);
+            }
+            if (!pairing.approved && pairing.status === "invalid-pair-state") {
+              helloPairingError = pairing.message ?? "Native host pair state is invalid.";
+            }
           }
-          if (!pairing.approved && pairing.status === "invalid-pair-state") {
-            helloPairingError = pairing.message ?? "Native host pair state is invalid.";
-          }
+        } else {
+          this.#nativeProtocolState = {
+            state: "incompatible",
+            error: response.value.error,
+          };
         }
       }
       this.#pendingCommands.settle(message.id, response.value);
@@ -386,9 +459,43 @@ export class FirefoxCliBackgroundController {
       return;
     }
 
-    const request = parseBoundaryRequest("host-to-extension", message);
+    const request = parseBoundaryRequest("host-to-extension", message, {
+      ...(this.#nativeProtocolState.state === "negotiated"
+        ? { protocolVersion: this.#nativeProtocolState.session.protocolVersion }
+        : {}),
+      hello: {
+        local: localProtocolVersionRange,
+        expectedPeerComponent: "native-host",
+      },
+    });
     if (!request.ok) {
-      this.#port?.postMessage(createErrorResponse("invalid-request", request.error));
+      const response = createProtocolStateErrorResponse(
+        this.#nativeProtocolState,
+        getMessageId(message),
+        request.error,
+      );
+      if (isRequestCommand(message, "hello") || request.error.code === "VERSION_MISMATCH") {
+        this.#nativeProtocolState = { state: "incompatible", error: request.error };
+      }
+      this.#port?.postMessage(response);
+      return;
+    }
+
+    const protocolSession = createProtocolSession(request.value.protocolVersion);
+    if (request.value.command === "hello") {
+      this.#nativeProtocolState = { state: "negotiated", session: protocolSession };
+    } else if (this.#nativeProtocolState.state === "incompatible") {
+      this.#port?.postMessage(
+        protocolSession.createErrorResponse(request.value.id, this.#nativeProtocolState.error),
+      );
+      return;
+    } else if (this.#nativeProtocolState.state !== "negotiated") {
+      this.#port?.postMessage(
+        protocolSession.createErrorResponse(request.value.id, {
+          code: "NATIVE_HOST_UNAVAILABLE",
+          message: "Native host protocol negotiation has not completed.",
+        }),
+      );
       return;
     }
 
@@ -398,6 +505,7 @@ export class FirefoxCliBackgroundController {
         this.#productVersion,
         this.#approved,
         this.#browserAdapter,
+        protocolSession,
       ),
     );
   }
@@ -408,42 +516,40 @@ function handleRequest(
   productVersion: string,
   approved: boolean,
   browserAdapter: BackgroundBrowserAdapter,
+  protocolSession: ProtocolSession,
 ): Promise<ResponseEnvelope> | ResponseEnvelope {
   if (request.command === "hello") {
-    return createOkResponse(request, {
+    return protocolSession.createOkResponse(request as RequestEnvelope<"hello">, {
       accepted: true,
-      negotiatedProtocolVersion: PROTOCOL_VERSION,
+      negotiatedProtocolVersion: protocolSession.protocolVersion,
       peer: {
-        component: "extension",
-        productName: "firefox-cli",
-        productVersion,
-        protocolMin: PROTOCOL_VERSION,
-        protocolMax: PROTOCOL_VERSION,
-        features: [],
+        ...createLocalComponentIdentity("extension", productVersion),
+        protocolMin: localProtocolVersionRange.protocolMin,
+        protocolMax: localProtocolVersionRange.protocolMax,
       },
     });
   }
 
   if (request.command === "pair.approve" || request.command === "pair.reset") {
-    return createErrorResponse(request.id, {
+    return protocolSession.createErrorResponse(request.id, {
       code: "UNSUPPORTED_CAPABILITY",
       message: "Pairing commands are handled by the native host.",
     });
   }
 
   if (!approved) {
-    return createErrorResponse(request.id, {
+    return protocolSession.createErrorResponse(request.id, {
       code: "NOT_APPROVED",
       message: "Approve firefox-cli in the extension popup before running CLI commands.",
     });
   }
 
   if (request.command === "capabilities") {
-    return createOkResponse(request, { capabilities: [...kernelCapabilities] });
+    return protocolSession.createOkResponse(request, { capabilities: [...kernelCapabilities] });
   }
 
   if (request.command === "noop") {
-    return createOkResponse(request, { ok: true });
+    return protocolSession.createOkResponse(request, { ok: true });
   }
 
   return handleBrowserRequest(request, browserAdapter);
@@ -456,5 +562,74 @@ function isResponseLike(message: unknown): message is { readonly id: string } {
     "id" in message &&
     "ok" in message &&
     typeof message.id === "string"
+  );
+}
+
+type NativeProtocolState =
+  | { readonly state: "disconnected" }
+  | { readonly state: "negotiating" }
+  | { readonly state: "negotiated"; readonly session: ProtocolSession }
+  | { readonly state: "incompatible"; readonly error: ProtocolError };
+
+function getNegotiatedNativeSession(
+  state: NativeProtocolState,
+):
+  | { readonly ok: true; readonly value: ProtocolSession }
+  | { readonly ok: false; readonly error: ProtocolError } {
+  if (state.state === "negotiated") {
+    return { ok: true, value: state.session };
+  }
+
+  if (state.state === "incompatible") {
+    return { ok: false, error: state.error };
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: "NATIVE_HOST_UNAVAILABLE",
+      message: "Native host protocol negotiation has not completed.",
+    },
+  };
+}
+
+function getNativeProtocolSession(state: NativeProtocolState): ProtocolSession {
+  return state.state === "negotiated"
+    ? state.session
+    : createProtocolSession(localProtocolVersionRange.protocolMax);
+}
+
+function createProtocolStateErrorResponse(
+  state: NativeProtocolState,
+  id: string,
+  error: ProtocolError,
+): ResponseEnvelope {
+  return getNativeProtocolSession(state).createErrorResponse(id, error);
+}
+
+function getMessageId(message: unknown): string {
+  return typeof message === "object" &&
+    message !== null &&
+    "id" in message &&
+    typeof message.id === "string"
+    ? message.id
+    : "invalid-request";
+}
+
+function getMessageProtocolVersion(message: unknown): number {
+  return typeof message === "object" &&
+    message !== null &&
+    "protocolVersion" in message &&
+    typeof message.protocolVersion === "number"
+    ? message.protocolVersion
+    : localProtocolVersionRange.protocolMax;
+}
+
+function isRequestCommand(message: unknown, command: string): boolean {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "command" in message &&
+    message.command === command
   );
 }

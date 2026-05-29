@@ -76,6 +76,7 @@ export async function startNativeHostSession(
   });
   const broker = new NativeHostBroker({
     hostIdentity,
+    productVersion: options.productVersion,
     verifyPairToken: async (token) =>
       verifyPairStateStatus(await readPairStateStatus(pairStateStore), hostIdentity, token),
   });
@@ -99,7 +100,8 @@ export async function startNativeHostSession(
   const ipcServer = new LocalIpcServer({
     endpoint,
     authToken: ipcAuthToken,
-    handleMessage: (message) => broker.handleCliRequest(message),
+    enableProtocolNegotiation: true,
+    handleMessage: (message, context) => broker.handleCliRequest(message, context),
   });
   await ipcServer.start();
 

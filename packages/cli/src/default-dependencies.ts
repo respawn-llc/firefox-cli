@@ -3,7 +3,7 @@ import {
   FileLocalIpcAuthTokenStore,
   FilePairStateStore,
   planLocalIpcEndpoint,
-  sendLocalIpcRequest,
+  sendNegotiatedLocalIpcRequest,
 } from "@firefox-cli/native-host";
 import type { CliDependencies } from "./types.js";
 
@@ -28,7 +28,10 @@ export function createDefaultDependencies(version: string): CliDependencies {
         rootDir: stateRoot,
       });
       const authToken = await new FileLocalIpcAuthTokenStore({ stateRoot }).read();
-      return sendLocalIpcRequest(endpoint, request, { authToken });
+      return sendNegotiatedLocalIpcRequest(endpoint, request, {
+        authToken,
+        productVersion: version,
+      });
     },
     clearPairState: async () => {
       await new FilePairStateStore({

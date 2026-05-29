@@ -60,7 +60,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Large files mix registry data, parsing, routing, formatting, validation, and feature implementations, making command changes high-risk.
   **Fix:** Extract CLI command modules by command family with shared parser utilities, split protocol schemas by domain with an assembled registry, split browser handlers by browser/content/native-owned capabilities, and split content snapshot into accessibility, querying, log capture, formatting, and command routing modules. Keep public exports stable while moving tests with the extracted modules.
 
-- [ ] Implement real protocol negotiation instead of strict version equality everywhere.
+- [x] Implement real protocol negotiation instead of strict version equality everywhere.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: identity schemas expose `protocolMin` and `protocolMax` at `packages/protocol/src/index.ts:80-96`, but request and response parsing require exact `PROTOCOL_VERSION` equality at `packages/protocol/src/index.ts:1997-2002` and `packages/protocol/src/index.ts:2051-2056`.
   **Problem:** Any CLI/native-host/extension version skew causes hard failure even when a compatible range could exist.

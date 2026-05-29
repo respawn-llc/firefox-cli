@@ -3,7 +3,7 @@ import { createOkResponse, createRequest, kernelCapabilities } from "@firefox-cl
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
-import { FileLocalIpcAuthTokenStore, sendLocalIpcRequest } from "./local-ipc.js";
+import { FileLocalIpcAuthTokenStore, sendNegotiatedLocalIpcRequest } from "./local-ipc.js";
 import { startNativeHostSession } from "./native-host-session.js";
 
 describe("native host session", () => {
@@ -20,6 +20,24 @@ describe("native host session", () => {
       approved: true,
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const initialHello = createRequest(
+      "hello",
+      {
+        component: "extension",
+        productName: "firefox-cli",
+        productVersion: "0.0.0",
+        protocolMin: 1,
+        protocolMax: 1,
+        features: [],
+      },
+      "hello-initial",
+    );
+    const initialHelloResponse = extensionReader.read();
+    extensionInput.write(encodeNativeMessageFrame(initialHello));
+    await expect(initialHelloResponse).resolves.toMatchObject({
+      ok: true,
+      result: { peer: { component: "native-host" } },
+    });
     const approve = createRequest("pair.approve", {}, "approve-1");
     const approveResponse = extensionReader.read();
     extensionInput.write(encodeNativeMessageFrame(approve));
@@ -47,7 +65,10 @@ describe("native host session", () => {
     const ipcAuthToken = await new FileLocalIpcAuthTokenStore({ stateRoot }).read();
 
     const request = createRequest("capabilities", {}, "request-1");
-    const response = sendLocalIpcRequest(session.endpoint, request, { authToken: ipcAuthToken });
+    const response = sendNegotiatedLocalIpcRequest(session.endpoint, request, {
+      authToken: ipcAuthToken,
+      productVersion: "0.0.0",
+    });
     const forwarded = (await extensionReader.read()) as typeof request;
 
     expect(forwarded).toEqual(request);

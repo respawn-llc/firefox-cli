@@ -1,13 +1,15 @@
 import type { Readable, Writable } from "node:stream";
 import {
-  PROTOCOL_VERSION,
   PendingRequestTracker,
+  createLocalComponentIdentity,
   createErrorResponse,
-  createOkResponse,
+  createProtocolSession,
   kernelCapabilities,
+  localProtocolVersionRange,
   parseBoundaryRequest,
-  parseBoundaryResponse,
   type CommandId,
+  type ProtocolError,
+  type ProtocolSession,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
@@ -52,25 +54,35 @@ export async function attachNativeMessagingConnection(
   const pending = new PendingRequestTracker<CommandId, unknown>({
     timeoutMs: options.requestTimeoutMs ?? DEFAULT_PENDING_REQUEST_TIMEOUT_MS,
     onDuplicate: (request) =>
-      createErrorResponse(request.id, {
-        code: "INVALID_ENVELOPE",
-        message: `Request ID is already pending: ${request.id}`,
-      }),
+      createErrorResponse(
+        request.id,
+        {
+          code: "INVALID_ENVELOPE",
+          message: `Request ID is already pending: ${request.id}`,
+        },
+        request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+      ),
     onTimeout: (request) =>
-      createErrorResponse(request.id, {
-        code: "TIMEOUT",
-        message: `Timed out waiting for extension response to ${request.command}.`,
-      }),
+      createErrorResponse(
+        request.id,
+        {
+          code: "TIMEOUT",
+          message: `Timed out waiting for extension response to ${request.command}.`,
+        },
+        request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+      ),
   });
   const reader = new NativeMessagingFrameReader(options.input);
   const connectionState: {
     approved: boolean;
     token: string | undefined;
     pairingError: PairTokenVerification | undefined;
+    protocolState: ExtensionProtocolState;
   } = {
     approved: options.approved,
     token: options.token,
     pairingError: undefined,
+    protocolState: { state: "negotiating" },
   };
   const extensionConnection = {
     get approved() {
@@ -81,6 +93,9 @@ export async function attachNativeMessagingConnection(
     },
     get pairingError() {
       return connectionState.pairingError;
+    },
+    get protocolState() {
+      return connectionState.protocolState;
     },
     send: async (request: RequestEnvelope): Promise<unknown> => {
       const tracked = pending.track(request);
@@ -93,10 +108,14 @@ export async function attachNativeMessagingConnection(
       } catch {
         pending.settle(
           request.id,
-          createErrorResponse(request.id, {
-            code: "EXTENSION_NOT_CONNECTED",
-            message: "Failed to send request to the Firefox extension.",
-          }),
+          createErrorResponse(
+            request.id,
+            {
+              code: "EXTENSION_NOT_CONNECTED",
+              message: "Failed to send request to the Firefox extension.",
+            },
+            request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+          ),
         );
       }
 
@@ -127,10 +146,14 @@ export async function attachNativeMessagingConnection(
     .finally(() => {
       options.broker.disconnectExtension(extensionConnection);
       pending.drain((request) =>
-        createErrorResponse(request.id, {
-          code: "EXTENSION_NOT_CONNECTED",
-          message: "Firefox extension disconnected before responding.",
-        }),
+        createErrorResponse(
+          request.id,
+          {
+            code: "EXTENSION_NOT_CONNECTED",
+            message: "Firefox extension disconnected before responding.",
+          },
+          request.protocolVersion,
+        ),
       );
     });
 
@@ -153,6 +176,7 @@ async function runReadLoop(options: {
     approved: boolean;
     token: string | undefined;
     pairingError: PairTokenVerification | undefined;
+    protocolState: ExtensionProtocolState;
   };
 }): Promise<void> {
   while (true) {
@@ -167,10 +191,11 @@ async function runReadLoop(options: {
         continue;
       }
 
-      const parsed = parseBoundaryResponse("host-to-extension", command, message);
+      const protocolSession = getExtensionProtocolSession(options.connectionState.protocolState);
+      const parsed = protocolSession.parseResponse("host-to-extension", command, message);
       options.pending.settle(
         message.id,
-        parsed.ok ? parsed.value : createErrorResponse(message.id, parsed.error),
+        parsed.ok ? parsed.value : protocolSession.createErrorResponse(message.id, parsed.error),
       );
       continue;
     }
@@ -193,15 +218,33 @@ async function handleExtensionRequest(options: {
     approved: boolean;
     token: string | undefined;
     pairingError: PairTokenVerification | undefined;
+    protocolState: ExtensionProtocolState;
   };
 }): Promise<ResponseEnvelope> {
   const { message, productVersion, pairing, connectionState } = options;
-  const parsed = parseBoundaryRequest("host-to-extension", message);
+  const parsed = parseBoundaryRequest("host-to-extension", message, {
+    ...(connectionState.protocolState.state === "negotiated"
+      ? { protocolVersion: connectionState.protocolState.session.protocolVersion }
+      : {}),
+    hello: {
+      local: localProtocolVersionRange,
+      expectedPeerComponent: "extension",
+    },
+  });
   if (!parsed.ok) {
-    return createErrorResponse("invalid-request", parsed.error);
+    const response = createProtocolStateErrorResponse(
+      connectionState.protocolState,
+      getMessageId(message),
+      parsed.error,
+    );
+    if (isRequestCommand(message, "hello") || parsed.error.code === "VERSION_MISMATCH") {
+      connectionState.protocolState = { state: "incompatible", error: parsed.error };
+    }
+    return response;
   }
 
   const request = parsed.value;
+  const protocolSession = createProtocolSession(request.protocolVersion);
   if (request.command === "hello") {
     const helloRequest = request as RequestEnvelope<"hello">;
     const pairState = pairing === undefined ? undefined : await pairing.readStateStatus();
@@ -213,17 +256,15 @@ async function handleExtensionRequest(options: {
     connectionState.approved = pairVerification?.ok ?? connectionState.approved;
     connectionState.pairingError =
       pairVerification === undefined || pairVerification.ok ? undefined : pairVerification;
+    connectionState.protocolState = { state: "negotiated", session: protocolSession };
 
-    return createOkResponse(request, {
+    return protocolSession.createOkResponse(request, {
       accepted: true,
-      negotiatedProtocolVersion: PROTOCOL_VERSION,
+      negotiatedProtocolVersion: protocolSession.protocolVersion,
       peer: {
-        component: "native-host",
-        productName: "firefox-cli",
-        productVersion,
-        protocolMin: PROTOCOL_VERSION,
-        protocolMax: PROTOCOL_VERSION,
-        features: [],
+        ...createLocalComponentIdentity("native-host", productVersion),
+        protocolMin: localProtocolVersionRange.protocolMin,
+        protocolMax: localProtocolVersionRange.protocolMax,
       },
       ...(pairing === undefined
         ? {}
@@ -242,9 +283,20 @@ async function handleExtensionRequest(options: {
     });
   }
 
+  if (connectionState.protocolState.state === "incompatible") {
+    return protocolSession.createErrorResponse(request.id, connectionState.protocolState.error);
+  }
+
+  if (connectionState.protocolState.state !== "negotiated") {
+    return protocolSession.createErrorResponse(request.id, {
+      code: "EXTENSION_NOT_CONNECTED",
+      message: "Native host protocol negotiation has not completed.",
+    });
+  }
+
   if (request.command === "pair.approve") {
     if (pairing === undefined) {
-      return createErrorResponse(request.id, {
+      return protocolSession.createErrorResponse(request.id, {
         code: "UNSUPPORTED_CAPABILITY",
         message: "Native host pairing is not configured.",
       });
@@ -254,7 +306,7 @@ async function handleExtensionRequest(options: {
     connectionState.approved = true;
     connectionState.token = approval.token;
     connectionState.pairingError = undefined;
-    return createOkResponse(request, {
+    return protocolSession.createOkResponse(request, {
       hostId: approval.state.hostId,
       extensionId: approval.state.extensionId,
       token: approval.token,
@@ -265,7 +317,7 @@ async function handleExtensionRequest(options: {
 
   if (request.command === "pair.reset") {
     if (pairing === undefined) {
-      return createErrorResponse(request.id, {
+      return protocolSession.createErrorResponse(request.id, {
         code: "UNSUPPORTED_CAPABILITY",
         message: "Native host pairing is not configured.",
       });
@@ -275,14 +327,14 @@ async function handleExtensionRequest(options: {
     connectionState.approved = false;
     connectionState.token = undefined;
     connectionState.pairingError = undefined;
-    return createOkResponse(request, { ok: true });
+    return protocolSession.createOkResponse(request, { ok: true });
   }
 
   if (request.command === "capabilities") {
-    return createOkResponse(request, { capabilities: [...kernelCapabilities] });
+    return protocolSession.createOkResponse(request, { capabilities: [...kernelCapabilities] });
   }
 
-  return createOkResponse(request, { ok: true });
+  return protocolSession.createOkResponse(request, { ok: true });
 }
 
 function helloPairingStatus(
@@ -307,5 +359,42 @@ function isResponseLike(message: unknown): message is { readonly id: string } {
     "id" in message &&
     "ok" in message &&
     typeof message.id === "string"
+  );
+}
+
+type ExtensionProtocolState =
+  | { readonly state: "negotiating" }
+  | { readonly state: "negotiated"; readonly session: ProtocolSession }
+  | { readonly state: "incompatible"; readonly error: ProtocolError };
+
+function getExtensionProtocolSession(state: ExtensionProtocolState): ProtocolSession {
+  return state.state === "negotiated"
+    ? state.session
+    : createProtocolSession(localProtocolVersionRange.protocolMax);
+}
+
+function createProtocolStateErrorResponse(
+  state: ExtensionProtocolState,
+  id: string,
+  error: ProtocolError,
+): ResponseEnvelope {
+  return getExtensionProtocolSession(state).createErrorResponse(id, error);
+}
+
+function getMessageId(message: unknown): string {
+  return typeof message === "object" &&
+    message !== null &&
+    "id" in message &&
+    typeof message.id === "string"
+    ? message.id
+    : "invalid-request";
+}
+
+function isRequestCommand(message: unknown, command: string): boolean {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "command" in message &&
+    message.command === command
   );
 }

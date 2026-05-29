@@ -3,16 +3,22 @@ import { z } from "zod";
 import { PROTOCOL_VERSION } from "./constants.js";
 import {
   boundarySchema,
+  createProtocolVersionMismatchError,
+  isProtocolVersionInRange,
+  negotiateProtocolVersion,
   protocolErrorSchema,
   type Boundary,
+  type Component,
+  type ComponentIdentity,
   type ErrorCode,
   type ParseResult,
   type ProtocolError,
+  type ProtocolVersionRange,
 } from "./core.js";
 import { commandSchemas, isCommandId, type CommandId } from "./registry/index.js";
 
 export type RequestEnvelope<C extends CommandId = CommandId> = {
-  readonly protocolVersion: typeof PROTOCOL_VERSION;
+  readonly protocolVersion: number;
   readonly id: string;
   readonly command: C;
   readonly params: z.infer<(typeof commandSchemas)[C]["params"]>;
@@ -20,17 +26,53 @@ export type RequestEnvelope<C extends CommandId = CommandId> = {
 
 export type ResponseEnvelope<C extends CommandId = CommandId> =
   | {
-      readonly protocolVersion: typeof PROTOCOL_VERSION;
+      readonly protocolVersion: number;
       readonly id: string;
       readonly ok: true;
       readonly result: z.infer<(typeof commandSchemas)[C]["result"]>;
     }
   | {
-      readonly protocolVersion: typeof PROTOCOL_VERSION;
+      readonly protocolVersion: number;
       readonly id: string;
       readonly ok: false;
       readonly error: ProtocolError;
     };
+
+export type HelloRequestNegotiationOptions = {
+  readonly local: ProtocolVersionRange;
+  readonly expectedPeerComponent: Component;
+};
+
+export type HelloResponseNegotiationOptions = {
+  readonly local: ProtocolVersionRange;
+  readonly expectedPeerComponent: Component;
+};
+
+export type ParseBoundaryRequestOptions = {
+  readonly protocolVersion?: number;
+  readonly hello?: HelloRequestNegotiationOptions;
+};
+
+export type ParseBoundaryResponseOptions = {
+  readonly protocolVersion?: number;
+  readonly hello?: HelloResponseNegotiationOptions;
+};
+
+export type ProtocolSession = {
+  readonly protocolVersion: number;
+  parseRequest(boundary: Boundary, raw: unknown): ParseResult<RequestEnvelope>;
+  parseResponse(
+    boundary: Boundary,
+    command: CommandId,
+    raw: unknown,
+  ): ParseResult<ResponseEnvelope>;
+  createOkResponse<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    result: z.infer<(typeof commandSchemas)[C]["result"]>,
+  ): ResponseEnvelope<C>;
+  createErrorResponse(id: string, error: ProtocolError): ResponseEnvelope;
+  withRequestVersion<C extends CommandId>(request: RequestEnvelope<C>): RequestEnvelope<C>;
+};
 
 const requestEnvelopeSchema = z
   .object({
@@ -63,6 +105,7 @@ const responseEnvelopeSchema = z.discriminatedUnion("ok", [
 export function parseBoundaryRequest(
   boundary: Boundary,
   raw: unknown,
+  options: ParseBoundaryRequestOptions = {},
 ): ParseResult<RequestEnvelope> {
   const boundaryValidation = boundarySchema.safeParse(boundary);
   if (!boundaryValidation.success) {
@@ -81,10 +124,15 @@ export function parseBoundaryRequest(
     });
   }
 
-  if (envelope.data.protocolVersion !== PROTOCOL_VERSION) {
+  if (envelope.data.command === "hello" && options.hello !== undefined) {
+    return parseNegotiatedHelloRequest(envelope.data, options.hello);
+  }
+
+  const expectedProtocolVersion = options.protocolVersion ?? PROTOCOL_VERSION;
+  if (envelope.data.protocolVersion !== expectedProtocolVersion) {
     return failure("VERSION_MISMATCH", "Protocol version is not supported.", {
       received: envelope.data.protocolVersion,
-      supported: PROTOCOL_VERSION,
+      supported: expectedProtocolVersion,
     });
   }
 
@@ -105,7 +153,7 @@ export function parseBoundaryRequest(
   return {
     ok: true,
     value: {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: expectedProtocolVersion,
       id: envelope.data.id,
       command: envelope.data.command,
       params: params.data,
@@ -117,6 +165,7 @@ export function parseBoundaryResponse(
   boundary: Boundary,
   command: CommandId,
   raw: unknown,
+  options: ParseBoundaryResponseOptions = {},
 ): ParseResult<ResponseEnvelope> {
   const boundaryValidation = boundarySchema.safeParse(boundary);
   if (!boundaryValidation.success) {
@@ -135,10 +184,15 @@ export function parseBoundaryResponse(
     });
   }
 
-  if (envelope.data.protocolVersion !== PROTOCOL_VERSION) {
+  if (command === "hello" && options.hello !== undefined) {
+    return parseNegotiatedHelloResponse(envelope.data, options.hello);
+  }
+
+  const expectedProtocolVersion = options.protocolVersion ?? PROTOCOL_VERSION;
+  if (envelope.data.protocolVersion !== expectedProtocolVersion) {
     return failure("VERSION_MISMATCH", "Protocol version is not supported.", {
       received: envelope.data.protocolVersion,
-      supported: PROTOCOL_VERSION,
+      supported: expectedProtocolVersion,
     });
   }
 
@@ -154,7 +208,7 @@ export function parseBoundaryResponse(
     return {
       ok: true,
       value: {
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: expectedProtocolVersion,
         id: envelope.data.id,
         ok: true,
         result: result.data,
@@ -172,7 +226,7 @@ export function parseBoundaryResponse(
   return {
     ok: true,
     value: {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: expectedProtocolVersion,
       id: envelope.data.id,
       ok: false,
       error: error.data,
@@ -184,9 +238,10 @@ export function createRequest<C extends CommandId>(
   command: C,
   params: z.infer<(typeof commandSchemas)[C]["params"]>,
   id: string = crypto.randomUUID(),
+  protocolVersion: number = PROTOCOL_VERSION,
 ): RequestEnvelope<C> {
   return {
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion,
     id,
     command,
     params,
@@ -196,21 +251,48 @@ export function createRequest<C extends CommandId>(
 export function createOkResponse<C extends CommandId>(
   request: RequestEnvelope<C>,
   result: z.infer<(typeof commandSchemas)[C]["result"]>,
+  protocolVersion: number = request.protocolVersion,
 ): ResponseEnvelope<C> {
   return {
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion,
     id: request.id,
     ok: true,
     result,
   };
 }
 
-export function createErrorResponse(id: string, error: ProtocolError): ResponseEnvelope {
+export function createErrorResponse(
+  id: string,
+  error: ProtocolError,
+  protocolVersion: number = PROTOCOL_VERSION,
+): ResponseEnvelope {
   return {
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion,
     id,
     ok: false,
     error,
+  };
+}
+
+export function withRequestProtocolVersion<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  protocolVersion: number,
+): RequestEnvelope<C> {
+  return {
+    ...request,
+    protocolVersion,
+  };
+}
+
+export function createProtocolSession(protocolVersion: number): ProtocolSession {
+  return {
+    protocolVersion,
+    parseRequest: (boundary, raw) => parseBoundaryRequest(boundary, raw, { protocolVersion }),
+    parseResponse: (boundary, command, raw) =>
+      parseBoundaryResponse(boundary, command, raw, { protocolVersion }),
+    createOkResponse: (request, result) => createOkResponse(request, result, protocolVersion),
+    createErrorResponse: (id, error) => createErrorResponse(id, error, protocolVersion),
+    withRequestVersion: (request) => withRequestProtocolVersion(request, protocolVersion),
   };
 }
 
@@ -241,4 +323,151 @@ function failure(
       ...(details === undefined ? {} : { details }),
     },
   };
+}
+
+function parseNegotiatedHelloRequest(
+  envelope: z.infer<typeof requestEnvelopeSchema>,
+  options: HelloRequestNegotiationOptions,
+): ParseResult<RequestEnvelope<"hello">> {
+  const params = commandSchemas.hello.params.safeParse(envelope.params);
+  if (!params.success) {
+    return failure("INVALID_ENVELOPE", "Command params are invalid.", {
+      command: "hello",
+      issues: params.error.issues,
+    });
+  }
+
+  const peer = params.data;
+  const negotiation = validateHelloNegotiation({
+    envelopeProtocolVersion: envelope.protocolVersion,
+    local: options.local,
+    peer,
+    expectedPeerComponent: options.expectedPeerComponent,
+    errorCode: "INVALID_ENVELOPE",
+  });
+  if (!negotiation.ok) {
+    return negotiation;
+  }
+
+  return {
+    ok: true,
+    value: {
+      protocolVersion: negotiation.value,
+      id: envelope.id,
+      command: "hello",
+      params: peer,
+    },
+  };
+}
+
+function parseNegotiatedHelloResponse(
+  envelope: z.infer<typeof responseEnvelopeSchema>,
+  options: HelloResponseNegotiationOptions,
+): ParseResult<ResponseEnvelope<"hello">> {
+  if (!envelope.ok) {
+    const error = protocolErrorSchema.safeParse(envelope.error);
+    if (!error.success) {
+      return failure("INVALID_RESPONSE", "Error response is invalid.", {
+        issues: error.error.issues,
+      });
+    }
+
+    if (
+      !isProtocolVersionInRange(envelope.protocolVersion, options.local) &&
+      error.data.code !== "VERSION_MISMATCH"
+    ) {
+      return {
+        ok: false,
+        error: createProtocolVersionMismatchError(options.local, {
+          protocolMin: envelope.protocolVersion,
+          protocolMax: envelope.protocolVersion,
+        }),
+      };
+    }
+
+    return {
+      ok: true,
+      value: {
+        protocolVersion: envelope.protocolVersion,
+        id: envelope.id,
+        ok: false,
+        error: error.data,
+      },
+    };
+  }
+
+  const result = commandSchemas.hello.result.safeParse(envelope.result);
+  if (!result.success) {
+    return failure("INVALID_RESPONSE", "Command result is invalid.", {
+      command: "hello",
+      issues: result.error.issues,
+    });
+  }
+
+  const negotiation = validateHelloNegotiation({
+    envelopeProtocolVersion: envelope.protocolVersion,
+    local: options.local,
+    peer: result.data.peer,
+    expectedPeerComponent: options.expectedPeerComponent,
+    errorCode: "INVALID_RESPONSE",
+  });
+  if (!negotiation.ok) {
+    return negotiation;
+  }
+
+  if (result.data.negotiatedProtocolVersion !== negotiation.value) {
+    return failure("INVALID_RESPONSE", "Negotiated protocol version is invalid.", {
+      expected: negotiation.value,
+      received: result.data.negotiatedProtocolVersion,
+    });
+  }
+
+  if (envelope.protocolVersion !== result.data.negotiatedProtocolVersion) {
+    return failure("INVALID_RESPONSE", "Hello response envelope version must match negotiation.", {
+      expected: result.data.negotiatedProtocolVersion,
+      received: envelope.protocolVersion,
+    });
+  }
+
+  return {
+    ok: true,
+    value: {
+      protocolVersion: negotiation.value,
+      id: envelope.id,
+      ok: true,
+      result: result.data,
+    },
+  };
+}
+
+function validateHelloNegotiation(options: {
+  readonly envelopeProtocolVersion: number;
+  readonly local: ProtocolVersionRange;
+  readonly peer: ComponentIdentity;
+  readonly expectedPeerComponent: Component;
+  readonly errorCode: "INVALID_ENVELOPE" | "INVALID_RESPONSE";
+}): ParseResult<number> {
+  if (options.peer.component !== options.expectedPeerComponent) {
+    return failure(options.errorCode, "Unexpected hello peer component.", {
+      expected: options.expectedPeerComponent,
+      received: options.peer.component,
+    });
+  }
+
+  if (!isProtocolVersionInRange(options.envelopeProtocolVersion, options.peer)) {
+    return failure("VERSION_MISMATCH", "Hello envelope version is outside the peer range.", {
+      received: options.envelopeProtocolVersion,
+      peer: {
+        protocolMin: options.peer.protocolMin,
+        protocolMax: options.peer.protocolMax,
+      },
+    });
+  }
+
+  const negotiated = negotiateProtocolVersion(options.local, options.peer);
+  if (!negotiated.ok) {
+    return negotiated;
+  }
+
+  return negotiated;
 }

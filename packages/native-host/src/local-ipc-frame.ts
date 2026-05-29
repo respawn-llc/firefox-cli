@@ -89,6 +89,28 @@ export async function endSocketWithResponse(
   }
 }
 
+export async function writeSocketJsonLine(socket: Socket, message: unknown): Promise<void> {
+  const line = encodeLocalIpcJsonLine(message);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      socket.off("error", onError);
+      reject(error);
+    };
+
+    socket.once("error", onError);
+    socket.resume();
+    socket.write(line, (error) => {
+      socket.off("error", onError);
+      if (error !== undefined && error !== null) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 export function endSocketWithResponseSync(
   socket: Socket,
   response: unknown,
@@ -287,27 +309,11 @@ export function isMessageTooLargeError(error: unknown): error is LocalIpcFrameEr
 }
 
 async function endSocketWithJsonLine(socket: Socket, message: unknown): Promise<void> {
-  const line = encodeLocalIpcJsonLine(message);
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error): void => {
-      socket.off("error", onError);
-      reject(error);
-    };
-
-    socket.once("error", onError);
-    socket.resume();
-    socket.write(line, (error) => {
-      if (error !== undefined && error !== null) {
-        socket.off("error", onError);
-        reject(error);
-        return;
-      }
-
-      socket.end(() => {
-        socket.off("error", onError);
-        socket.destroy();
-        resolve();
-      });
+  await writeSocketJsonLine(socket, message);
+  await new Promise<void>((resolve) => {
+    socket.end(() => {
+      socket.destroy();
+      resolve();
     });
   });
 }
