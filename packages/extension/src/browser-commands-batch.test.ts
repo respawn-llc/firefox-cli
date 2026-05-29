@@ -175,6 +175,55 @@ describe("browser batch command handling", () => {
     });
   });
 
+  it("keeps nested batch dispatcher errors inside the nested batch result", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.contentFailure = new Error("Cannot access tab");
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          steps: [
+            {
+              command: "batch",
+              params: { steps: [{ command: "snapshot", params: {} }] },
+            },
+          ],
+        },
+        "batch-nested-error",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        steps: [
+          {
+            index: 0,
+            command: "batch",
+            ok: true,
+            result: {
+              ok: false,
+              firstFailedIndex: 0,
+              steps: [
+                {
+                  index: 0,
+                  command: "snapshot",
+                  ok: false,
+                  error: { code: "SCRIPT_INJECTION_FAILED" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+  });
+
   it("applies remaining outer timeout to timeout-aware steps", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),

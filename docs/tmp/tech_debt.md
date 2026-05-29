@@ -54,7 +54,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Command behavior is duplicated across protocol, CLI, extension routing, batch execution, capability gating, help output, and timeout handling. These lists already differ and will drift further as commands are added.
   **Fix:** Extend protocol command metadata with command ownership, CLI aliases, batchability, target behavior, timeout/idle behavior, capability status, parser shape, and formatter category. Generate or consume dispatch/gating/batch allow-lists from that metadata, remove duplicated command lists, and add tests that every MVP command has parser coverage, extension handling, help visibility, batch policy, target policy, and capability output.
 
-- [ ] Split large god files along package ownership boundaries.
+- [x] Split large god files along package ownership boundaries.
   Source: direct observation from file-size audit.
   Evidence: `packages/cli/src/index.ts` is about 3k LoC, `packages/protocol/src/index.ts` about 2.2k LoC, `packages/extension/src/browser-commands.ts` about 1.4k LoC, and `packages/extension/src/content-snapshot.ts` about 1.3k LoC.
   **Problem:** Large files mix registry data, parsing, routing, formatting, validation, and feature implementations, making command changes high-risk.

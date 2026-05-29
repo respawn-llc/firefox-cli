@@ -1,0 +1,17 @@
+import { z } from "zod";
+
+export const pairApproveParamsSchema = z.object({}).strict();
+export const pairApproveResultSchema = z
+  .object({
+    hostId: z.string().min(1),
+    extensionId: z.string().min(1),
+    token: z.string().min(1),
+    generation: z.number().int().positive(),
+    approvedAt: z.string().min(1),
+  })
+  .strict();
+
+export const pairResetParamsSchema = z.object({}).strict();
+export const pairResetResultSchema = z.object({
+  ok: z.literal(true),
+});

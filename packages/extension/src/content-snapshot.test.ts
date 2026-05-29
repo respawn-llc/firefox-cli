@@ -969,6 +969,126 @@ describe("content snapshot", () => {
     expect(highlighted?.style.outline).toContain("#ff9500");
   });
 
+  it("captures facade-installed console logs in the same buffer cleared by content commands", () => {
+    const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    handleContentScriptRequest(
+      createRequest("console", { action: "clear" }, "console-clear"),
+      base,
+    );
+    captureConsoleLogWithoutStdout("facade-load-log");
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("console", { action: "list" }, "console-list"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        entries: [expect.objectContaining({ level: "log", text: "facade-load-log" })],
+      },
+    });
+
+    handleContentScriptRequest(
+      createRequest("console", { action: "clear" }, "console-clear-2"),
+      base,
+    );
+    expect(
+      handleContentScriptRequest(
+        createRequest("console", { action: "list" }, "console-list-2"),
+        base,
+      ),
+    ).toMatchObject({
+      ok: true,
+      result: {
+        entries: [],
+      },
+    });
+  });
+
+  it("installs log capture only from a cold facade import and keeps buffers across reloads", async () => {
+    const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
+    const global = globalThis as typeof globalThis & {
+      [stateKey]?: unknown;
+    };
+    const savedState = global[stateKey];
+    const savedLog = console.log;
+    const passthroughCalls: unknown[][] = [];
+
+    try {
+      delete global[stateKey];
+      console.log = (...args: unknown[]) => {
+        passthroughCalls.push(args);
+      };
+
+      const firstFacade = (await import(
+        /* @vite-ignore */ `./content-snapshot.js?cold=${Date.now()}-first`
+      )) as typeof import("./content-snapshot.js");
+      const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+      const base = {
+        document: window.document,
+        registry: new firstFacade.ElementRefRegistry<Element>(),
+        now: 1000,
+      };
+
+      firstFacade.handleContentScriptRequest(
+        createRequest("console", { action: "clear" }, "console-clear"),
+        base,
+      );
+      console.log("cold-facade-log");
+
+      expect(
+        firstFacade.handleContentScriptRequest(
+          createRequest("console", { action: "list" }, "console-list"),
+          base,
+        ),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          entries: [expect.objectContaining({ level: "log", text: "cold-facade-log" })],
+        },
+      });
+
+      const secondFacade = (await import(
+        /* @vite-ignore */ `./content-snapshot.js?cold=${Date.now()}-second`
+      )) as typeof import("./content-snapshot.js");
+      console.log("after-facade-reload");
+
+      const listed = secondFacade.handleContentScriptRequest(
+        createRequest("console", { action: "list" }, "console-list-after-reload"),
+        base,
+      ) as ResponseEnvelope<"console">;
+      const reloadedEntryCount =
+        listed.ok && listed.result.entries !== undefined
+          ? listed.result.entries.filter((entry) => entry.text === "after-facade-reload").length
+          : 0;
+      expect(listed).toMatchObject({
+        ok: true,
+        result: {
+          entries: [
+            expect.objectContaining({ text: "cold-facade-log" }),
+            expect.objectContaining({ text: "after-facade-reload" }),
+          ],
+        },
+      });
+      expect(reloadedEntryCount).toBe(1);
+      expect(passthroughCalls).toEqual([["cold-facade-log"], ["after-facade-reload"]]);
+    } finally {
+      console.log = savedLog;
+      if (savedState === undefined) {
+        delete global[stateKey];
+      } else {
+        global[stateKey] = savedState;
+      }
+    }
+  });
+
   it("returns an async protocol envelope for browser.tabs.sendMessage", async () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
