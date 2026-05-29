@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runProcess } from "./process-runner.js";
 import rootPackage from "../package.json" with { type: "json" };
 
 const apiKey = process.env.WEB_EXT_API_KEY ?? process.env.AMO_JWT_ISSUER;
@@ -62,13 +62,12 @@ async function runWebExtSign(): Promise<void> {
     "--no-input",
   ];
 
-  const child = spawn(webExtBinary, args, {
-    stdio: "inherit",
+  await runProcess(webExtBinary, args, {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+    timeoutMs: 10 * 60_000,
+    label: "web-ext sign",
+    redactArgValues: [apiKey ?? "", apiSecret ?? ""],
   });
-
-  const exitCode = await new Promise<number | null>((resolveExit) => child.on("exit", resolveExit));
-
-  if (exitCode !== 0) {
-    throw new Error(`web-ext sign failed with exit code ${exitCode ?? 1}.`);
-  }
 }

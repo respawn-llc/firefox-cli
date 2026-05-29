@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
 import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -15,6 +14,13 @@ import {
   approveExtensionWithMarionette,
   type MarionetteApprovalResult,
 } from "./marionette-client.js";
+import { parseDisposableFirefoxProcessIds } from "./e2e-firefox-cleanup.js";
+import {
+  raceWithProcessFailure,
+  runProcess,
+  startManagedProcess,
+  type ManagedProcess,
+} from "./process-runner.js";
 
 type CliRun = {
   readonly exitCode: number | null;
@@ -60,8 +66,7 @@ const homeDir = await createTempDir("firefox-cli-e2e-firefox-home");
 const profileDir = await createTempDir("firefox-cli-e2e-firefox-profile");
 const fixture = await startWorkflowFixtureServer();
 const env = e2eEnvironment(homeDir);
-const webExtOutput: string[] = [];
-let webExt: ChildProcess | undefined;
+let webExt: ManagedProcess | undefined;
 let lastDoctorStatus = "<not run>";
 let approvalResult: MarionetteApprovalResult | undefined;
 let failed = false;
@@ -114,16 +119,16 @@ try {
       ? ["--arg=--marionette", "--arg=--remote-allow-system-access", "--arg=--headless"]
       : []),
   ];
-  webExt = spawn(webExtBinary, launchArgs, {
+  webExt = startManagedProcess(webExtBinary, launchArgs, {
     env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  collectProcessOutput(webExt, webExtOutput);
-  webExt.on("exit", (code, signal) => {
-    webExtOutput.push(`web-ext exited code=${String(code)} signal=${String(signal)}`);
+    label: "web-ext disposable Firefox",
   });
 
-  await waitForDoctorStatus({ env, status: "not-approved", timeoutMs: 20_000 });
+  await raceWithProcessFailure(
+    webExt,
+    waitForDoctorStatus({ env, status: "not-approved", timeoutMs: 20_000 }),
+    "web-ext disposable Firefox",
+  );
   if (approvalMode === "marionette") {
     approvalResult = await approveExtensionWithMarionette(profileDir);
   } else {
@@ -139,15 +144,23 @@ try {
       ].join("\n"),
     );
   }
-  await waitForDoctorStatus({
-    env,
-    status: "connected",
-    timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
-  });
-  await waitForStableCliConnection({
-    env,
-    timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
-  });
+  await raceWithProcessFailure(
+    webExt,
+    waitForDoctorStatus({
+      env,
+      status: "connected",
+      timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
+    }),
+    "web-ext disposable Firefox",
+  );
+  await raceWithProcessFailure(
+    webExt,
+    waitForStableCliConnection({
+      env,
+      timeoutMs: approvalMode === "manual" ? manualApprovalTimeoutMs : 20_000,
+    }),
+    "web-ext disposable Firefox",
+  );
   console.error(`Disposable Firefox approval confirmed by doctor --json: ${lastDoctorStatus}`);
   if (approvalResult?.captureVisibleTabAvailableBeforeApproval === false) {
     console.error(
@@ -161,11 +174,11 @@ try {
   failed = true;
   throw error;
 } finally {
-  await stopProcess(webExt);
+  await webExt?.stop();
   await stopFirefoxProcessesForProfile(profileDir);
   await restoreFirefoxVisibleManifest?.();
   await new Promise<void>((resolveClose) => fixture.server.close(() => resolveClose()));
-  const output = webExtOutput.join("").trim();
+  const output = webExtOutput().trim();
   if (output.length > 0 && (failed || process.env.FIREFOX_CLI_E2E_DEBUG === "1")) {
     console.error(tail(output, 12_000));
   }
@@ -263,9 +276,7 @@ async function waitForDoctorStatus(options: {
       timeoutMs: options.timeoutMs,
       intervalMs: 250,
       timeoutMessage: () =>
-        `Timed out waiting for disposable Firefox ${options.status} status.\nLast doctor: ${lastDoctor}\n${webExtOutput
-          .join("")
-          .trim()}`,
+        `Timed out waiting for disposable Firefox ${options.status} status.\nLast doctor: ${lastDoctor}\n${webExtOutput()}`,
     },
   );
 }
@@ -300,9 +311,7 @@ async function waitForStableCliConnection(options: {
       timeoutMs: options.timeoutMs,
       intervalMs: 250,
       timeoutMessage: () =>
-        `Timed out waiting for stable disposable Firefox CLI connectivity.\nLast probe: ${lastProbe}\n${webExtOutput
-          .join("")
-          .trim()}`,
+        `Timed out waiting for stable disposable Firefox CLI connectivity.\nLast probe: ${lastProbe}\n${webExtOutput()}`,
     },
   );
 }
@@ -344,16 +353,13 @@ async function runCliJson<T>(args: readonly string[], env: NodeJS.ProcessEnv): P
 }
 
 async function runCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<CliRun> {
-  const child = spawn(binaryPath, args, {
+  const result = await runProcess(binaryPath, args, {
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    expectedExitCodes: [0, 1],
+    timeoutMs: 30_000,
+    label: `firefox-cli ${args.join(" ")}`,
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    collectOutput(child.stdout),
-    collectOutput(child.stderr),
-    waitForExit(child),
-  ]);
-  return { exitCode, stdout, stderr };
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 }
 
 function e2eEnvironment(homeDir: string): NodeJS.ProcessEnv {
@@ -394,52 +400,6 @@ async function findFirefoxBinary(): Promise<string> {
   throw new Error("Firefox binary was not found. Set FIREFOX_BINARY to run disposable E2E.");
 }
 
-function collectProcessOutput(child: ChildProcess, target: string[]): void {
-  child.stdout?.setEncoding("utf8");
-  child.stderr?.setEncoding("utf8");
-  child.stdout?.on("data", (chunk: string) => target.push(chunk));
-  child.stderr?.on("data", (chunk: string) => target.push(chunk));
-}
-
-function collectOutput(stream: NodeJS.ReadableStream): Promise<string> {
-  return new Promise((resolveOutput) => {
-    let output = "";
-    stream.setEncoding("utf8");
-    stream.on("data", (chunk: string) => {
-      output += chunk;
-    });
-    stream.on("end", () => {
-      resolveOutput(output);
-    });
-  });
-}
-
-function waitForExit(child: ChildProcess): Promise<number | null> {
-  return new Promise((resolveExit) => child.on("exit", resolveExit));
-}
-
-async function stopProcess(child: ChildProcess | undefined): Promise<void> {
-  if (child === undefined || child.exitCode !== null) {
-    return;
-  }
-
-  child.kill("SIGINT");
-  try {
-    await withTimeout(waitForExit(child), 5000, "web-ext did not exit after SIGINT.");
-    return;
-  } catch {
-    // Fall through to stronger signals for the disposable web-ext process.
-  }
-
-  child.kill("SIGTERM");
-  try {
-    await withTimeout(waitForExit(child), 3000, "web-ext did not exit after SIGTERM.");
-  } catch {
-    child.kill("SIGKILL");
-    await waitForExit(child);
-  }
-}
-
 async function stopFirefoxProcessesForProfile(profileDir: string): Promise<void> {
   const pids = await findDisposableFirefoxProcessIds(profileDir);
   for (const pid of pids) {
@@ -466,24 +426,16 @@ async function stopFirefoxProcessesForProfile(profileDir: string): Promise<void>
 }
 
 async function findDisposableFirefoxProcessIds(profileDir: string): Promise<number[]> {
-  const child = spawn("ps", ["-axo", "pid=,command="], {
-    stdio: ["ignore", "pipe", "pipe"],
+  const result = await runProcess("ps", ["-axo", "pid=,command="], {
+    timeoutMs: 5000,
+    maxOutputBytes: 512 * 1024,
+    label: "profile-scoped Firefox process scan",
   });
-  const [stdout] = await Promise.all([collectOutput(child.stdout), waitForExit(child)]);
-  return stdout
-    .split("\n")
-    .map((line) => line.trim().match(/^(\d+)\s+(.+)$/u))
-    .filter((match): match is RegExpMatchArray => match !== null)
-    .filter((match) => {
-      const command = match[2] ?? "";
-      return command.includes(profileDir) && isFirefoxExecutableCommand(command);
-    })
-    .map((match) => Number(match[1]))
-    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+  return parseDisposableFirefoxProcessIds(result.stdout, { profileDir });
 }
 
-function isFirefoxExecutableCommand(command: string): boolean {
-  return /(?:^|\/)(?:firefox|firefox-bin|firefox-esr)(?:\s|$)/iu.test(command);
+function webExtOutput(): string {
+  return webExt?.output() ?? "";
 }
 
 async function pollUntil<T>(
@@ -504,22 +456,6 @@ async function pollUntil<T>(
   }
 
   throw new Error(options.timeoutMessage());
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), ms);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
 }
 
 function sleep(ms: number): Promise<void> {

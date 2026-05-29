@@ -1,13 +1,13 @@
 import { cp, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
 import {
   FIREFOX_CLI_EXTENSION_ID,
   NATIVE_HOST_NAME,
   resolvePackagedBinary,
 } from "@firefox-cli/native-host";
 import { verifyPackageLayout } from "./package-check.js";
+import { runProcess } from "./process-runner.js";
 import rootPackage from "../package.json" with { type: "json" };
 
 const packageRoot = resolve("dist/package");
@@ -200,33 +200,18 @@ async function runNodeLauncher(
   } = {},
 ): Promise<LauncherResult> {
   const launcherPath = join(packageRoot, "bin/firefox-cli.js");
-  const child = spawn(process.execPath, [launcherPath, ...args], {
-    env: options.env,
-    stdio: "pipe",
+  const result = await runProcess(process.execPath, [launcherPath, ...args], {
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.expectedExitCodes === undefined
+      ? {}
+      : { expectedExitCodes: options.expectedExitCodes }),
+    timeoutMs: 30_000,
+    label: "node launcher",
   });
-  let stdout = "";
-  let stderr = "";
-
-  child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => {
-    stdout += chunk;
-  });
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk: string) => {
-    stderr += chunk;
-  });
-
-  const exitCode = await new Promise<number | null>((resolveExit) => child.on("exit", resolveExit));
-  const normalizedExitCode = exitCode ?? 1;
-  const expectedExitCodes = options.expectedExitCodes ?? [0];
-
-  if (!expectedExitCodes.includes(normalizedExitCode)) {
-    throw new Error(stderr.trim() || `launcher exited with ${normalizedExitCode}`);
-  }
 
   return {
-    exitCode: normalizedExitCode,
-    stdout,
-    stderr,
+    exitCode: result.exitCode ?? 1,
+    stdout: result.stdout,
+    stderr: result.stderr,
   };
 }

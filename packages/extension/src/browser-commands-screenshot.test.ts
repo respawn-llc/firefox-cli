@@ -173,7 +173,7 @@ describe("browser screenshot command handling", () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
     ]);
-    adapter.captureDelayMs = 10;
+    adapter.captureDelayMs = 100;
 
     const response = await handleBrowserRequest(
       createRequest(

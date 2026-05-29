@@ -78,7 +78,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Long-lived or noisy tabs can leak memory in content scripts and produce very large `console` / `errors` command payloads.
   **Fix:** Replace arrays with bounded ring buffers that track entry count and encoded byte budget, expose truncation metadata, and add cleanup semantics for `console clear` / `errors clear`. Add tests for high-volume logs and retained ordering.
 
-- [ ] Extract robust process runner helpers for scripts and E2E.
+- [x] Extract robust process runner helpers for scripts and E2E.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: release launcher runner waits only for `exit` at `scripts/release-check.ts:203-225`; disposable E2E runner delegates spawn handling locally at `scripts/e2e-disposable-firefox.ts:347-356`; process cleanup scans `ps` output for a profile substring at `scripts/e2e-disposable-firefox.ts:468-483`; phase E2E hardcodes a macOS native-host manifest path at `scripts/e2e-phase2.ts:20-32`.
   **Problem:** Spawn failures can hang or produce unclear failures, cleanup can match by brittle process text, and E2E setup is not fully platform-aware.
