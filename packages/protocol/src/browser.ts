@@ -446,6 +446,8 @@ export const consoleResultSchema = z
     action: z.enum(logActions),
     ok: z.literal(true),
     entries: z.array(consoleEntrySchema).optional(),
+    truncated: z.boolean().optional(),
+    droppedEntries: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type ConsoleResult = z.infer<typeof consoleResultSchema>;
@@ -456,6 +458,8 @@ export const errorsResultSchema = z
     action: z.enum(logActions),
     ok: z.literal(true),
     errors: z.array(consoleEntrySchema).optional(),
+    truncated: z.boolean().optional(),
+    droppedEntries: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type ErrorsResult = z.infer<typeof errorsResultSchema>;

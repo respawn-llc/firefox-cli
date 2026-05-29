@@ -1,13 +1,16 @@
 export const PRODUCT_NAME = "firefox-cli";
 export const NATIVE_HOST_NAME = "firefox_cli";
 export const FIREFOX_CLI_EXTENSION_ID = "firefox-cli@example.invalid";
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const PROTOCOL_MIN_VERSION = 1;
 export const PROTOCOL_MAX_VERSION = PROTOCOL_VERSION;
 export const MAX_EVAL_SCRIPT_BYTES = 100_000;
 export const MAX_EVAL_RESULT_BYTES = 900_000;
 export const MAX_SCREENSHOT_BYTES = 8_000_000;
 export const MAX_BATCH_RESULT_BYTES = 900_000;
+export const LOG_RESULT_METADATA_PROTOCOL_VERSION = 3;
+export const MAX_LOG_ENTRIES = 500;
+export const MAX_LOG_RESULT_BYTES = 128_000;
 export const MAX_UPLOAD_FILES = 20;
 export const MAX_UPLOAD_FILE_BYTES = 512_000;
 export const MAX_UPLOAD_TOTAL_BYTES = 640_000;

@@ -72,7 +72,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Unrelated tabs can affect `network list` and `wait --load networkidle`, causing flaky waits and incorrect results.
   **Fix:** Track request state by tab ID and URL, pass resolved target context into the adapter, filter network list and idle checks by target, and ignore extension/internal requests. Add tests for two tabs where background traffic in one tab does not block or pollute another tab.
 
-- [ ] Bound content-script console and error capture buffers.
+- [x] Bound content-script console and error capture buffers.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: append-only arrays are declared at `packages/extension/src/content-snapshot.ts:36-40`; console monkeypatch pushes entries at `packages/extension/src/content-snapshot.ts:525-545`; error listeners push entries at `packages/extension/src/content-snapshot.ts:557-574`.
   **Problem:** Long-lived or noisy tabs can leak memory in content scripts and produce very large `console` / `errors` command payloads.

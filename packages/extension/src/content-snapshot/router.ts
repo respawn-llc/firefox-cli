@@ -184,12 +184,18 @@ export function handleContentScriptRequest(
 
   if (request.command === "console") {
     const command = request as RequestEnvelope<"console">;
-    return createOkResponse(command, createConsoleResult(command.params.action));
+    return createOkResponse(
+      command,
+      createConsoleResult(command.params.action, command.protocolVersion),
+    );
   }
 
   if (request.command === "errors") {
     const command = request as RequestEnvelope<"errors">;
-    return createOkResponse(command, createErrorsResult(command.params.action));
+    return createOkResponse(
+      command,
+      createErrorsResult(command.params.action, command.protocolVersion),
+    );
   }
 
   if (request.command === "highlight") {

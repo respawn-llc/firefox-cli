@@ -1,5 +1,10 @@
 import { PassThrough } from "node:stream";
-import { createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
+import {
+  PROTOCOL_VERSION,
+  createOkResponse,
+  createRequest,
+  kernelCapabilities,
+} from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
@@ -27,7 +32,7 @@ describe("native host session", () => {
         productName: "firefox-cli",
         productVersion: "0.0.0",
         protocolMin: 1,
-        protocolMax: 2,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
       },
       "hello-initial",
@@ -50,7 +55,7 @@ describe("native host session", () => {
         productName: "firefox-cli",
         productVersion: "0.0.0",
         protocolMin: 1,
-        protocolMax: 2,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
         pairToken: token,
       },

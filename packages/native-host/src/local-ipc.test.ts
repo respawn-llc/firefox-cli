@@ -437,7 +437,7 @@ describe("local IPC", () => {
 
     expect(forwardedRequest).toMatchObject({
       id: request.id,
-      protocolVersion: 2,
+      protocolVersion: PROTOCOL_VERSION,
       command: "capabilities",
     });
     expect(response).toEqual({

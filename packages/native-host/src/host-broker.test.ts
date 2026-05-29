@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  PROTOCOL_VERSION,
   createProtocolSession,
   createOkResponse,
   createRequest,
@@ -453,7 +454,7 @@ describe("NativeHostBroker", () => {
     });
 
     expect(await broker.handleCliRequest("{")).toEqual({
-      protocolVersion: 2,
+      protocolVersion: PROTOCOL_VERSION,
       id: "invalid-request",
       ok: false,
       error: {

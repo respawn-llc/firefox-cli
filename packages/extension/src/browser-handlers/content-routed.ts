@@ -1,4 +1,5 @@
 import {
+  LOG_RESULT_METADATA_PROTOCOL_VERSION,
   createErrorResponse,
   createOkResponse,
   type ActionKind,
@@ -186,7 +187,24 @@ async function handleLogCommand(
   if (!logResponse.ok) {
     return createErrorResponse(command.id, logResponse.error, command.protocolVersion);
   }
-  return createOkResponse(command, logResponse.result as ConsoleResult | ErrorsResult);
+  return createOkResponse(
+    command,
+    logResultForProtocolVersion(
+      logResponse.result as ConsoleResult | ErrorsResult,
+      command.protocolVersion,
+    ),
+  );
+}
+
+function logResultForProtocolVersion<T extends ConsoleResult | ErrorsResult>(
+  result: T,
+  protocolVersion: number,
+): T {
+  if (protocolVersion >= LOG_RESULT_METADATA_PROTOCOL_VERSION) {
+    return result;
+  }
+  const { truncated: _truncated, droppedEntries: _droppedEntries, ...compatibleResult } = result;
+  return compatibleResult as T;
 }
 
 async function snapshotTextForDiff(

@@ -444,7 +444,11 @@ describe("request protocol compatibility", () => {
         },
       });
       expect(
-        parseBoundaryRequest("host-to-extension", request, { protocolVersion: 2 }),
+        parseBoundaryRequest(
+          "host-to-extension",
+          { ...request, protocolVersion: 2 },
+          { protocolVersion: 2 },
+        ),
       ).toMatchObject({
         ok: true,
       });
@@ -1508,6 +1512,8 @@ describe("parseBoundaryResponse", () => {
           action: "list",
           ok: true,
           entries: [{ level: "log", text: "ready", timestamp: 1 }],
+          truncated: true,
+          droppedEntries: 4,
         },
       },
       {
@@ -1516,6 +1522,8 @@ describe("parseBoundaryResponse", () => {
           action: "list",
           ok: true,
           errors: [{ level: "error", text: "boom", timestamp: 1 }],
+          truncated: false,
+          droppedEntries: 0,
         },
       },
       {

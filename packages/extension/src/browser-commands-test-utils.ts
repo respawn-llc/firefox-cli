@@ -251,7 +251,9 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       return createOkResponse(consoleRequest, {
         action: consoleRequest.params.action,
         ok: true,
-        entries: [],
+        ...(consoleRequest.params.action === "list"
+          ? { entries: [], truncated: true, droppedEntries: 2 }
+          : {}),
       });
     }
 
@@ -260,7 +262,9 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       return createOkResponse(errorsRequest, {
         action: errorsRequest.params.action,
         ok: true,
-        errors: [],
+        ...(errorsRequest.params.action === "list"
+          ? { errors: [], truncated: true, droppedEntries: 2 }
+          : {}),
       });
     }
 

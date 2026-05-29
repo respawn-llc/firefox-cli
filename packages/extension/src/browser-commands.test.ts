@@ -975,6 +975,107 @@ describe("browser command handling", () => {
     ]);
   });
 
+  it("strips log truncation metadata for protocol v1 and v2 browser responses", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    for (const protocolVersion of [1, 2]) {
+      const consoleResponse = await handleBrowserRequest(
+        createRequest(
+          "console",
+          { action: "list" },
+          `console-v${protocolVersion}`,
+          protocolVersion,
+        ),
+        adapter,
+      );
+      const errorsResponse = await handleBrowserRequest(
+        createRequest("errors", { action: "list" }, `errors-v${protocolVersion}`, protocolVersion),
+        adapter,
+      );
+      const batchResponse = await handleBrowserRequest(
+        createRequest(
+          "batch",
+          {
+            steps: [
+              { command: "console", params: { action: "list" } },
+              { command: "errors", params: { action: "list" } },
+            ],
+          },
+          `batch-v${protocolVersion}`,
+          protocolVersion,
+        ),
+        adapter,
+      );
+
+      expect(consoleResponse).toMatchObject({ ok: true, protocolVersion });
+      expect(errorsResponse).toMatchObject({ ok: true, protocolVersion });
+      expect(batchResponse).toMatchObject({ ok: true, protocolVersion });
+      if (consoleResponse.ok) {
+        expect("truncated" in consoleResponse.result).toBe(false);
+        expect("droppedEntries" in consoleResponse.result).toBe(false);
+      }
+      if (errorsResponse.ok) {
+        expect("truncated" in errorsResponse.result).toBe(false);
+        expect("droppedEntries" in errorsResponse.result).toBe(false);
+      }
+      if (batchResponse.ok) {
+        const batchResult = batchResponse.result as {
+          readonly steps: readonly {
+            readonly ok: boolean;
+            readonly result: Record<string, unknown>;
+          }[];
+        };
+        const stepResults = batchResult.steps.filter((step) => step.ok);
+        expect(stepResults).toHaveLength(2);
+        for (const step of stepResults) {
+          expect("truncated" in step.result).toBe(false);
+          expect("droppedEntries" in step.result).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("keeps log truncation metadata for protocol v3 browser responses", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const consoleResponse = await handleBrowserRequest(
+      createRequest("console", { action: "list" }, "console-v3"),
+      adapter,
+    );
+    const batchResponse = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          steps: [{ command: "console", params: { action: "list" } }],
+        },
+        "batch-v3",
+      ),
+      adapter,
+    );
+
+    expect(consoleResponse).toMatchObject({
+      ok: true,
+      protocolVersion: PROTOCOL_VERSION,
+      result: { truncated: true, droppedEntries: 2 },
+    });
+    expect(batchResponse).toMatchObject({
+      ok: true,
+      protocolVersion: PROTOCOL_VERSION,
+      result: {
+        steps: [
+          {
+            ok: true,
+            result: { truncated: true, droppedEntries: 2 },
+          },
+        ],
+      },
+    });
+  });
+
   it("rejects private-window interactions for every action command", async () => {
     for (const command of actionKinds) {
       const adapter = new FakeBrowserAdapter([

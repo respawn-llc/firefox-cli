@@ -1,4 +1,10 @@
-import { createRequest, parseBoundaryResponse, type ResponseEnvelope } from "@firefox-cli/protocol";
+import {
+  MAX_LOG_ENTRIES,
+  MAX_LOG_RESULT_BYTES,
+  createRequest,
+  parseBoundaryResponse,
+  type ResponseEnvelope,
+} from "@firefox-cli/protocol";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,6 +13,7 @@ import {
   handleContentScriptRequest,
 } from "./content-snapshot.js";
 import { createContentMessageHandler } from "./content.js";
+import { BoundedLogBuffer, createConsoleResult } from "./content-snapshot/log-capture.js";
 
 describe("content snapshot", () => {
   it("emits compact interactive refs with accessible names", () => {
@@ -1012,6 +1019,156 @@ describe("content snapshot", () => {
     });
   });
 
+  it("bounds console capture by retained entry count and preserves newest order", () => {
+    const buffer = new BoundedLogBuffer("entries");
+    for (let index = 0; index < MAX_LOG_ENTRIES + 3; index += 1) {
+      buffer.push({ level: "log", text: `bounded-log-${index}`, timestamp: index });
+    }
+    const snapshot = buffer.snapshot();
+
+    expect(snapshot.entries).toHaveLength(MAX_LOG_ENTRIES);
+    expect(snapshot.entries[0]?.text).toBe("bounded-log-3");
+    expect(snapshot.entries.at(-1)?.text).toBe(`bounded-log-${MAX_LOG_ENTRIES + 2}`);
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.droppedEntries).toBe(3);
+  });
+
+  it("bounds console capture by serialized result bytes and truncates oversized retained text", () => {
+    const buffer = new BoundedLogBuffer("entries");
+
+    buffer.push({ level: "log", text: "x".repeat(MAX_LOG_RESULT_BYTES * 2), timestamp: 1 });
+    const snapshot = buffer.snapshot();
+
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.text).toContain("[truncated]");
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.droppedEntries).toBe(0);
+    expect(buffer.encodedResultBytes()).toBeLessThanOrEqual(MAX_LOG_RESULT_BYTES);
+  });
+
+  it("resets console buffer entries and truncation metadata on clear", () => {
+    const buffer = new BoundedLogBuffer("entries");
+
+    for (let index = 0; index < MAX_LOG_ENTRIES + 1; index += 1) {
+      buffer.push({ level: "log", text: `clear-reset-${index}`, timestamp: index });
+    }
+    buffer.clear();
+
+    expect(buffer.snapshot()).toEqual({
+      entries: [],
+      truncated: false,
+      droppedEntries: 0,
+    });
+  });
+
+  it("bounds error capture by retained entry count", () => {
+    const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
+    for (let index = 0; index < MAX_LOG_ENTRIES + 2; index += 1) {
+      window.dispatchEvent(new window.ErrorEvent("error", { message: `bounded-error-${index}` }));
+    }
+
+    const response = handleContentScriptRequest(
+      createRequest("errors", { action: "list" }, "errors-list"),
+      base,
+    ) as ResponseEnvelope<"errors">;
+
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.errors).toHaveLength(MAX_LOG_ENTRIES);
+      expect(response.result.errors?.[0]?.text).toBe("bounded-error-2");
+      expect(response.result.errors?.at(-1)?.text).toBe(`bounded-error-${MAX_LOG_ENTRIES + 1}`);
+      expect(response.result.truncated).toBe(true);
+      expect(response.result.droppedEntries).toBe(2);
+    }
+  });
+
+  it("normalizes legacy symbol log state while preserving push, spread, and length clear compatibility", () => {
+    const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
+    const global = globalThis as typeof globalThis & {
+      [stateKey]?: unknown;
+    };
+    const savedState = global[stateKey];
+
+    try {
+      global[stateKey] = {
+        installed: true,
+        consoleEntries: [{ level: "log", text: "legacy-console", timestamp: 1 }],
+        errorEntries: [{ level: "error", text: "legacy-error", timestamp: 2 }],
+        capturedWindows: new WeakSet<Window>(),
+      };
+
+      expect(createConsoleResult("list")).toMatchObject({
+        entries: [{ level: "log", text: "legacy-console", timestamp: 1 }],
+      });
+
+      const normalized = (
+        global[stateKey] as {
+          readonly consoleEntries: {
+            push(entry: { level: string; text: string; timestamp: number }): number;
+            length: number;
+            [Symbol.iterator](): Iterator<{ level: string; text: string; timestamp: number }>;
+          };
+        }
+      ).consoleEntries;
+      normalized.push({ level: "log", text: "legacy-push", timestamp: 3 });
+      expect([...normalized].map((entry) => entry.text)).toEqual(["legacy-console", "legacy-push"]);
+      normalized.length = 0;
+      expect(createConsoleResult("list")).toMatchObject({
+        entries: [],
+        truncated: false,
+        droppedEntries: 0,
+      });
+    } finally {
+      if (savedState === undefined) {
+        delete global[stateKey];
+      } else {
+        global[stateKey] = savedState;
+      }
+    }
+  });
+
+  it("drops entries that cannot fit even after text truncation", () => {
+    const droppedOnlyBudget = encodedByteLength(
+      JSON.stringify({
+        action: "list",
+        ok: true,
+        entries: [],
+        truncated: true,
+        droppedEntries: 1,
+      }),
+    );
+    const suffixEntryBudget = encodedByteLength(
+      JSON.stringify({
+        action: "list",
+        ok: true,
+        entries: [{ level: "log", text: "... [truncated]", timestamp: 1 }],
+        truncated: true,
+        droppedEntries: 0,
+      }),
+    );
+    expect(suffixEntryBudget).toBeGreaterThan(droppedOnlyBudget);
+
+    const buffer = new BoundedLogBuffer("entries", {
+      maxEntries: 1,
+      maxResultBytes: droppedOnlyBudget,
+    });
+    buffer.push({ level: "log", text: "x".repeat(1000), timestamp: 1 });
+
+    expect(buffer.snapshot()).toEqual({
+      entries: [],
+      truncated: true,
+      droppedEntries: 1,
+    });
+    expect(buffer.encodedResultBytes()).toBeLessThanOrEqual(droppedOnlyBudget);
+  });
+
   it("installs log capture only from a cold facade import and keeps buffers across reloads", async () => {
     const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
     const global = globalThis as typeof globalThis & {
@@ -1120,4 +1277,8 @@ function captureConsoleLogWithoutStdout(...args: readonly unknown[]): void {
   } finally {
     process.stdout.write = originalWrite;
   }
+}
+
+function encodedByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
