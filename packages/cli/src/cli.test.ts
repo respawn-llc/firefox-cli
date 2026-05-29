@@ -5,9 +5,11 @@ import {
   MAX_UPLOAD_FILE_BYTES,
   MAX_UPLOAD_FILES,
   MAX_UPLOAD_TOTAL_BYTES,
+  commandSchemas,
   createErrorResponse,
   createOkResponse,
   gatedCapabilities,
+  getCliRoutes,
   kernelCapabilities,
   type CommandId,
   type RequestEnvelope,
@@ -15,9 +17,45 @@ import {
   type WaitResult,
 } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
-import { runCli, type CliDependencies } from "./index.js";
+import { cliRouteBindings, renderHelp, runCli, type CliDependencies } from "./index.js";
 
 describe("runCli", () => {
+  it("binds every protocol CLI route exactly once", () => {
+    const protocolRoutes = getCliRoutes();
+    const bindingEntries = Object.entries(cliRouteBindings);
+
+    expect(bindingEntries).toHaveLength(protocolRoutes.length);
+    expect(new Set(bindingEntries.map(([, binding]) => binding.route.id)).size).toBe(
+      protocolRoutes.length,
+    );
+
+    for (const route of protocolRoutes) {
+      const matches = bindingEntries.filter(([, binding]) => binding.route.id === route.id);
+      expect(matches, `Missing or duplicate CLI binding for ${route.id}`).toHaveLength(1);
+      expect(matches[0]?.[0]).toBe(route.id);
+      expect(matches[0]?.[1].help.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps CLI route bindings aligned with protocol metadata", () => {
+    for (const [routeId, binding] of Object.entries(cliRouteBindings)) {
+      const protocolRoute = getCliRoutes().find((route) => route.id === routeId);
+      expect(protocolRoute, `Unknown bound protocol route ${routeId}`).toBeDefined();
+      expect(binding.route).toEqual(protocolRoute);
+      expect(commandSchemas[binding.command].cliRoutes.some((route) => route.id === routeId)).toBe(
+        true,
+      );
+    }
+  });
+
+  it("renders protocol route help from CLI route bindings", () => {
+    const help = renderHelp();
+
+    for (const binding of Object.values(cliRouteBindings)) {
+      expect(help).toContain(`  ${binding.help}`);
+    }
+  });
+
   it("prints capabilities returned by the native host", async () => {
     const output = await runCli(["capabilities", "--json"], {
       ...baseDependencies(),
@@ -1783,6 +1821,46 @@ describe("runCli", () => {
     });
   });
 
+  it("builds matching direct and batch argv requests for shared protocol routes", async () => {
+    let directRequest: RequestEnvelope | undefined;
+    const directOutput = await runCli(["click", "#save", "--tab", "id:42", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        directRequest = request;
+        return {
+          protocolVersion: request.protocolVersion,
+          id: request.id,
+          ok: true,
+          result: { action: "click", ok: true, element: actionElement("button", "Save") },
+        };
+      },
+    });
+
+    let batchRequest: RequestEnvelope<"batch"> | undefined;
+    const batchOutput = await runCli(
+      ["batch", JSON.stringify([["click", "#save", "--tab", "id:42"]]), "--json"],
+      {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          batchRequest = request as RequestEnvelope<"batch">;
+          return {
+            protocolVersion: request.protocolVersion,
+            id: request.id,
+            ok: true,
+            result: { ok: true, elapsedMs: 1, steps: [] },
+          };
+        },
+      },
+    );
+
+    expect(directOutput.exitCode).toBe(0);
+    expect(batchOutput.exitCode).toBe(0);
+    expect(directRequest?.command).toBe("click");
+    expect(batchRequest?.params.steps).toEqual([
+      { command: directRequest?.command, params: directRequest?.params },
+    ]);
+  });
+
   it("rejects malformed screenshot arguments at the CLI boundary", async () => {
     await expect(runCli(["screenshot", "--timeout", "0"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
@@ -1809,6 +1887,62 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Only PNG and JPEG screenshots are supported.\n",
     });
+  });
+
+  it("rejects protocol schema overflow values before direct requests are sent", async () => {
+    const cases: readonly (readonly string[])[] = [
+      ["eval", "1 + 1", "--timeout", "600001"],
+      ["eval", "1 + 1", "--max-output", "900001"],
+      ["screenshot", "--format", "jpeg", "--screenshot-quality", "101"],
+      ["screenshot", "--timeout", "600001"],
+      ["screenshot", "--max-output", "8000001"],
+      ["snapshot", "--depth", "51"],
+      ["snapshot", "--max-output", "1000001"],
+      ["set", "viewport", "10001", "100"],
+      ["scroll", "down", "100001"],
+    ];
+
+    for (const argv of cases) {
+      let requestCalls = 0;
+      const output = await runCli(argv, {
+        ...baseDependencies(),
+        sendRequest: async () => {
+          requestCalls += 1;
+          throw new Error(`Unexpected request for invalid argv: ${argv.join(" ")}`);
+        },
+      });
+
+      expect(output.exitCode, argv.join(" ")).toBe(1);
+      expect(output.stderr, argv.join(" ")).toContain("Invalid ");
+      expect(requestCalls, argv.join(" ")).toBe(0);
+    }
+  });
+
+  it("rejects protocol schema overflow values before batch argv requests are sent", async () => {
+    const cases: readonly (readonly string[])[] = [
+      ["eval", "1 + 1", "--timeout", "600001"],
+      ["eval", "1 + 1", "--max-output", "900001"],
+      ["screenshot", "--format", "jpeg", "--screenshot-quality", "101"],
+      ["screenshot", "--timeout", "600001"],
+      ["snapshot", "--depth", "51"],
+      ["set", "viewport", "10001", "100"],
+      ["scroll", "down", "100001"],
+    ];
+
+    for (const step of cases) {
+      let requestCalls = 0;
+      const output = await runCli(["batch", JSON.stringify([step])], {
+        ...baseDependencies(),
+        sendRequest: async () => {
+          requestCalls += 1;
+          throw new Error(`Unexpected request for invalid batch step: ${step.join(" ")}`);
+        },
+      });
+
+      expect(output.exitCode, step.join(" ")).toBe(1);
+      expect(output.stderr, step.join(" ")).toContain("Invalid batch argv step 0: Invalid ");
+      expect(requestCalls, step.join(" ")).toBe(0);
+    }
   });
 
   it("runs element actions by selector and ref", async () => {
@@ -2398,6 +2532,26 @@ describe("runCli", () => {
   });
 
   it("rejects malformed interaction arguments at the CLI boundary", async () => {
+    await expect(runCli(["set"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing or invalid set command.\n",
+    });
+    await expect(runCli(["set", "foo"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing or invalid set command.\n",
+    });
+    await expect(runCli(["keyboard"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing or invalid keyboard command.\n",
+    });
+    await expect(runCli(["keyboard", "foo"], baseDependencies())).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing or invalid keyboard command.\n",
+    });
     await expect(runCli(["click"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
@@ -2432,6 +2586,23 @@ describe("runCli", () => {
       exitCode: 1,
       stdout: "",
       stderr: "Missing selector or ref.\n",
+    });
+  });
+
+  it("preserves command-specific usage errors for malformed batch argv subcommands", async () => {
+    await expect(
+      runCli(["batch", JSON.stringify([["set", "foo"]])], baseDependencies()),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid batch argv step 0: Missing or invalid set command.\n",
+    });
+    await expect(
+      runCli(["batch", JSON.stringify([["keyboard", "foo"]])], baseDependencies()),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid batch argv step 0: Missing or invalid keyboard command.\n",
     });
   });
 

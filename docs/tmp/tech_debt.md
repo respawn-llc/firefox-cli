@@ -48,7 +48,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
 
 ## Medium Priority
 
-- [ ] Consolidate command, parser, gating, batch, and timeout metadata into one source of truth.
+- [x] Consolidate command, parser, gating, batch, and timeout metadata into one source of truth.
   Source: direct observation with subagent corroboration.
   Evidence: CLI dispatch is a long hand-written chain at `packages/cli/src/index.ts:90-269`; batch CLI allow-list duplicates command names at `packages/cli/src/index.ts:1770-1819`; protocol command schemas live separately at `packages/protocol/src/index.ts:1567-1863`; gated capabilities live separately at `packages/protocol/src/index.ts:1927-1966`; protocol batch default-target logic covers only four commands at `packages/protocol/src/index.ts:2167-2195`; extension batch default-target and timeout logic has its own broader command lists at `packages/extension/src/browser-commands.ts:1042-1110`; network-idle uses `intervalMs` as `idleMs` at `packages/extension/src/browser-commands.ts:393-399`.
   **Problem:** Command behavior is duplicated across protocol, CLI, extension routing, batch execution, capability gating, help output, and timeout handling. These lists already differ and will drift further as commands are added.

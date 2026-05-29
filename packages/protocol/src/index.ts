@@ -382,7 +382,7 @@ export const refResolveResultSchema = z.object({
 });
 export type RefResolveResult = z.infer<typeof refResolveResultSchema>;
 
-export const getKindSchema = z.enum([
+export const getKinds = [
   "text",
   "html",
   "value",
@@ -392,7 +392,8 @@ export const getKindSchema = z.enum([
   "count",
   "box",
   "styles",
-]);
+] as const;
+export const getKindSchema = z.enum(getKinds);
 export type GetKind = z.infer<typeof getKindSchema>;
 
 export const getParamsSchema = z
@@ -518,7 +519,8 @@ export const getResultSchema = z.discriminatedUnion("kind", [
 ]);
 export type GetResult = z.infer<typeof getResultSchema>;
 
-export const isKindSchema = z.enum(["visible", "enabled", "checked"]);
+export const isKinds = ["visible", "enabled", "checked"] as const;
+export const isKindSchema = z.enum(isKinds);
 export type IsKind = z.infer<typeof isKindSchema>;
 
 export const isParamsSchema = z
@@ -559,7 +561,7 @@ export const isResultSchema = z
   .strict();
 export type IsResult = z.infer<typeof isResultSchema>;
 
-export const waitKindSchema = z.enum([
+export const waitKinds = [
   "ms",
   "element",
   "text",
@@ -567,16 +569,18 @@ export const waitKindSchema = z.enum([
   "function",
   "load-state",
   "download",
-]);
+] as const;
+export const waitKindSchema = z.enum(waitKinds);
 export type WaitKind = z.infer<typeof waitKindSchema>;
-export const waitStateSchema = z.enum([
+export const waitStates = [
   "visible",
   "hidden",
   "attached",
   "domcontentloaded",
   "complete",
   "networkidle",
-]);
+] as const;
+export const waitStateSchema = z.enum(waitStates);
 export type WaitState = z.infer<typeof waitStateSchema>;
 
 export const waitParamsSchema = z
@@ -772,7 +776,7 @@ export const waitResultSchema = z.discriminatedUnion("kind", [
 ]);
 export type WaitResult = z.infer<typeof waitResultSchema>;
 
-export const actionKindSchema = z.enum([
+export const actionKinds = [
   "click",
   "dblclick",
   "focus",
@@ -793,10 +797,12 @@ export const actionKindSchema = z.enum([
   "mouse",
   "keydown",
   "keyup",
-]);
+] as const;
+export const actionKindSchema = z.enum(actionKinds);
 export type ActionKind = z.infer<typeof actionKindSchema>;
 
-export const scrollDirectionSchema = z.enum(["up", "down", "left", "right"]);
+export const scrollDirections = ["up", "down", "left", "right"] as const;
+export const scrollDirectionSchema = z.enum(scrollDirections);
 export type ScrollDirection = z.infer<typeof scrollDirectionSchema>;
 
 const elementTargetRefinement = (
@@ -970,7 +976,8 @@ export const actionResultSchema = z.union([
 ]);
 export type ActionResult = z.infer<typeof actionResultSchema>;
 
-export const evalSourceSchema = z.enum(["argv", "stdin", "base64"]);
+export const evalSources = ["argv", "stdin", "base64"] as const;
+export const evalSourceSchema = z.enum(evalSources);
 export type EvalSource = z.infer<typeof evalSourceSchema>;
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
@@ -1029,7 +1036,8 @@ export const evalResultSchema = z
   .strict();
 export type EvalResult = z.infer<typeof evalResultSchema>;
 
-export const screenshotFormatSchema = z.enum(["png", "jpeg"]);
+export const screenshotFormats = ["png", "jpeg"] as const;
+export const screenshotFormatSchema = z.enum(screenshotFormats);
 export type ScreenshotFormat = z.infer<typeof screenshotFormatSchema>;
 
 export const screenshotParamsSchema = z
@@ -1198,7 +1206,7 @@ export const keyEventParamsSchema = z
   });
 export type KeyEventParams = z.infer<typeof keyEventParamsSchema>;
 
-export const findKindSchema = z.enum([
+export const findKinds = [
   "role",
   "text",
   "label",
@@ -1206,7 +1214,8 @@ export const findKindSchema = z.enum([
   "alt",
   "title",
   "testid",
-]);
+] as const;
+export const findKindSchema = z.enum(findKinds);
 export type FindKind = z.infer<typeof findKindSchema>;
 
 export const findParamsSchema = z
@@ -1266,16 +1275,17 @@ export const downloadResultSchema = z
   .strict();
 export type DownloadResult = z.infer<typeof downloadResultSchema>;
 
+export const dialogActions = ["status", "accept", "dismiss"] as const;
 export const dialogParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
-    action: z.enum(["status", "accept", "dismiss"]),
+    action: z.enum(dialogActions),
     promptText: z.string().optional(),
   })
   .strict();
 export const dialogResultSchema = z
   .object({
-    action: z.enum(["status", "accept", "dismiss"]),
+    action: z.enum(dialogActions),
     handled: z.boolean(),
     message: z.string().optional(),
     type: z.string().optional(),
@@ -1283,10 +1293,11 @@ export const dialogResultSchema = z
   .strict();
 export type DialogResult = z.infer<typeof dialogResultSchema>;
 
+export const clipboardActions = ["read", "write", "copy", "paste"] as const;
 export const clipboardParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
-    action: z.enum(["read", "write", "copy", "paste"]),
+    action: z.enum(clipboardActions),
     text: z.string().optional(),
     selector: z.string().min(1).optional(),
     ref: elementRefSchema.optional(),
@@ -1295,16 +1306,17 @@ export const clipboardParamsSchema = z
   .strict();
 export const clipboardResultSchema = z
   .object({
-    action: z.enum(["read", "write", "copy", "paste"]),
+    action: z.enum(clipboardActions),
     ok: z.literal(true),
     text: z.string().optional(),
   })
   .strict();
 export type ClipboardResult = z.infer<typeof clipboardResultSchema>;
 
+export const cookieActions = ["list", "get", "set", "remove"] as const;
 export const cookieParamsSchema = z
   .object({
-    action: z.enum(["list", "get", "set", "remove"]),
+    action: z.enum(cookieActions),
     url: z.string().min(1),
     name: z.string().min(1).optional(),
     value: z.string().optional(),
@@ -1322,7 +1334,7 @@ export const cookieSummarySchema = z
   .strict();
 export const cookieResultSchema = z
   .object({
-    action: z.enum(["list", "get", "set", "remove"]),
+    action: z.enum(cookieActions),
     ok: z.literal(true),
     cookies: z.array(cookieSummarySchema).optional(),
     cookie: cookieSummarySchema.nullable().optional(),
@@ -1330,19 +1342,21 @@ export const cookieResultSchema = z
   .strict();
 export type CookieResult = z.infer<typeof cookieResultSchema>;
 
+export const storageAreas = ["local", "session"] as const;
+export const storageActions = ["get", "set", "remove", "clear"] as const;
 export const storageParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
-    area: z.enum(["local", "session"]),
-    action: z.enum(["get", "set", "remove", "clear"]),
+    area: z.enum(storageAreas),
+    action: z.enum(storageActions),
     key: z.string().min(1).optional(),
     value: z.string().optional(),
   })
   .strict();
 export const storageResultSchema = z
   .object({
-    area: z.enum(["local", "session"]),
-    action: z.enum(["get", "set", "remove", "clear"]),
+    area: z.enum(storageAreas),
+    action: z.enum(storageActions),
     ok: z.literal(true),
     value: z.string().nullable().optional(),
     entries: z.record(z.string(), z.string()).optional(),
@@ -1350,9 +1364,10 @@ export const storageResultSchema = z
   .strict();
 export type StorageResult = z.infer<typeof storageResultSchema>;
 
+export const networkActions = ["list", "clear"] as const;
 export const networkParamsSchema = z
   .object({
-    action: z.enum(["list", "clear"]),
+    action: z.enum(networkActions),
     urlGlob: z.string().min(1).optional(),
   })
   .strict();
@@ -1367,17 +1382,18 @@ export const networkRequestSummarySchema = z
   .strict();
 export const networkResultSchema = z
   .object({
-    action: z.enum(["list", "clear"]),
+    action: z.enum(networkActions),
     ok: z.literal(true),
     requests: z.array(networkRequestSummarySchema).optional(),
   })
   .strict();
 export type NetworkResult = z.infer<typeof networkResultSchema>;
 
+export const logActions = ["list", "clear"] as const;
 export const consoleParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
-    action: z.enum(["list", "clear"]),
+    action: z.enum(logActions),
   })
   .strict();
 export const consoleEntrySchema = z
@@ -1389,7 +1405,7 @@ export const consoleEntrySchema = z
   .strict();
 export const consoleResultSchema = z
   .object({
-    action: z.enum(["list", "clear"]),
+    action: z.enum(logActions),
     ok: z.literal(true),
     entries: z.array(consoleEntrySchema).optional(),
   })
@@ -1399,7 +1415,7 @@ export type ConsoleResult = z.infer<typeof consoleResultSchema>;
 export const errorsParamsSchema = consoleParamsSchema;
 export const errorsResultSchema = z
   .object({
-    action: z.enum(["list", "clear"]),
+    action: z.enum(logActions),
     ok: z.literal(true),
     errors: z.array(consoleEntrySchema).optional(),
   })
@@ -1440,17 +1456,18 @@ export const setViewportResultSchema = z
   .strict();
 export type SetViewportResult = z.infer<typeof setViewportResultSchema>;
 
+export const diffKinds = ["url", "title", "snapshot"] as const;
 export const diffParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),
-    kind: z.enum(["url", "title", "snapshot"]),
+    kind: z.enum(diffKinds),
     expected: z.string(),
     selector: z.string().min(1).optional(),
   })
   .strict();
 export const diffResultSchema = z
   .object({
-    kind: z.enum(["url", "title", "snapshot"]),
+    kind: z.enum(diffKinds),
     matches: z.boolean(),
     expected: z.string(),
     actual: z.string(),
@@ -1480,14 +1497,39 @@ export const screenshotResultSchema = z
   .strict();
 export type ScreenshotResult = z.infer<typeof screenshotResultSchema>;
 
-const nonBatchableCommands = new Set([
-  "hello",
-  "capabilities",
-  "noop",
-  "batch",
-  "pair.approve",
-  "pair.reset",
-]);
+export type CommandOwner = "native-host" | "extension";
+export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
+export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
+export type CommandTimeoutPolicy = "none" | "command" | "batch";
+
+export type CliRouteMetadata = {
+  readonly id: string;
+  readonly path: readonly [string, ...string[]];
+  readonly batch: boolean;
+};
+
+type CommandBatchMetadata = {
+  readonly allowed: boolean;
+  readonly protocolDefaultTarget?: boolean;
+  readonly extensionDefaultTarget?: boolean;
+  readonly timeoutRebase?: boolean;
+};
+
+type CommandSchemaMetadata = {
+  readonly owner: CommandOwner;
+  readonly target: CommandTargetPolicy;
+  readonly content: CommandContentPolicy;
+  readonly action: boolean;
+  readonly timeout: CommandTimeoutPolicy;
+  readonly batch: CommandBatchMetadata;
+  readonly cliRoutes: readonly CliRouteMetadata[];
+};
+
+type CommandSchemaEntry = CommandSchemaMetadata & {
+  readonly params: z.ZodType;
+  readonly result: z.ZodType;
+  readonly status: CapabilityStatus;
+};
 
 export const batchStepSchema = z
   .object({
@@ -1684,307 +1726,719 @@ export const commandSchemas = {
     params: helloParamsSchema,
     result: helloResultSchema,
     status: "mvp",
+    owner: "native-host",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [],
   },
   capabilities: {
     params: capabilitiesParamsSchema,
     result: capabilitiesResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [{ id: "capabilities", path: ["capabilities"], batch: false }],
   },
   noop: {
     params: noOpParamsSchema,
     result: noOpResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [],
   },
   "tabs.list": {
     params: tabsListParamsSchema,
     result: tabsListResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "tab.list", path: ["tab"], batch: true }],
   },
   "tab.new": {
     params: tabNewParamsSchema,
     result: tabNewResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "tab.new", path: ["tab", "new"], batch: true }],
   },
   "tab.select": {
     params: tabTargetParamsSchema,
     result: tabNewResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "required",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "tab.select", path: ["tab", "select"], batch: true }],
   },
   "tab.close": {
     params: tabTargetParamsSchema,
     result: tabCloseResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "required",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "tab.close", path: ["tab", "close"], batch: true }],
   },
   "windows.list": {
     params: windowsListParamsSchema,
     result: windowsListResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "window.list", path: ["window"], batch: true }],
   },
   "window.new": {
     params: windowNewParamsSchema,
     result: windowNewResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "window.new", path: ["window", "new"], batch: true }],
   },
   "window.select": {
     params: windowTargetParamsSchema,
     result: windowSelectResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "required",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "window.select", path: ["window", "select"], batch: true }],
   },
   "window.close": {
     params: windowTargetParamsSchema,
     result: windowCloseResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "required",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "window.close", path: ["window", "close"], batch: true }],
   },
   open: {
     params: openParamsSchema,
     result: navigationResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "open", path: ["open"], batch: true }],
   },
   back: {
     params: navigationParamsSchema,
     result: navigationResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "back", path: ["back"], batch: true }],
   },
   forward: {
     params: navigationParamsSchema,
     result: navigationResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "forward", path: ["forward"], batch: true }],
   },
   reload: {
     params: navigationParamsSchema,
     result: navigationResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "reload", path: ["reload"], batch: true }],
   },
   snapshot: {
     params: snapshotParamsSchema,
     result: snapshotResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "snapshot", path: ["snapshot"], batch: true }],
   },
   "ref.resolve": {
     params: refResolveParamsSchema,
     result: refResolveResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "ref", path: ["ref"], batch: true }],
   },
   get: {
     params: getParamsSchema,
     result: getResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "mixed",
+    content: "mixed",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "get", path: ["get"], batch: true }],
   },
   is: {
     params: isParamsSchema,
     result: isResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "is", path: ["is"], batch: true }],
   },
   wait: {
     params: waitParamsSchema,
     result: waitResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "mixed",
+    content: "mixed",
+    action: false,
+    timeout: "command",
+    batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
+    cliRoutes: [{ id: "wait", path: ["wait"], batch: true }],
   },
   eval: {
     params: evalParamsSchema,
     result: evalResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "command",
+    batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
+    cliRoutes: [{ id: "eval", path: ["eval"], batch: true }],
   },
   screenshot: {
     params: screenshotParamsSchema,
     result: screenshotResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "command",
+    batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
+    cliRoutes: [{ id: "screenshot", path: ["screenshot"], batch: true }],
   },
   drag: {
     params: dragParamsSchema,
     result: actionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "drag", path: ["drag"], batch: true }],
   },
   upload: {
     params: uploadParamsSchema,
     result: actionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "upload", path: ["upload"], batch: true }],
   },
   mouse: {
     params: mouseParamsSchema,
     result: actionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "mouse", path: ["mouse"], batch: true }],
   },
   keydown: {
     params: keyEventParamsSchema,
     result: actionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "keydown", path: ["keydown"], batch: true }],
   },
   keyup: {
     params: keyEventParamsSchema,
     result: actionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "keyup", path: ["keyup"], batch: true }],
   },
   find: {
     params: findParamsSchema,
     result: findResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "find", path: ["find"], batch: true }],
   },
   frame: {
     params: frameParamsSchema,
     result: frameResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "frame", path: ["frame"], batch: true }],
   },
   download: {
     params: downloadParamsSchema,
     result: downloadResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "download", path: ["download"], batch: true }],
   },
   dialog: {
     params: dialogParamsSchema,
     result: dialogResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "dialog", path: ["dialog"], batch: true }],
   },
   clipboard: {
     params: clipboardParamsSchema,
     result: clipboardResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "mixed",
+    content: "mixed",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "clipboard", path: ["clipboard"], batch: true }],
   },
   cookies: {
     params: cookieParamsSchema,
     result: cookieResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "cookies", path: ["cookies"], batch: true }],
   },
   storage: {
     params: storageParamsSchema,
     result: storageResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "storage", path: ["storage"], batch: true }],
   },
   network: {
     params: networkParamsSchema,
     result: networkResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "network", path: ["network"], batch: true }],
   },
   console: {
     params: consoleParamsSchema,
     result: consoleResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "console", path: ["console"], batch: true }],
   },
   errors: {
     params: errorsParamsSchema,
     result: errorsResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "errors", path: ["errors"], batch: true }],
   },
   highlight: {
     params: highlightParamsSchema,
     result: highlightResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "always",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "highlight", path: ["highlight"], batch: true }],
   },
   pdf: {
     params: pdfParamsSchema,
     result: pdfResultSchema,
     status: "unsupported",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true },
+    cliRoutes: [{ id: "pdf", path: ["pdf"], batch: true }],
   },
   "set.viewport": {
     params: setViewportParamsSchema,
     result: setViewportResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "set.viewport", path: ["set", "viewport"], batch: true }],
   },
   diff: {
     params: diffParamsSchema,
     result: diffResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "mixed",
+    content: "mixed",
+    action: false,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "diff", path: ["diff"], batch: true }],
   },
   batch: {
     params: batchParamsSchema,
     result: batchResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "never",
+    action: false,
+    timeout: "batch",
+    batch: { allowed: false },
+    cliRoutes: [{ id: "batch", path: ["batch"], batch: false }],
   },
   click: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("click"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "click", path: ["click"], batch: true }],
   },
   dblclick: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("dblclick"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "dblclick", path: ["dblclick"], batch: true }],
   },
   focus: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("focus"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "focus", path: ["focus"], batch: true }],
   },
   hover: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("hover"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "hover", path: ["hover"], batch: true }],
   },
   fill: {
     params: textActionParamsSchema,
     result: textActionResultSchemaFor("fill"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "fill", path: ["fill"], batch: true }],
   },
   type: {
     params: textActionParamsSchema,
     result: textActionResultSchemaFor("type"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "type", path: ["type"], batch: true }],
   },
   press: {
     params: pressParamsSchema,
     result: elementActionResultSchemaFor("press"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "press", path: ["press"], batch: true }],
   },
   "keyboard.type": {
     params: keyboardTextActionParamsSchema,
     result: textActionResultSchemaFor("keyboard.type"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "keyboard.type", path: ["keyboard", "type"], batch: true }],
   },
   "keyboard.inserttext": {
     params: keyboardTextActionParamsSchema,
     result: textActionResultSchemaFor("keyboard.inserttext"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true }],
   },
   check: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("check"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "check", path: ["check"], batch: true }],
   },
   uncheck: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("uncheck"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "uncheck", path: ["uncheck"], batch: true }],
   },
   select: {
     params: selectParamsSchema,
     result: selectActionResultSchema,
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "select", path: ["select"], batch: true }],
   },
   scroll: {
     params: scrollParamsSchema,
     result: scrollActionResultSchemaFor("scroll"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "scroll", path: ["scroll"], batch: true }],
   },
   scrollintoview: {
     params: elementActionParamsSchema,
     result: elementActionResultSchemaFor("scrollintoview"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true }],
   },
   swipe: {
     params: scrollParamsSchema,
     result: scrollActionResultSchemaFor("swipe"),
     status: "mvp",
+    owner: "extension",
+    target: "optional",
+    content: "action",
+    action: true,
+    timeout: "none",
+    batch: { allowed: true, extensionDefaultTarget: true },
+    cliRoutes: [{ id: "swipe", path: ["swipe"], batch: true }],
   },
   "pair.approve": {
     params: pairApproveParamsSchema,
     result: pairApproveResultSchema,
     status: "mvp",
+    owner: "native-host",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [],
   },
   "pair.reset": {
     params: pairResetParamsSchema,
     result: pairResetResultSchema,
     status: "mvp",
+    owner: "native-host",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [],
   },
-} as const satisfies Record<
-  string,
-  {
-    readonly params: z.ZodType;
-    readonly result: z.ZodType;
-    readonly status: CapabilityStatus;
-  }
->;
+} as const satisfies Record<string, CommandSchemaEntry>;
 
 export type CommandId = keyof typeof commandSchemas;
+
+type CommandsWithContentPolicy<P extends CommandContentPolicy> = {
+  readonly [C in CommandId]: (typeof commandSchemas)[C]["content"] extends P ? C : never;
+}[CommandId];
+
+export type ContentCommandId = CommandsWithContentPolicy<"always" | "mixed" | "action">;
 
 export type RequestEnvelope<C extends CommandId = CommandId> = {
   readonly protocolVersion: typeof PROTOCOL_VERSION;
@@ -2275,15 +2729,61 @@ function isCommandId(command: string): command is CommandId {
   return Object.hasOwn(commandSchemas, command);
 }
 
+export function getCommandCliRoutes(command: CommandId): readonly CliRouteMetadata[] {
+  return commandSchemas[command].cliRoutes;
+}
+
+export function getCliRoutes(): readonly CliRouteMetadata[] {
+  return Object.values(commandSchemas).flatMap(
+    (schema): readonly CliRouteMetadata[] => schema.cliRoutes,
+  );
+}
+
 export function isBatchableCommandId(command: string): command is CommandId {
-  return isCommandId(command) && !nonBatchableCommands.has(command);
+  return isCommandId(command) && commandSchemas[command].batch.allowed;
+}
+
+export function commandAcceptsProtocolBatchDefaultTarget(command: string): command is CommandId {
+  if (!isCommandId(command)) {
+    return false;
+  }
+  const batch: CommandBatchMetadata = commandSchemas[command].batch;
+  return batch.protocolDefaultTarget === true;
+}
+
+export function commandAcceptsExtensionBatchDefaultTarget(command: string): command is CommandId {
+  if (!isCommandId(command)) {
+    return false;
+  }
+  const batch: CommandBatchMetadata = commandSchemas[command].batch;
+  return batch.extensionDefaultTarget === true;
+}
+
+export function commandAcceptsBatchTimeout(command: string): command is CommandId {
+  if (!isCommandId(command)) {
+    return false;
+  }
+  const batch: CommandBatchMetadata = commandSchemas[command].batch;
+  return batch.timeoutRebase === true;
+}
+
+export function isActionCommand(command: string): command is ActionKind {
+  return isCommandId(command) && commandSchemas[command].action;
+}
+
+export function isContentCommand(command: string): command is ContentCommandId {
+  if (!isCommandId(command)) {
+    return false;
+  }
+  const content = commandSchemas[command].content;
+  return content === "always" || content === "mixed" || content === "action";
 }
 
 function batchStepParamsWithDefaultTarget(
   command: CommandId,
   params: unknown,
 ): unknown | undefined {
-  if (!batchCommandAcceptsRequiredDefaultTarget(command) || !isRecord(params)) {
+  if (!commandAcceptsProtocolBatchDefaultTarget(command) || !isRecord(params)) {
     return undefined;
   }
 
@@ -2298,15 +2798,6 @@ function batchStepParamsWithDefaultTarget(
       tab: { kind: "active" },
     },
   };
-}
-
-function batchCommandAcceptsRequiredDefaultTarget(command: CommandId): boolean {
-  return (
-    command === "tab.select" ||
-    command === "tab.close" ||
-    command === "window.select" ||
-    command === "window.close"
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

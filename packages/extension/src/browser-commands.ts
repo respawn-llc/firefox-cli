@@ -19,6 +19,7 @@ import {
   type ActionResult,
   type ActionKind,
   type CommandId,
+  type ContentCommandId,
   type EvalResult,
   type GetResult,
   type IsResult,
@@ -35,9 +36,11 @@ import {
   type TargetSelector,
   type WaitResult,
   type WindowSummary,
+  commandAcceptsBatchTimeout,
+  commandAcceptsExtensionBatchDefaultTarget,
+  isActionCommand,
   parseBoundaryResponse,
 } from "@firefox-cli/protocol";
-import { isActionCommand } from "./action-commands.js";
 import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
@@ -739,44 +742,7 @@ async function handleBrowserRequestOrThrow(
   });
 }
 
-async function sendContentCommand<
-  C extends Extract<
-    CommandId,
-    | "snapshot"
-    | "ref.resolve"
-    | "get"
-    | "is"
-    | "wait"
-    | "find"
-    | "frame"
-    | "dialog"
-    | "clipboard"
-    | "storage"
-    | "console"
-    | "errors"
-    | "highlight"
-    | "click"
-    | "dblclick"
-    | "focus"
-    | "hover"
-    | "fill"
-    | "type"
-    | "press"
-    | "keyboard.type"
-    | "keyboard.inserttext"
-    | "check"
-    | "uncheck"
-    | "select"
-    | "scroll"
-    | "scrollintoview"
-    | "swipe"
-    | "drag"
-    | "upload"
-    | "mouse"
-    | "keydown"
-    | "keyup"
-  >,
->(
+async function sendContentCommand<C extends ContentCommandId>(
   adapter: BackgroundBrowserAdapter,
   tabId: number,
   command: RequestEnvelope<C>,
@@ -1051,7 +1017,7 @@ function applyBatchStepDefaults(
 
   return {
     ...rawParams,
-    ...(acceptsBatchDefaultTarget(command) && rawParams.target === undefined
+    ...(commandAcceptsExtensionBatchDefaultTarget(command) && rawParams.target === undefined
       ? { target: defaultTarget }
       : {}),
     ...timeoutOverride(command, rawParams.timeoutMs, remainingMs),
@@ -1063,50 +1029,13 @@ function timeoutOverride(
   existingTimeout: unknown,
   remainingMs: number | undefined,
 ): { readonly timeoutMs?: number } {
-  if (remainingMs === undefined || !acceptsBatchTimeout(command)) {
+  if (remainingMs === undefined || !commandAcceptsBatchTimeout(command)) {
     return {};
   }
 
   const boundedTimeout =
     typeof existingTimeout === "number" ? Math.min(existingTimeout, remainingMs) : remainingMs;
   return { timeoutMs: Math.max(1, Math.floor(boundedTimeout)) };
-}
-
-function acceptsBatchDefaultTarget(command: string): boolean {
-  return (
-    command === "tabs.list" ||
-    command === "tab.new" ||
-    command === "tab.select" ||
-    command === "tab.close" ||
-    command === "window.select" ||
-    command === "window.close" ||
-    command === "open" ||
-    command === "back" ||
-    command === "forward" ||
-    command === "reload" ||
-    command === "snapshot" ||
-    command === "ref.resolve" ||
-    command === "get" ||
-    command === "is" ||
-    command === "wait" ||
-    command === "eval" ||
-    command === "screenshot" ||
-    command === "find" ||
-    command === "frame" ||
-    command === "dialog" ||
-    command === "clipboard" ||
-    command === "storage" ||
-    command === "console" ||
-    command === "errors" ||
-    command === "highlight" ||
-    command === "set.viewport" ||
-    command === "diff" ||
-    isActionCommand(command)
-  );
-}
-
-function acceptsBatchTimeout(command: string): boolean {
-  return command === "wait" || command === "eval" || command === "screenshot";
 }
 
 function remainingBatchTime(startedAt: number, timeoutMs: number | undefined): number | undefined {

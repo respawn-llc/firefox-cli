@@ -3,13 +3,24 @@ import {
   MAX_UPLOAD_FILE_BYTES,
   MAX_UPLOAD_TOTAL_BYTES,
   PROTOCOL_VERSION,
+  actionKinds,
+  commandAcceptsBatchTimeout,
+  commandAcceptsExtensionBatchDefaultTarget,
+  commandAcceptsProtocolBatchDefaultTarget,
+  commandSchemas,
   createOkResponse,
   createRequest,
   gatedCapabilities,
+  getCliRoutes,
+  getCommandCliRoutes,
+  isActionCommand,
+  isBatchableCommandId,
+  isContentCommand,
   kernelCapabilities,
   parseBoundaryRequest,
   parseBoundaryResponse,
   type Boundary,
+  type CliRouteMetadata,
   type CommandId,
   type ComponentIdentity,
   type RequestEnvelope,
@@ -34,6 +45,216 @@ const cliIdentity: ComponentIdentity = {
 function uploadData(bytes: number): string {
   return Buffer.alloc(bytes).toString("base64");
 }
+
+function commandIds(): CommandId[] {
+  return Object.keys(commandSchemas) as CommandId[];
+}
+
+function sorted(values: readonly string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliRouteMetadata[]>> = {
+  capabilities: [{ id: "capabilities", path: ["capabilities"], batch: false }],
+  "tabs.list": [{ id: "tab.list", path: ["tab"], batch: true }],
+  "tab.new": [{ id: "tab.new", path: ["tab", "new"], batch: true }],
+  "tab.select": [{ id: "tab.select", path: ["tab", "select"], batch: true }],
+  "tab.close": [{ id: "tab.close", path: ["tab", "close"], batch: true }],
+  "windows.list": [{ id: "window.list", path: ["window"], batch: true }],
+  "window.new": [{ id: "window.new", path: ["window", "new"], batch: true }],
+  "window.select": [{ id: "window.select", path: ["window", "select"], batch: true }],
+  "window.close": [{ id: "window.close", path: ["window", "close"], batch: true }],
+  open: [{ id: "open", path: ["open"], batch: true }],
+  back: [{ id: "back", path: ["back"], batch: true }],
+  forward: [{ id: "forward", path: ["forward"], batch: true }],
+  reload: [{ id: "reload", path: ["reload"], batch: true }],
+  snapshot: [{ id: "snapshot", path: ["snapshot"], batch: true }],
+  "ref.resolve": [{ id: "ref", path: ["ref"], batch: true }],
+  get: [{ id: "get", path: ["get"], batch: true }],
+  is: [{ id: "is", path: ["is"], batch: true }],
+  wait: [{ id: "wait", path: ["wait"], batch: true }],
+  eval: [{ id: "eval", path: ["eval"], batch: true }],
+  screenshot: [{ id: "screenshot", path: ["screenshot"], batch: true }],
+  drag: [{ id: "drag", path: ["drag"], batch: true }],
+  upload: [{ id: "upload", path: ["upload"], batch: true }],
+  mouse: [{ id: "mouse", path: ["mouse"], batch: true }],
+  keydown: [{ id: "keydown", path: ["keydown"], batch: true }],
+  keyup: [{ id: "keyup", path: ["keyup"], batch: true }],
+  find: [{ id: "find", path: ["find"], batch: true }],
+  frame: [{ id: "frame", path: ["frame"], batch: true }],
+  download: [{ id: "download", path: ["download"], batch: true }],
+  dialog: [{ id: "dialog", path: ["dialog"], batch: true }],
+  clipboard: [{ id: "clipboard", path: ["clipboard"], batch: true }],
+  cookies: [{ id: "cookies", path: ["cookies"], batch: true }],
+  storage: [{ id: "storage", path: ["storage"], batch: true }],
+  network: [{ id: "network", path: ["network"], batch: true }],
+  console: [{ id: "console", path: ["console"], batch: true }],
+  errors: [{ id: "errors", path: ["errors"], batch: true }],
+  highlight: [{ id: "highlight", path: ["highlight"], batch: true }],
+  pdf: [{ id: "pdf", path: ["pdf"], batch: true }],
+  "set.viewport": [{ id: "set.viewport", path: ["set", "viewport"], batch: true }],
+  diff: [{ id: "diff", path: ["diff"], batch: true }],
+  batch: [{ id: "batch", path: ["batch"], batch: false }],
+  click: [{ id: "click", path: ["click"], batch: true }],
+  dblclick: [{ id: "dblclick", path: ["dblclick"], batch: true }],
+  focus: [{ id: "focus", path: ["focus"], batch: true }],
+  hover: [{ id: "hover", path: ["hover"], batch: true }],
+  fill: [{ id: "fill", path: ["fill"], batch: true }],
+  type: [{ id: "type", path: ["type"], batch: true }],
+  press: [{ id: "press", path: ["press"], batch: true }],
+  "keyboard.type": [{ id: "keyboard.type", path: ["keyboard", "type"], batch: true }],
+  "keyboard.inserttext": [
+    { id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true },
+  ],
+  check: [{ id: "check", path: ["check"], batch: true }],
+  uncheck: [{ id: "uncheck", path: ["uncheck"], batch: true }],
+  select: [{ id: "select", path: ["select"], batch: true }],
+  scroll: [{ id: "scroll", path: ["scroll"], batch: true }],
+  scrollintoview: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true }],
+  swipe: [{ id: "swipe", path: ["swipe"], batch: true }],
+} as const;
+
+describe("protocol command metadata", () => {
+  it("uses unique CLI route ids and paths", () => {
+    const routes = getCliRoutes();
+    const expectedRoutes = commandIds().flatMap(
+      (command) => expectedCliRoutesByCommand[command] ?? [],
+    );
+    const routeIds = routes.map((route) => route.id);
+    const routePaths = routes.map((route) => route.path.join("\0"));
+
+    for (const command of commandIds()) {
+      expect(getCommandCliRoutes(command)).toEqual(expectedCliRoutesByCommand[command] ?? []);
+    }
+    expect(routes).toEqual(expectedRoutes);
+    expect(new Set(routeIds).size).toBe(routeIds.length);
+    expect(new Set(routePaths).size).toBe(routePaths.length);
+    expect(routes.every((route) => route.path.length > 0)).toBe(true);
+    expect(routes.every((route) => route.path.every((segment) => segment.length > 0))).toBe(true);
+  });
+
+  it("includes all command statuses and gated capabilities in kernel capabilities", () => {
+    for (const command of commandIds()) {
+      expect(kernelCapabilities).toContainEqual({
+        command,
+        status: commandSchemas[command].status,
+      });
+    }
+
+    for (const capability of gatedCapabilities) {
+      expect(kernelCapabilities).toContainEqual({
+        command: capability.command,
+        status: capability.status,
+        reason: capability.reason,
+      });
+    }
+  });
+
+  it("uses metadata for batchability", () => {
+    for (const command of commandIds()) {
+      expect(isBatchableCommandId(command)).toBe(commandSchemas[command].batch.allowed);
+    }
+
+    const nonBatchableCommands = commandIds().filter((command) => !isBatchableCommandId(command));
+    expect(nonBatchableCommands).toEqual([
+      "hello",
+      "capabilities",
+      "noop",
+      "batch",
+      "pair.approve",
+      "pair.reset",
+    ]);
+  });
+
+  it("marks only required tab/window selectors for protocol batch default targets", () => {
+    const protocolDefaultCommands = commandIds().filter(commandAcceptsProtocolBatchDefaultTarget);
+
+    expect(protocolDefaultCommands).toEqual([
+      "tab.select",
+      "tab.close",
+      "window.select",
+      "window.close",
+    ]);
+  });
+
+  it("marks extension batch default target commands", () => {
+    const extensionDefaultCommands = commandIds().filter(commandAcceptsExtensionBatchDefaultTarget);
+
+    expect(extensionDefaultCommands).toEqual([
+      "tabs.list",
+      "tab.new",
+      "tab.select",
+      "tab.close",
+      "window.select",
+      "window.close",
+      "open",
+      "back",
+      "forward",
+      "reload",
+      "snapshot",
+      "ref.resolve",
+      "get",
+      "is",
+      "wait",
+      "eval",
+      "screenshot",
+      "drag",
+      "upload",
+      "mouse",
+      "keydown",
+      "keyup",
+      "find",
+      "frame",
+      "dialog",
+      "clipboard",
+      "storage",
+      "console",
+      "errors",
+      "highlight",
+      "set.viewport",
+      "diff",
+      "click",
+      "dblclick",
+      "focus",
+      "hover",
+      "fill",
+      "type",
+      "press",
+      "keyboard.type",
+      "keyboard.inserttext",
+      "check",
+      "uncheck",
+      "select",
+      "scroll",
+      "scrollintoview",
+      "swipe",
+    ]);
+  });
+
+  it("keeps actionKinds aligned with action command metadata", () => {
+    const actionCommands = commandIds().filter((command) => commandSchemas[command].action);
+
+    for (const command of commandIds()) {
+      expect(isActionCommand(command)).toBe(commandSchemas[command].action);
+    }
+    expect(sorted(actionKinds)).toEqual(sorted(actionCommands));
+  });
+
+  it("identifies every command with content-script policy", () => {
+    const contentCommands = commandIds().filter(
+      (command) => commandSchemas[command].content !== "never",
+    );
+    const helperCommands = commandIds().filter(isContentCommand);
+
+    expect(sorted(helperCommands)).toEqual(sorted(contentCommands));
+  });
+
+  it("marks timeout-rebased batch commands", () => {
+    const timeoutRebaseCommands = commandIds().filter(commandAcceptsBatchTimeout);
+
+    expect(timeoutRebaseCommands).toEqual(["wait", "eval", "screenshot"]);
+  });
+});
 
 describe("parseBoundaryRequest", () => {
   it.each(boundaries)("validates hello requests across %s", (boundary) => {

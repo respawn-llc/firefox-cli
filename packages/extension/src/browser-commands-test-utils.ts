@@ -1,10 +1,10 @@
 import {
   PROTOCOL_VERSION,
   createOkResponse,
+  isActionCommand,
   type ActionKind,
   type RequestEnvelope,
 } from "@firefox-cli/protocol";
-import { isActionCommand } from "./action-commands.js";
 import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
 import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js";
 

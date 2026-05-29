@@ -1,6 +1,12 @@
-import { PROTOCOL_VERSION, createRequest, type RequestEnvelope } from "@firefox-cli/protocol";
+import {
+  PROTOCOL_VERSION,
+  actionKinds,
+  commandSchemas,
+  createRequest,
+  type CommandId,
+  type RequestEnvelope,
+} from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
-import { ACTION_COMMANDS } from "./action-commands.js";
 import { handleBrowserRequest } from "./browser-commands.js";
 import {
   FakeBrowserAdapter,
@@ -9,7 +15,111 @@ import {
   windowSnapshot,
 } from "./browser-commands-test-utils.js";
 
+const browserSmokeRequests = new Map<CommandId, unknown>([
+  ["tabs.list", {}],
+  ["tab.new", {}],
+  ["tab.select", { target: { tab: { kind: "active" } } }],
+  ["tab.close", { target: { tab: { kind: "active" } } }],
+  ["windows.list", {}],
+  ["window.new", {}],
+  ["window.select", { target: { window: { kind: "active" } } }],
+  ["window.close", { target: { window: { kind: "active" } } }],
+  ["open", { url: "https://example.test/done", newTab: false }],
+  ["back", {}],
+  ["forward", {}],
+  ["reload", {}],
+  ["snapshot", {}],
+  ["ref.resolve", { ref: "@e1", generationId: "g1" }],
+  ["get", { kind: "title" }],
+  ["is", { kind: "visible", selector: "button" }],
+  ["wait", { kind: "url", urlGlob: "https://example.test/*" }],
+  ["eval", { script: "document.title", source: "argv" }],
+  ["screenshot", { path: "/tmp/page.png", format: "png" }],
+  ["drag", actionParamsFor("drag")],
+  ["upload", actionParamsFor("upload")],
+  ["mouse", actionParamsFor("mouse")],
+  ["keydown", actionParamsFor("keydown")],
+  ["keyup", actionParamsFor("keyup")],
+  ["find", { kind: "text", value: "Submit" }],
+  ["frame", {}],
+  ["download", { url: "https://example.test/file.txt" }],
+  ["dialog", { action: "status" }],
+  ["clipboard", { action: "read" }],
+  ["cookies", { action: "list", url: "https://example.test/" }],
+  ["storage", { area: "local", action: "get" }],
+  ["network", { action: "list" }],
+  ["console", { action: "list" }],
+  ["errors", { action: "list" }],
+  ["highlight", { selector: "button" }],
+  ["pdf", { path: "/tmp/page.pdf" }],
+  ["set.viewport", { width: 1200, height: 800 }],
+  ["diff", { kind: "title", expected: "Expected title" }],
+  ["batch", { steps: [{ command: "snapshot", params: {} }] }],
+  ["click", actionParamsFor("click")],
+  ["dblclick", actionParamsFor("dblclick")],
+  ["focus", actionParamsFor("focus")],
+  ["hover", actionParamsFor("hover")],
+  ["fill", actionParamsFor("fill")],
+  ["type", actionParamsFor("type")],
+  ["press", actionParamsFor("press")],
+  ["keyboard.type", actionParamsFor("keyboard.type")],
+  ["keyboard.inserttext", actionParamsFor("keyboard.inserttext")],
+  ["check", actionParamsFor("check")],
+  ["uncheck", actionParamsFor("uncheck")],
+  ["select", actionParamsFor("select")],
+  ["scroll", actionParamsFor("scroll")],
+  ["scrollintoview", actionParamsFor("scrollintoview")],
+  ["swipe", actionParamsFor("swipe")],
+]);
+
 describe("browser command handling", () => {
+  it("has browser handlers for every extension-owned command routed past background control", async () => {
+    const expectedCommands = (Object.keys(commandSchemas) as CommandId[]).filter(
+      (command) =>
+        commandSchemas[command].owner === "extension" &&
+        command !== "capabilities" &&
+        command !== "noop",
+    );
+
+    expect([...browserSmokeRequests.keys()].sort()).toEqual(expectedCommands.sort());
+
+    for (const [command, params] of browserSmokeRequests) {
+      const adapter = new FakeBrowserAdapter([
+        windowSnapshot(10, true, [
+          tabSummary(101, 0, true, 10, {
+            url: "https://example.test/done",
+            title: "Expected title",
+          }),
+        ]),
+      ]);
+      const response = await handleBrowserRequest(
+        {
+          protocolVersion: PROTOCOL_VERSION,
+          id: `${command}-smoke`,
+          command,
+          params,
+        } as RequestEnvelope,
+        adapter,
+      );
+
+      if (command === "pdf") {
+        expect(response).toMatchObject({
+          ok: false,
+          error: {
+            code: "UNSUPPORTED_CAPABILITY",
+            message: expect.stringContaining("PDF export is unsupported"),
+          },
+        });
+        continue;
+      }
+
+      expect(response).not.toMatchObject({
+        ok: false,
+        error: { code: "UNSUPPORTED_CAPABILITY" },
+      });
+    }
+  });
+
   it("lists tabs for the focused window using deterministic window ordering", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),
@@ -775,7 +885,7 @@ describe("browser command handling", () => {
   });
 
   it("rejects private-window interactions for every action command", async () => {
-    for (const command of ACTION_COMMANDS) {
+    for (const command of actionKinds) {
       const adapter = new FakeBrowserAdapter([
         {
           ...windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { private: true })]),

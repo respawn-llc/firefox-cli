@@ -26,8 +26,8 @@ import {
   type StorageResult,
   type WaitParams,
   type WaitElementSummary,
+  isActionCommand,
 } from "@firefox-cli/protocol";
-import { isActionCommand } from "./action-commands.js";
 import { createActionResult } from "./content-actions.js";
 import { createWaitResult } from "./content-wait.js";
 import { type ElementRefRegistry, ElementRefRegistryError } from "./element-ref-registry.js";

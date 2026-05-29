@@ -16,12 +16,21 @@ import {
   MAX_UPLOAD_FILES,
   MAX_UPLOAD_TOTAL_BYTES,
   batchParamsSchema,
-  createErrorResponse,
+  clipboardActions,
+  commandAcceptsProtocolBatchDefaultTarget,
+  commandSchemas,
+  cookieActions,
   createRequest,
+  dialogActions,
+  diffKinds,
+  findKinds,
+  getCliRoutes,
+  getKinds,
   type ActionResult,
   type BatchResult,
   type BatchParams,
   type BatchStep,
+  type CliRouteMetadata,
   type CommandId,
   type EvalResult,
   type ProtocolError,
@@ -33,8 +42,15 @@ import {
   type TargetSelector,
   type UploadParams,
   type WaitResult,
+  isKinds,
   gatedCapabilities,
   isBatchableCommandId,
+  logActions,
+  networkActions,
+  screenshotFormats,
+  scrollDirections,
+  storageActions,
+  storageAreas,
 } from "@firefox-cli/protocol";
 
 export type CliExitCode = 0 | 1;
@@ -59,6 +75,327 @@ const gatedCliCommands = new Map(
 );
 const gatedCapabilitiesByCommand = new Map(
   gatedCapabilities.map((capability) => [capability.command, capability] as const),
+);
+
+type CliRequestBuilder = (
+  args: readonly string[],
+  dependencies: CliDependencies,
+  context: CliRequestBuildContext,
+) => Promise<RequestEnvelope> | RequestEnvelope;
+
+type CliRequestBuildContext = {
+  readonly uploadBudget: UploadBudget;
+};
+
+type CliRouteBinding = {
+  readonly route: CliRouteMetadata;
+  readonly command: CommandId;
+  readonly help: string;
+  readonly buildRequest: CliRequestBuilder;
+};
+
+const protocolCliRoutes = getCliRoutes();
+const protocolCliRoutesById = new Map(protocolCliRoutes.map((route) => [route.id, route]));
+
+function bindCliRoute(
+  routeId: string,
+  command: CommandId,
+  help: string,
+  buildRequest: CliRequestBuilder,
+): CliRouteBinding {
+  const route = protocolCliRoutesById.get(routeId);
+  if (route === undefined) {
+    throw new Error(`CLI binding references unknown protocol route: ${routeId}`);
+  }
+
+  return { route, command, help, buildRequest };
+}
+
+export const cliRouteBindings = {
+  capabilities: bindCliRoute(
+    "capabilities",
+    "capabilities",
+    "firefox-cli capabilities [--json]",
+    buildCapabilitiesRequest,
+  ),
+  "tab.list": bindCliRoute("tab.list", "tabs.list", "firefox-cli tab [--json]", buildTabsRequest),
+  "tab.new": bindCliRoute(
+    "tab.new",
+    "tab.new",
+    "firefox-cli tab new [url] [--json]",
+    buildTabsRequest,
+  ),
+  "tab.select": bindCliRoute(
+    "tab.select",
+    "tab.select",
+    "firefox-cli tab select [target-or-url] [--json]",
+    buildTabsRequest,
+  ),
+  "tab.close": bindCliRoute(
+    "tab.close",
+    "tab.close",
+    "firefox-cli tab close [target-or-url] [--json]",
+    buildTabsRequest,
+  ),
+  "window.list": bindCliRoute(
+    "window.list",
+    "windows.list",
+    "firefox-cli window [--json]",
+    buildWindowsRequest,
+  ),
+  "window.new": bindCliRoute(
+    "window.new",
+    "window.new",
+    "firefox-cli window new [url] [--json]",
+    buildWindowsRequest,
+  ),
+  "window.select": bindCliRoute(
+    "window.select",
+    "window.select",
+    "firefox-cli window select [target-or-url] [--json]",
+    buildWindowsRequest,
+  ),
+  "window.close": bindCliRoute(
+    "window.close",
+    "window.close",
+    "firefox-cli window close [target-or-url] [--json]",
+    buildWindowsRequest,
+  ),
+  open: bindCliRoute(
+    "open",
+    "open",
+    "firefox-cli open [--new-tab] <url> [--json]",
+    buildOpenRequest,
+  ),
+  back: bindCliRoute("back", "back", "firefox-cli back [--json]", buildNavigationRequest),
+  forward: bindCliRoute(
+    "forward",
+    "forward",
+    "firefox-cli forward [--json]",
+    buildNavigationRequest,
+  ),
+  reload: bindCliRoute("reload", "reload", "firefox-cli reload [--json]", buildNavigationRequest),
+  snapshot: bindCliRoute(
+    "snapshot",
+    "snapshot",
+    "firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]",
+    buildSnapshotRequest,
+  ),
+  ref: bindCliRoute("ref", "ref.resolve", "firefox-cli ref <@ref> [--json]", buildRefRequest),
+  get: bindCliRoute(
+    "get",
+    "get",
+    "firefox-cli get <kind> [selector|@ref] [--json]",
+    buildGetRequest,
+  ),
+  is: bindCliRoute("is", "is", "firefox-cli is <kind> <selector|@ref> [--json]", buildIsRequest),
+  wait: bindCliRoute("wait", "wait", "firefox-cli wait <condition> [--json]", buildWaitRequest),
+  eval: bindCliRoute(
+    "eval",
+    "eval",
+    "firefox-cli eval <js> | --stdin | -b base64 [--json]",
+    buildEvalRequest,
+  ),
+  screenshot: bindCliRoute(
+    "screenshot",
+    "screenshot",
+    "firefox-cli screenshot [path] [--json]",
+    buildScreenshotRequest,
+  ),
+  drag: bindCliRoute(
+    "drag",
+    "drag",
+    "firefox-cli drag <source> <target> [--json]",
+    buildDragRequest,
+  ),
+  upload: bindCliRoute(
+    "upload",
+    "upload",
+    "firefox-cli upload <selector|@ref> <file...> [--json]",
+    buildUploadRequest,
+  ),
+  mouse: bindCliRoute(
+    "mouse",
+    "mouse",
+    "firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]",
+    buildMouseRequest,
+  ),
+  keydown: bindCliRoute(
+    "keydown",
+    "keydown",
+    "firefox-cli keydown <key> [selector|@ref] [--json]",
+    buildKeyEventRequest,
+  ),
+  keyup: bindCliRoute(
+    "keyup",
+    "keyup",
+    "firefox-cli keyup <key> [selector|@ref] [--json]",
+    buildKeyEventRequest,
+  ),
+  find: bindCliRoute("find", "find", "firefox-cli find <kind> <value> [--json]", buildFindRequest),
+  frame: bindCliRoute("frame", "frame", "firefox-cli frame [--json]", buildFrameRequest),
+  download: bindCliRoute(
+    "download",
+    "download",
+    "firefox-cli download <url> [filename] [--json]",
+    buildDownloadRequest,
+  ),
+  dialog: bindCliRoute(
+    "dialog",
+    "dialog",
+    "firefox-cli dialog status|accept|dismiss [--json]",
+    buildDialogRequest,
+  ),
+  clipboard: bindCliRoute(
+    "clipboard",
+    "clipboard",
+    "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]",
+    buildClipboardRequest,
+  ),
+  cookies: bindCliRoute(
+    "cookies",
+    "cookies",
+    "firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]",
+    buildCookiesRequest,
+  ),
+  storage: bindCliRoute(
+    "storage",
+    "storage",
+    "firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]",
+    buildStorageRequest,
+  ),
+  network: bindCliRoute(
+    "network",
+    "network",
+    "firefox-cli network list|clear [--json]",
+    buildNetworkRequest,
+  ),
+  console: bindCliRoute(
+    "console",
+    "console",
+    "firefox-cli console list|clear [--json]",
+    buildLogRequest,
+  ),
+  errors: bindCliRoute(
+    "errors",
+    "errors",
+    "firefox-cli errors list|clear [--json]",
+    buildLogRequest,
+  ),
+  highlight: bindCliRoute(
+    "highlight",
+    "highlight",
+    "firefox-cli highlight <selector|@ref> [--json]",
+    buildHighlightRequest,
+  ),
+  pdf: bindCliRoute("pdf", "pdf", "firefox-cli pdf <path> [--json]", buildPdfRequest),
+  "set.viewport": bindCliRoute(
+    "set.viewport",
+    "set.viewport",
+    "firefox-cli set viewport <width> <height> [--json]",
+    buildSetViewportRequest,
+  ),
+  diff: bindCliRoute(
+    "diff",
+    "diff",
+    "firefox-cli diff url|title|snapshot <expected> [--json]",
+    buildDiffRequest,
+  ),
+  batch: bindCliRoute(
+    "batch",
+    "batch",
+    "firefox-cli batch <json> | --stdin [--bail] [--json]",
+    buildBatchRequest,
+  ),
+  click: bindCliRoute(
+    "click",
+    "click",
+    "firefox-cli click <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  dblclick: bindCliRoute(
+    "dblclick",
+    "dblclick",
+    "firefox-cli dblclick <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  focus: bindCliRoute(
+    "focus",
+    "focus",
+    "firefox-cli focus <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  hover: bindCliRoute(
+    "hover",
+    "hover",
+    "firefox-cli hover <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  fill: bindCliRoute(
+    "fill",
+    "fill",
+    "firefox-cli fill <selector|@ref> <text> [--json]",
+    buildTextActionRequest,
+  ),
+  type: bindCliRoute(
+    "type",
+    "type",
+    "firefox-cli type <selector|@ref> <text> [--json]",
+    buildTextActionRequest,
+  ),
+  press: bindCliRoute("press", "press", "firefox-cli press <key> [--json]", buildPressRequest),
+  "keyboard.type": bindCliRoute(
+    "keyboard.type",
+    "keyboard.type",
+    "firefox-cli keyboard type <text> [--json]",
+    buildKeyboardRequest,
+  ),
+  "keyboard.inserttext": bindCliRoute(
+    "keyboard.inserttext",
+    "keyboard.inserttext",
+    "firefox-cli keyboard inserttext <text> [--json]",
+    buildKeyboardRequest,
+  ),
+  check: bindCliRoute(
+    "check",
+    "check",
+    "firefox-cli check <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  uncheck: bindCliRoute(
+    "uncheck",
+    "uncheck",
+    "firefox-cli uncheck <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  select: bindCliRoute(
+    "select",
+    "select",
+    "firefox-cli select <selector|@ref> <value...> [--json]",
+    buildSelectRequest,
+  ),
+  scroll: bindCliRoute(
+    "scroll",
+    "scroll",
+    "firefox-cli scroll up|down|left|right [px] [selector|@ref] [--json]",
+    buildScrollRequest,
+  ),
+  scrollintoview: bindCliRoute(
+    "scrollintoview",
+    "scrollintoview",
+    "firefox-cli scrollintoview <selector|@ref> [--json]",
+    buildElementActionRequest,
+  ),
+  swipe: bindCliRoute(
+    "swipe",
+    "swipe",
+    "firefox-cli swipe up|down|left|right [px] [selector|@ref] [--json]",
+    buildScrollRequest,
+  ),
+} as const satisfies Record<string, CliRouteBinding>;
+
+const cliRouteBindingsForMatching = Object.values(cliRouteBindings).sort(
+  (left, right) => right.route.path.length - left.route.path.length,
 );
 
 export type CliDependencies = {
@@ -128,152 +465,9 @@ async function runCliOrThrow(
     return ok("Pair state cleared. Approve firefox-cli again from the extension popup.\n");
   }
 
-  if (args[0] === "capabilities") {
-    return capabilities(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "tab") {
-    return tabs(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "window") {
-    return windows(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "open") {
-    return open(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "snapshot") {
-    return snapshot(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "ref") {
-    return refResolve(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "get") {
-    return get(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "is") {
-    return is(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "wait") {
-    return wait(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "eval") {
-    return evalCommand(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "screenshot") {
-    return screenshot(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "drag") {
-    return drag(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "upload") {
-    return upload(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "mouse") {
-    return mouse(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "keydown" || args[0] === "keyup") {
-    return keyEvent(args[0], args.slice(1), dependencies);
-  }
-
-  if (args[0] === "find") {
-    return find(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "frame") {
-    return frame(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "download") {
-    return download(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "dialog") {
-    return dialog(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "clipboard") {
-    return clipboard(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "cookies") {
-    return cookies(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "storage") {
-    return storage(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "network") {
-    return network(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "console") {
-    return consoleCommand(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "errors") {
-    return errors(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "highlight") {
-    return highlight(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "pdf") {
-    return pdf(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "set") {
-    return setCommand(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "diff") {
-    return diffCommand(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "batch") {
-    return batch(args.slice(1), dependencies);
-  }
-
-  if (isElementActionCommand(args[0])) {
-    return elementAction(args[0], args.slice(1), dependencies);
-  }
-
-  if (args[0] === "fill" || args[0] === "type") {
-    return textElementAction(args[0], args.slice(1), dependencies);
-  }
-
-  if (args[0] === "press") {
-    return press(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "keyboard") {
-    return keyboard(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "select") {
-    return select(args.slice(1), dependencies);
-  }
-
-  if (args[0] === "scroll" || args[0] === "swipe") {
-    return scroll(args[0], args.slice(1), dependencies);
-  }
-
-  if (args[0] === "back" || args[0] === "forward" || args[0] === "reload") {
-    return navigation(args[0], args.slice(1), dependencies);
+  const routeBinding = findCliRouteBindingForArgv(args);
+  if (routeBinding !== undefined) {
+    return runCliRouteBinding(routeBinding, args, dependencies);
   }
 
   const gated = args[0] === undefined ? undefined : gatedCliCommands.get(args[0]);
@@ -288,6 +482,311 @@ async function runCliOrThrow(
   };
 }
 
+async function runCliRouteBinding(
+  binding: CliRouteBinding,
+  argv: readonly string[],
+  dependencies: CliDependencies,
+): Promise<CliResult> {
+  const request = await binding.buildRequest(argv, dependencies, {
+    uploadBudget: createUploadBudget(),
+  });
+  const response = await sendOrUnavailable(dependencies, request);
+  return formatCliResponse(request.command, response, argv);
+}
+
+type SuccessfulResponse<C extends CommandId> = Extract<ResponseEnvelope<C>, { readonly ok: true }>;
+
+function responseResult<C extends CommandId>(
+  response: ResponseEnvelope<C>,
+): SuccessfulResponse<C>["result"] {
+  return (response as SuccessfulResponse<C>).result;
+}
+
+function formatCliResponse<C extends CommandId>(
+  command: C,
+  response: ResponseEnvelope<C>,
+  argv: readonly string[],
+): CliResult {
+  const json = cliRouteWantsJsonOutput(command, argv);
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  switch (command) {
+    case "capabilities": {
+      const result = responseResult(response as ResponseEnvelope<"capabilities">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(
+            `${result.capabilities
+              .map((capability) => `${capability.command}\t${capability.status}`)
+              .join("\n")}\n`,
+          );
+    }
+
+    case "tabs.list": {
+      const result = responseResult(response as ResponseEnvelope<"tabs.list">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(result.tabs.map(renderTabSummary).join(""));
+    }
+
+    case "tab.new":
+    case "tab.select":
+    case "open":
+    case "back":
+    case "forward":
+    case "reload": {
+      const result = responseResult(
+        response as ResponseEnvelope<
+          "tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"
+        >,
+      );
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`${renderTargetSummary(result.target)}\n`);
+    }
+
+    case "tab.close": {
+      const result = responseResult(response as ResponseEnvelope<"tab.close">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`Closed tab ${result.closedTabId}\n`);
+    }
+
+    case "windows.list": {
+      const result = responseResult(response as ResponseEnvelope<"windows.list">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(
+            result.windows
+              .map(
+                (window) =>
+                  `${window.focused ? "*" : " "} w${window.id} [${window.index}] tabs=${
+                    window.tabCount
+                  }${window.activeTabId === undefined ? "" : ` active=t${window.activeTabId}`}\n`,
+              )
+              .join(""),
+          );
+    }
+
+    case "window.new":
+    case "window.select": {
+      const result = responseResult(response as ResponseEnvelope<"window.new" | "window.select">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`w${result.window.id} [${result.window.index}]\n`);
+    }
+
+    case "window.close": {
+      const result = responseResult(response as ResponseEnvelope<"window.close">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`Closed window ${result.closedWindowId}\n`);
+    }
+
+    case "snapshot": {
+      const result = responseResult(response as ResponseEnvelope<"snapshot">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(result.text.endsWith("\n") ? result.text : `${result.text}\n`);
+    }
+
+    case "ref.resolve": {
+      const result = responseResult(response as ResponseEnvelope<"ref.resolve">);
+      if (json) {
+        return ok(`${JSON.stringify(result, null, 2)}\n`);
+      }
+      const element = result.element;
+      return ok(
+        `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
+      );
+    }
+
+    case "get": {
+      const result = responseResult(response as ResponseEnvelope<"get">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`${formatGetValue(result.value)}\n`);
+    }
+
+    case "is": {
+      const result = responseResult(response as ResponseEnvelope<"is">);
+      return json ? ok(`${JSON.stringify(result, null, 2)}\n`) : ok(`${result.value}\n`);
+    }
+
+    case "wait": {
+      const result = responseResult(response as ResponseEnvelope<"wait">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`${formatWaitResult(result)}\n`);
+    }
+
+    case "eval": {
+      const result = responseResult(response as ResponseEnvelope<"eval">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`${formatEvalResult(result)}\n`);
+    }
+
+    case "screenshot": {
+      const result = responseResult(response as ResponseEnvelope<"screenshot">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(`${formatScreenshotResult(result)}\n`);
+    }
+
+    case "find": {
+      const result = responseResult(response as ResponseEnvelope<"find">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(
+            result.elements
+              .map(
+                (element) =>
+                  `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
+              )
+              .join(""),
+          );
+    }
+
+    case "frame": {
+      const result = responseResult(response as ResponseEnvelope<"frame">);
+      return json
+        ? ok(`${JSON.stringify(result, null, 2)}\n`)
+        : ok(
+            result.frames
+              .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
+              .join(""),
+          );
+    }
+
+    case "batch": {
+      const result = responseResult(response as ResponseEnvelope<"batch">);
+      return {
+        exitCode: result.ok ? 0 : 1,
+        stdout: json ? `${JSON.stringify(result, null, 2)}\n` : `${formatBatchResult(result)}\n`,
+        stderr: "",
+      };
+    }
+
+    default:
+      return isActionResponseCommand(command)
+        ? formatActionResponse(response as ResponseEnvelope<ActionResponseCommand>, json)
+        : formatJsonOrObject(response as ResponseEnvelope<CommandId>, json);
+  }
+}
+
+type ActionResponseCommand =
+  | "click"
+  | "dblclick"
+  | "focus"
+  | "hover"
+  | "drag"
+  | "upload"
+  | "mouse"
+  | "keydown"
+  | "keyup"
+  | "fill"
+  | "type"
+  | "press"
+  | "keyboard.type"
+  | "keyboard.inserttext"
+  | "check"
+  | "uncheck"
+  | "select"
+  | "scroll"
+  | "scrollintoview"
+  | "swipe";
+
+function isActionResponseCommand(command: CommandId): command is ActionResponseCommand {
+  return (
+    command === "click" ||
+    command === "dblclick" ||
+    command === "focus" ||
+    command === "hover" ||
+    command === "drag" ||
+    command === "upload" ||
+    command === "mouse" ||
+    command === "keydown" ||
+    command === "keyup" ||
+    command === "fill" ||
+    command === "type" ||
+    command === "press" ||
+    command === "keyboard.type" ||
+    command === "keyboard.inserttext" ||
+    command === "check" ||
+    command === "uncheck" ||
+    command === "select" ||
+    command === "scroll" ||
+    command === "scrollintoview" ||
+    command === "swipe"
+  );
+}
+
+function cliRouteWantsJsonOutput(command: CommandId, argv: readonly string[]): boolean {
+  const args = argv.slice(1);
+  switch (command) {
+    case "eval":
+      return parseEvalArguments(args).json;
+    case "screenshot":
+      return parseScreenshotArguments(args).json;
+    case "batch":
+      return parseBatchArguments(args).json;
+    case "find":
+      return parsePayloadPositionalsAndOptions(args, {
+        payloadStartPositionals: 1,
+        minPositionals: 2,
+      }).optionArgs.includes("--json");
+    case "clipboard":
+      return parsePayloadPositionalsAndOptions(args, {
+        payloadStartPositionals: 1,
+        minPositionals: 1,
+      }).optionArgs.includes("--json");
+    case "cookies":
+    case "storage":
+      return parsePayloadPositionalsAndOptions(args, {
+        payloadStartPositionals: 2,
+        minPositionals: 2,
+      }).optionArgs.includes("--json");
+    case "diff":
+      return parsePayloadPositionalsAndOptions(args, {
+        payloadStartPositionals: 1,
+        minPositionals: 2,
+      }).optionArgs.includes("--json");
+    case "fill":
+    case "type":
+    case "keyboard.type":
+    case "keyboard.inserttext":
+      return parsePayloadPositionalsAndOptions(args, {
+        payloadStartPositionals: 1,
+        minPositionals: 2,
+      }).optionArgs.includes("--json");
+    case "select":
+      return parseSelectArguments(args).optionArgs.includes("--json");
+    case "drag":
+    case "upload":
+    case "mouse":
+    case "keydown":
+    case "keyup":
+    case "click":
+    case "dblclick":
+    case "focus":
+    case "hover":
+    case "check":
+    case "uncheck":
+    case "press":
+    case "scroll":
+    case "scrollintoview":
+    case "swipe":
+      return parsePositionalsAndOptions(args, {
+        preserveUnknownOptions: command === "upload",
+      }).optionArgs.includes("--json");
+    default:
+      return args.includes("--json");
+  }
+}
+
 export function renderHelp(): string {
   return [
     "firefox-cli",
@@ -297,44 +796,7 @@ export function renderHelp(): string {
     "  firefox-cli setup native-host [--dry-run] [--json]",
     "  firefox-cli doctor [--fix] [--json]",
     "  firefox-cli unpair",
-    "  firefox-cli capabilities [--json]",
-    "  firefox-cli open [--new-tab] <url> [--json]",
-    "  firefox-cli back|forward|reload [--json]",
-    "  firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]",
-    "  firefox-cli ref <@ref> [--generation id] [--json]",
-    "  firefox-cli get text|html|value|attr|count|box|styles <selector|@ref> [--json]",
-    "  firefox-cli get title|url [--json]",
-    "  firefox-cli is visible|enabled|checked <selector|@ref> [--generation id] [--json]",
-    "  firefox-cli wait <ms|selector|@ref> [--state visible|hidden|attached] [--json]",
-    "  firefox-cli wait --text text | --url glob | --fn js | --load domcontentloaded|complete [--json]",
-    "  firefox-cli eval <js> | --stdin | -b base64 [--json]",
-    "  firefox-cli screenshot [path] [--json]",
-    "  firefox-cli drag <source-selector|@ref> <target-selector|@ref> [--json]",
-    "  firefox-cli upload <selector|@ref> <file...> [--json]",
-    "  firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]",
-    "  firefox-cli keydown|keyup <key> [selector|@ref] [--json]",
-    "  firefox-cli find role|text|label|placeholder|alt|title|testid <value> [--json]",
-    "  firefox-cli frame [--json]",
-    "  firefox-cli download <url> [filename] [--json]",
-    "  firefox-cli dialog status|accept|dismiss [--json]",
-    "  firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]",
-    "  firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]",
-    "  firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]",
-    "  firefox-cli network list|clear [--json]",
-    "  firefox-cli console|errors list|clear [--json]",
-    "  firefox-cli highlight <selector|@ref> [--json]",
-    "  firefox-cli pdf <path> [--json]",
-    "  firefox-cli set viewport <width> <height> [--json]",
-    "  firefox-cli diff url|title|snapshot <expected> [--json]",
-    "  firefox-cli batch <json> | --stdin [--bail] [--json]",
-    "  firefox-cli click|dblclick|focus|hover|check|uncheck|scrollintoview <selector|@ref> [--json]",
-    "  firefox-cli fill|type <selector|@ref> <text> [--json]",
-    "  firefox-cli keyboard type|inserttext <text> [--json]",
-    "  firefox-cli press <key> [--json]",
-    "  firefox-cli select <selector|@ref> <value...> [--json]",
-    "  firefox-cli scroll|swipe up|down|left|right [px] [selector|@ref] [--json]",
-    "  firefox-cli tab [new|select|close] [target-or-url] [--json]",
-    "  firefox-cli window [new|select|close] [target-or-url] [--json]",
+    ...Object.values(cliRouteBindings).map((binding) => `  ${binding.help}`),
     "",
   ].join("\n");
 }
@@ -497,815 +959,504 @@ async function doctor(args: readonly string[], dependencies: CliDependencies): P
   };
 }
 
-async function capabilities(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const json = args.includes("--json");
-  const request = createRequest("capabilities", {});
-  const response = await sendOrUnavailable(dependencies, request);
+function createValidatedRequest<C extends CommandId>(
+  command: C,
+  params: unknown,
+): RequestEnvelope<C> {
+  return createRequest(command, validateCommandParams(command, params) as never);
+}
 
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
+function validateProtocolRequest<C extends CommandId>(
+  request: RequestEnvelope<C>,
+): RequestEnvelope<C> {
+  return {
+    ...request,
+    params: validateCommandParams(request.command, request.params) as RequestEnvelope<C>["params"],
+  };
+}
+
+function validateCommandParams<C extends CommandId>(
+  command: C,
+  params: unknown,
+): RequestEnvelope<C>["params"] {
+  const parsed = commandSchemas[command].params.safeParse(params);
+  if (parsed.success) {
+    return parsed.data as RequestEnvelope<C>["params"];
   }
 
-  if (json) {
-    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
-  }
-
-  return ok(
-    `${response.result.capabilities
-      .map((capability) => `${capability.command}\t${capability.status}`)
-      .join("\n")}\n`,
+  const firstIssue = parsed.error.issues[0];
+  const path = firstIssue?.path.length === 0 ? "" : ` at ${firstIssue?.path.join(".")}`;
+  throw new CliUsageError(
+    firstIssue === undefined
+      ? `Invalid ${command} request.`
+      : `Invalid ${command} request${path}: ${firstIssue.message}`,
   );
 }
 
-async function tabs(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildCapabilitiesRequest(argv: readonly string[]): RequestEnvelope {
+  parseTargetOptions(argv.slice(1));
+  return createValidatedRequest("capabilities", {});
+}
+
+function buildTabsRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args);
   const subcommand = positional[0];
   const target = parseTargetOptions(args);
-  const response =
-    subcommand === "new"
-      ? await sendOrUnavailable(
-          dependencies,
-          createRequest("tab.new", {
-            ...optionalUrl(normalizeOptionalUrl(positional[1])),
-            ...optionalTarget(target),
-          }),
-        )
-      : subcommand === "select"
-        ? await sendOrUnavailable(
-            dependencies,
-            createRequest("tab.select", {
-              target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
-            }),
-          )
-        : subcommand === "close"
-          ? await sendOrUnavailable(
-              dependencies,
-              createRequest("tab.close", {
-                target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
-              }),
-            )
-          : await sendOrUnavailable(
-              dependencies,
-              createRequest("tabs.list", {
-                ...optionalTarget(target),
-              }),
-            );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
+  if (subcommand === "new") {
+    return createValidatedRequest("tab.new", {
+      ...optionalUrl(normalizeOptionalUrl(positional[1])),
+      ...optionalTarget(target),
+    });
   }
-
-  if (json) {
-    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
+  if (subcommand === "select") {
+    return createValidatedRequest("tab.select", {
+      target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
+    });
   }
-
-  if ("tabs" in response.result) {
-    return ok(response.result.tabs.map(renderTabSummary).join(""));
+  if (subcommand === "close") {
+    return createValidatedRequest("tab.close", {
+      target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
+    });
   }
-
-  if ("target" in response.result) {
-    return ok(`${renderTargetSummary(response.result.target)}\n`);
-  }
-
-  if ("closedTabId" in response.result) {
-    return ok(`Closed tab ${response.result.closedTabId}\n`);
-  }
-
-  return ok(`${JSON.stringify(response.result)}\n`);
+  return createValidatedRequest("tabs.list", {
+    ...optionalTarget(target),
+  });
 }
 
-async function windows(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildWindowsRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args);
   const subcommand = positional[0];
   const target = parseTargetOptions(args);
-  const response =
-    subcommand === "new"
-      ? await sendOrUnavailable(
-          dependencies,
-          createRequest("window.new", {
-            ...optionalUrl(normalizeOptionalUrl(positional[1])),
-          }),
-        )
-      : subcommand === "select"
-        ? await sendOrUnavailable(
-            dependencies,
-            createRequest("window.select", {
-              target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
-            }),
-          )
-        : subcommand === "close"
-          ? await sendOrUnavailable(
-              dependencies,
-              createRequest("window.close", {
-                target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
-              }),
-            )
-          : await sendOrUnavailable(dependencies, createRequest("windows.list", {}));
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
+  if (subcommand === "new") {
+    return createValidatedRequest("window.new", {
+      ...optionalUrl(normalizeOptionalUrl(positional[1])),
+    });
   }
-
-  if (json) {
-    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
+  if (subcommand === "select") {
+    return createValidatedRequest("window.select", {
+      target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
+    });
   }
-
-  if ("windows" in response.result) {
-    return ok(
-      response.result.windows
-        .map(
-          (window) =>
-            `${window.focused ? "*" : " "} w${window.id} [${window.index}] tabs=${
-              window.tabCount
-            }${window.activeTabId === undefined ? "" : ` active=t${window.activeTabId}`}\n`,
-        )
-        .join(""),
-    );
+  if (subcommand === "close") {
+    return createValidatedRequest("window.close", {
+      target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
+    });
   }
-
-  if ("window" in response.result) {
-    return ok(`w${response.result.window.id} [${response.result.window.index}]\n`);
-  }
-
-  if ("closedWindowId" in response.result) {
-    return ok(`Closed window ${response.result.closedWindowId}\n`);
-  }
-
-  return ok(`${JSON.stringify(response.result)}\n`);
+  return createValidatedRequest("windows.list", {});
 }
 
-async function open(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildOpenRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const url = normalizeOptionalUrl(getPositionals(args)[0]);
   if (url === undefined) {
-    return error("Missing URL.\n");
+    throw new CliUsageError("Missing URL.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("open", {
-      url,
-      newTab: args.includes("--new-tab"),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${renderTargetSummary(response.result.target)}\n`);
+  return createValidatedRequest("open", {
+    url,
+    newTab: args.includes("--new-tab"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function navigation(
-  command: "back" | "forward" | "reload",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const json = args.includes("--json");
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
+function buildNavigationRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (command !== "back" && command !== "forward" && command !== "reload") {
+    throw new CliUsageError("Invalid navigation command.");
   }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${renderTargetSummary(response.result.target)}\n`);
+  const args = argv.slice(1);
+  return createValidatedRequest(command, {
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function snapshot(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const json = args.includes("--json");
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("snapshot", {
-      interactiveOnly: args.includes("-i") || args.includes("--interactive"),
-      compact: args.includes("-c") || args.includes("--compact") || !args.includes("--verbose"),
-      ...optionalPositiveInteger(args, ["-d", "--depth"], "depth", "maxDepth"),
-      ...optionalStringOption(args, ["-s", "--selector"], "selector"),
-      ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(response.result.text.endsWith("\n") ? response.result.text : `${response.result.text}\n`);
+function buildSnapshotRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
+  return createValidatedRequest("snapshot", {
+    interactiveOnly: args.includes("-i") || args.includes("--interactive"),
+    compact: args.includes("-c") || args.includes("--compact") || !args.includes("--verbose"),
+    ...optionalPositiveInteger(args, ["-d", "--depth"], "depth", "maxDepth"),
+    ...optionalStringOption(args, ["-s", "--selector"], "selector"),
+    ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function refResolve(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildRefRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const ref = getPositionals(args)[0];
   if (ref === undefined) {
-    return error("Missing ref.\n");
+    throw new CliUsageError("Missing ref.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("ref.resolve", {
-      ref,
-      ...optionalStringOption(args, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  if (json) {
-    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
-  }
-
-  const element = response.result.element;
-  return ok(
-    `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
-  );
+  return createValidatedRequest("ref.resolve", {
+    ref,
+    ...optionalStringOption(args, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function get(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildGetRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args);
   const kind = positional[0];
   if (!isGetKind(kind)) {
-    return error("Missing or invalid get kind.\n");
+    throw new CliUsageError("Missing or invalid get kind.");
   }
-
   const elementTarget = positional[1];
   const attribute = positional[2];
   if (kind === "attr" && attribute === undefined) {
-    return error("Missing attribute name.\n");
+    throw new CliUsageError("Missing attribute name.");
   }
-
   if ((kind === "title" || kind === "url") && elementTarget !== undefined) {
-    return error(`get ${kind} does not accept a selector or ref.\n`);
+    throw new CliUsageError(`get ${kind} does not accept a selector or ref.`);
   }
-
   if (kind !== "title" && kind !== "url" && elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("get", {
-      kind,
-      ...parseElementTarget(elementTarget),
-      ...(kind === "attr" && attribute !== undefined ? { attribute } : {}),
-      ...optionalStringOption(args, ["--generation"], "generationId"),
-      ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatGetValue(response.result.value)}\n`);
+  return createValidatedRequest("get", {
+    kind,
+    ...parseElementTarget(elementTarget),
+    ...(kind === "attr" && attribute !== undefined ? { attribute } : {}),
+    ...optionalStringOption(args, ["--generation"], "generationId"),
+    ...optionalPositiveInteger(args, ["--max-output"], "max output", "maxOutputBytes"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function is(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildIsRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args);
   const kind = positional[0];
   if (!isIsKind(kind)) {
-    return error("Missing or invalid is kind.\n");
+    throw new CliUsageError("Missing or invalid is kind.");
   }
-
   const elementTarget = positional[1];
   if (elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("is", {
-      kind,
-      ...parseElementTarget(elementTarget),
-      ...optionalStringOption(args, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${response.result.value}\n`);
+  return createValidatedRequest("is", {
+    kind,
+    ...parseElementTarget(elementTarget),
+    ...optionalStringOption(args, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function wait(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildWaitRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const waitArgs = parseWaitArguments(args);
-  const params = parseWaitParams(waitArgs);
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("wait", {
-      ...params,
-      ...(waitArgs.timeout === undefined
-        ? {}
-        : { timeoutMs: parsePositiveIntegerValue(waitArgs.timeout, "timeout") }),
-      ...(waitArgs.interval === undefined
-        ? {}
-        : { intervalMs: parsePositiveIntegerValue(waitArgs.interval, "interval") }),
-      ...optionalTarget(parseTargetOptions(args)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatWaitResult(response.result)}\n`);
+  return createValidatedRequest("wait", {
+    ...parseWaitParams(waitArgs),
+    ...(waitArgs.timeout === undefined
+      ? {}
+      : { timeoutMs: parsePositiveIntegerValue(waitArgs.timeout, "timeout") }),
+    ...(waitArgs.interval === undefined
+      ? {}
+      : { intervalMs: parsePositiveIntegerValue(waitArgs.interval, "interval") }),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function evalCommand(
-  args: readonly string[],
+async function buildEvalRequest(
+  argv: readonly string[],
   dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parseEvalArguments(args);
+): Promise<RequestEnvelope> {
+  const parsedArgs = parseEvalArguments(argv.slice(1));
   const script = await readEvalScript(parsedArgs, dependencies);
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("eval", {
-      script,
-      source: parsedArgs.source,
-      ...(parsedArgs.timeout === undefined
-        ? {}
-        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-      ...(parsedArgs.maxResultBytes === undefined
-        ? {}
-        : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return parsedArgs.json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatEvalResult(response.result)}\n`);
+  return createValidatedRequest("eval", {
+    script,
+    source: parsedArgs.source,
+    ...(parsedArgs.timeout === undefined
+      ? {}
+      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxResultBytes === undefined
+      ? {}
+      : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function screenshot(
-  args: readonly string[],
+function buildScreenshotRequest(
+  argv: readonly string[],
   dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parseScreenshotArguments(args);
+): RequestEnvelope {
+  const parsedArgs = parseScreenshotArguments(argv.slice(1));
   const outputPath = resolve(
     dependencies.cwd ?? process.cwd(),
     parsedArgs.outputPath ?? "screenshot.png",
   );
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("screenshot", {
-      path: outputPath,
-      format: parsedArgs.format,
-      ...(parsedArgs.fullPage ? { fullPage: true } : {}),
-      ...(parsedArgs.quality === undefined
-        ? {}
-        : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
-      ...(parsedArgs.timeout === undefined
-        ? {}
-        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-      ...(parsedArgs.maxImageBytes === undefined
-        ? {}
-        : { maxImageBytes: parsePositiveIntegerValue(parsedArgs.maxImageBytes, "max output") }),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return parsedArgs.json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatScreenshotResult(response.result)}\n`);
+  return createValidatedRequest("screenshot", {
+    path: outputPath,
+    format: parsedArgs.format,
+    ...(parsedArgs.fullPage ? { fullPage: true } : {}),
+    ...(parsedArgs.quality === undefined
+      ? {}
+      : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
+    ...(parsedArgs.timeout === undefined
+      ? {}
+      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxImageBytes === undefined
+      ? {}
+      : { maxImageBytes: parsePositiveIntegerValue(parsedArgs.maxImageBytes, "max output") }),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function drag(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePositionalsAndOptions(args);
+function buildDragRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePositionalsAndOptions(argv.slice(1));
   const [source, target] = parsed.positionals;
   if (source === undefined || target === undefined) {
-    return error("Missing drag source or target.\n");
+    throw new CliUsageError("Missing drag source or target.");
   }
-  return formatActionResponse(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("drag", {
-        ...sourceDragTarget(source, "source"),
-        ...sourceDragTarget(target, "target"),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
+  return createValidatedRequest("drag", {
+    ...sourceDragTarget(source, "source"),
+    ...sourceDragTarget(target, "target"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
+}
+
+async function buildUploadRequest(
+  argv: readonly string[],
+  dependencies: CliDependencies,
+  context: CliRequestBuildContext,
+): Promise<RequestEnvelope> {
+  const parsed = parseUploadArguments(argv.slice(1));
+  return createValidatedRequest(
+    "upload",
+    await createUploadParams(parsed, dependencies, context.uploadBudget),
   );
 }
 
-async function upload(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parseUploadArguments(args);
-  const params = await createUploadParams(parsed, dependencies, createUploadBudget());
-  return formatActionResponse(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("upload", {
-        ...params,
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
-}
-
-async function mouse(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePositionalsAndOptions(args);
+function buildMouseRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePositionalsAndOptions(argv.slice(1));
   const action = parsed.positionals[0];
   if (action !== "move" && action !== "down" && action !== "up" && action !== "wheel") {
-    return error("Missing or invalid mouse action.\n");
+    throw new CliUsageError("Missing or invalid mouse action.");
   }
-  const maybeTarget = parsed.positionals[1];
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("mouse", {
-      action,
-      ...parseElementTarget(maybeTarget),
-      ...optionalNumberOption(parsed.optionArgs, ["--x"], "x"),
-      ...optionalNumberOption(parsed.optionArgs, ["--y"], "y"),
-      ...optionalNumberOption(parsed.optionArgs, ["--button"], "button"),
-      ...optionalNumberOption(parsed.optionArgs, ["--delta-x"], "deltaX"),
-      ...optionalNumberOption(parsed.optionArgs, ["--delta-y"], "deltaY"),
-      ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-    }),
-  );
-  return formatActionResponse(response, parsed.optionArgs.includes("--json"));
+  return createValidatedRequest("mouse", {
+    action,
+    ...parseElementTarget(parsed.positionals[1]),
+    ...optionalNumberOption(parsed.optionArgs, ["--x"], "x"),
+    ...optionalNumberOption(parsed.optionArgs, ["--y"], "y"),
+    ...optionalNumberOption(parsed.optionArgs, ["--button"], "button"),
+    ...optionalNumberOption(parsed.optionArgs, ["--delta-x"], "deltaX"),
+    ...optionalNumberOption(parsed.optionArgs, ["--delta-y"], "deltaY"),
+    ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function keyEvent(
-  command: "keydown" | "keyup",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsed = parsePositionalsAndOptions(args);
+function buildKeyEventRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (command !== "keydown" && command !== "keyup") {
+    throw new CliUsageError("Invalid key event command.");
+  }
+  const parsed = parsePositionalsAndOptions(argv.slice(1));
   const key = parsed.positionals[0];
   if (key === undefined) {
-    return error("Missing key.\n");
+    throw new CliUsageError("Missing key.");
   }
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      key,
-      ...parseElementTarget(parsed.positionals[1]),
-      ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-    }),
-  );
-  return formatActionResponse(response, parsed.optionArgs.includes("--json"));
+  return createValidatedRequest(command, {
+    key,
+    ...parseElementTarget(parsed.positionals[1]),
+    ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function find(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePayloadPositionalsAndOptions(args, {
+function buildFindRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,
     minPositionals: 2,
   });
   const [kind, value] = parsed.positionals;
   if (!isFindKind(kind) || value === undefined) {
-    return error("Missing or invalid find kind/value.\n");
+    throw new CliUsageError("Missing or invalid find kind/value.");
   }
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("find", {
-      kind,
-      value,
-      ...optionalBooleanFlag(parsed.optionArgs, "--first", "first"),
-      ...optionalBooleanFlag(parsed.optionArgs, "--last", "last"),
-      ...optionalPositiveInteger(parsed.optionArgs, ["--nth"], "nth", "nth"),
-      ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-    }),
-  );
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-  return parsed.optionArgs.includes("--json")
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(
-        response.result.elements
-          .map(
-            (element) =>
-              `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
-          )
-          .join(""),
-      );
+  return createValidatedRequest("find", {
+    kind,
+    value,
+    ...optionalBooleanFlag(parsed.optionArgs, "--first", "first"),
+    ...optionalBooleanFlag(parsed.optionArgs, "--last", "last"),
+    ...optionalPositiveInteger(parsed.optionArgs, ["--nth"], "nth", "nth"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function frame(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("frame", { ...optionalTarget(parseTargetOptions(args)) }),
-  );
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(
-        response.result.frames
-          .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
-          .join(""),
-      );
+function buildFrameRequest(argv: readonly string[]): RequestEnvelope {
+  return createValidatedRequest("frame", { ...optionalTarget(parseTargetOptions(argv.slice(1))) });
 }
 
-async function download(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildDownloadRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
+  parseTargetOptions(args);
   const positional = getPositionals(args);
   const url = normalizeOptionalUrl(positional[0]);
   if (url === undefined) {
-    return error("Missing download URL.\n");
+    throw new CliUsageError("Missing download URL.");
   }
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("download", {
-      url,
-      ...(positional[1] === undefined ? {} : { filename: positional[1] }),
-      saveAs: args.includes("--save-as"),
-    }),
-  );
-  return formatJsonOrObject(response, json);
+  return createValidatedRequest("download", {
+    url,
+    ...(positional[1] === undefined ? {} : { filename: positional[1] }),
+    saveAs: args.includes("--save-as"),
+  });
 }
 
-async function dialog(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
+function buildDialogRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args, { preserveUnknownOptions: true });
   const action = positional[0] ?? "status";
-  if (action !== "status" && action !== "accept" && action !== "dismiss") {
-    return error("Missing or invalid dialog action.\n");
+  if (!isDialogAction(action)) {
+    throw new CliUsageError("Missing or invalid dialog action.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("dialog", {
-        action,
-        ...(positional[1] === undefined ? {} : { promptText: positional[1] }),
-        ...optionalTarget(parseTargetOptions(args)),
-      }),
-    ),
-    json,
-  );
+  return createValidatedRequest("dialog", {
+    action,
+    ...(positional[1] === undefined ? {} : { promptText: positional[1] }),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function clipboard(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsed = parsePayloadPositionalsAndOptions(args, {
+function buildClipboardRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,
     minPositionals: 1,
   });
   const action = parsed.positionals[0] ?? "read";
-  if (action !== "read" && action !== "write" && action !== "copy" && action !== "paste") {
-    return error("Missing or invalid clipboard action.\n");
+  if (!isClipboardAction(action)) {
+    throw new CliUsageError("Missing or invalid clipboard action.");
   }
   const value = parsed.positionals[1];
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("clipboard", {
-        action,
-        ...(action === "write" ? { text: value ?? "" } : parseElementTarget(value)),
-        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
+  return createValidatedRequest("clipboard", {
+    action,
+    ...(action === "write" ? { text: value ?? "" } : parseElementTarget(value)),
+    ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function cookies(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePayloadPositionalsAndOptions(args, {
+function buildCookiesRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 2,
     minPositionals: 2,
   });
+  parseTargetOptions(parsed.optionArgs);
   const [action, url, name, value] = parsed.positionals;
-  if (
-    (action !== "list" && action !== "get" && action !== "set" && action !== "remove") ||
-    url === undefined
-  ) {
-    return error("Missing or invalid cookies action/url.\n");
+  if (!isCookieAction(action) || url === undefined) {
+    throw new CliUsageError("Missing or invalid cookies action/url.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("cookies", {
-        action,
-        url: normalizeOptionalUrl(url) ?? url,
-        ...(name === undefined ? {} : { name }),
-        ...(value === undefined ? {} : { value }),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
+  return createValidatedRequest("cookies", {
+    action,
+    url: normalizeOptionalUrl(url) ?? url,
+    ...(name === undefined ? {} : { name }),
+    ...(value === undefined ? {} : { value }),
+  });
 }
 
-async function storage(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePayloadPositionalsAndOptions(args, {
+function buildStorageRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 2,
     minPositionals: 2,
   });
   const [area, action, key, value] = parsed.positionals;
-  if (
-    (area !== "local" && area !== "session") ||
-    (action !== "get" && action !== "set" && action !== "remove" && action !== "clear")
-  ) {
-    return error("Missing or invalid storage area/action.\n");
+  if (!isStorageArea(area) || !isStorageAction(action)) {
+    throw new CliUsageError("Missing or invalid storage area/action.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("storage", {
-        area,
-        action,
-        ...(key === undefined ? {} : { key }),
-        ...(value === undefined ? {} : { value }),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
+  return createValidatedRequest("storage", {
+    area,
+    action,
+    ...(key === undefined ? {} : { key }),
+    ...(value === undefined ? {} : { value }),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function network(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const json = args.includes("--json");
-  const positional = getPositionals(args);
-  const action = positional[0] ?? "list";
-  if (action !== "list" && action !== "clear") {
-    return error("Missing or invalid network action.\n");
-  }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("network", {
-        action,
-        ...optionalStringOption(args, ["--url"], "urlGlob"),
-      }),
-    ),
-    json,
-  );
-}
-
-async function consoleCommand(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  return logCommand("console", args, dependencies);
-}
-
-async function errors(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  return logCommand("errors", args, dependencies);
-}
-
-async function logCommand(
-  command: "console" | "errors",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+function buildNetworkRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
+  parseTargetOptions(args);
   const action = getPositionals(args)[0] ?? "list";
-  if (action !== "list" && action !== "clear") {
-    return error(`Missing or invalid ${command} action.\n`);
+  if (!isNetworkAction(action)) {
+    throw new CliUsageError("Missing or invalid network action.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest(command, { action, ...optionalTarget(parseTargetOptions(args)) }),
-    ),
-    args.includes("--json"),
-  );
+  return createValidatedRequest("network", {
+    action,
+    ...optionalStringOption(args, ["--url"], "urlGlob"),
+  });
 }
 
-async function highlight(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsed = parsePositionalsAndOptions(args);
+function buildLogRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (command !== "console" && command !== "errors") {
+    throw new CliUsageError("Invalid log command.");
+  }
+  const args = argv.slice(1);
+  const action = getPositionals(args)[0] ?? "list";
+  if (!isLogAction(action)) {
+    throw new CliUsageError(`Missing or invalid ${command} action.`);
+  }
+  return createValidatedRequest(command, { action, ...optionalTarget(parseTargetOptions(args)) });
+}
+
+function buildHighlightRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePositionalsAndOptions(argv.slice(1));
   const elementTarget = parsed.positionals[0];
   if (elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("highlight", {
-        ...parseElementTarget(elementTarget),
-        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
-        ...optionalPositiveInteger(parsed.optionArgs, ["--duration"], "duration", "durationMs"),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
+  return createValidatedRequest("highlight", {
+    ...parseElementTarget(elementTarget),
+    ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+    ...optionalPositiveInteger(parsed.optionArgs, ["--duration"], "duration", "durationMs"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function pdf(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const path = getPositionals(args)[0];
+function buildPdfRequest(argv: readonly string[], dependencies: CliDependencies): RequestEnvelope {
+  const path = getPositionals(argv.slice(1))[0];
   if (path === undefined) {
-    return error("Missing PDF path.\n");
+    throw new CliUsageError("Missing PDF path.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("pdf", {
-        path: resolve(dependencies.cwd ?? process.cwd(), path),
-        ...optionalTarget(parseTargetOptions(args)),
-      }),
-    ),
-    args.includes("--json"),
-  );
+  return createValidatedRequest("pdf", {
+    path: resolve(dependencies.cwd ?? process.cwd(), path),
+    ...optionalTarget(parseTargetOptions(argv.slice(1))),
+  });
 }
 
-async function setCommand(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+function buildSetViewportRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
   const positional = getPositionals(args);
   if (positional[0] !== "viewport") {
-    return error("Missing or invalid set command.\n");
+    throw new CliUsageError("Missing or invalid set command.");
   }
-  const width = parsePositiveIntegerValue(positional[1] ?? "", "width");
-  const height = parsePositiveIntegerValue(positional[2] ?? "", "height");
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("set.viewport", {
-        width,
-        height,
-        ...optionalTarget(parseTargetOptions(args)),
-      }),
-    ),
-    args.includes("--json"),
-  );
+  return createValidatedRequest("set.viewport", {
+    width: parsePositiveIntegerValue(positional[1] ?? "", "width"),
+    height: parsePositiveIntegerValue(positional[2] ?? "", "height"),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
 }
 
-async function diffCommand(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsed = parsePayloadPositionalsAndOptions(args, {
+function buildDiffRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,
     minPositionals: 2,
   });
   const [kind, expected] = parsed.positionals;
-  if ((kind !== "url" && kind !== "title" && kind !== "snapshot") || expected === undefined) {
-    return error("Missing or invalid diff kind/expected value.\n");
+  if (!isDiffKind(kind) || expected === undefined) {
+    throw new CliUsageError("Missing or invalid diff kind/expected value.");
   }
-  return formatJsonOrObject(
-    await sendOrUnavailable(
-      dependencies,
-      createRequest("diff", {
-        kind,
-        expected,
-        ...optionalStringOption(parsed.optionArgs, ["--selector"], "selector"),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
-      }),
-    ),
-    parsed.optionArgs.includes("--json"),
-  );
+  return createValidatedRequest("diff", {
+    kind,
+    expected,
+    ...optionalStringOption(parsed.optionArgs, ["--selector"], "selector"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  });
 }
 
-async function batch(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsedArgs = parseBatchArguments(args);
+async function buildBatchRequest(
+  argv: readonly string[],
+  dependencies: CliDependencies,
+): Promise<RequestEnvelope> {
+  const parsedArgs = parseBatchArguments(argv.slice(1));
   const steps = await readBatchSteps(parsedArgs, dependencies);
   const params = parseBatchParamsForCli({
     steps,
@@ -1318,153 +1469,98 @@ async function batch(args: readonly string[], dependencies: CliDependencies): Pr
       : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
     ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
   });
-  const response = await sendOrUnavailable(dependencies, createRequest("batch", params));
-
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  const exitCode: CliExitCode = response.result.ok ? 0 : 1;
-  return {
-    exitCode,
-    stdout: parsedArgs.json
-      ? `${JSON.stringify(response.result, null, 2)}\n`
-      : `${formatBatchResult(response.result)}\n`,
-    stderr: "",
-  };
+  return createValidatedRequest("batch", params);
 }
 
-async function elementAction(
-  command: "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parsePositionalsAndOptions(args);
-  const json = parsedArgs.optionArgs.includes("--json");
+function buildElementActionRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (!isElementActionCommand(command)) {
+    throw new CliUsageError("Invalid element action command.");
+  }
+  const parsedArgs = parsePositionalsAndOptions(argv.slice(1));
   const elementTarget = parsedArgs.positionals[0];
   if (elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      ...parseElementTarget(elementTarget),
-      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  return createValidatedRequest(command, {
+    ...parseElementTarget(elementTarget),
+    ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function textElementAction(
-  command: "fill" | "type",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
+function buildTextActionRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (command !== "fill" && command !== "type") {
+    throw new CliUsageError("Invalid text action command.");
+  }
+  const parsedArgs = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,
     minPositionals: 2,
   });
-  const json = parsedArgs.optionArgs.includes("--json");
-  const positional = parsedArgs.positionals;
-  const elementTarget = positional[0];
-  const text = positional[1];
+  const elementTarget = parsedArgs.positionals[0];
+  const text = parsedArgs.positionals[1];
   if (elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
   if (text === undefined) {
-    return error("Missing text.\n");
+    throw new CliUsageError("Missing text.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      ...parseElementTarget(elementTarget),
-      text,
-      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  return createValidatedRequest(command, {
+    ...parseElementTarget(elementTarget),
+    text,
+    ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function press(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsedArgs = parsePositionalsAndOptions(args);
-  const json = parsedArgs.optionArgs.includes("--json");
+function buildPressRequest(argv: readonly string[]): RequestEnvelope {
+  const parsedArgs = parsePositionalsAndOptions(argv.slice(1));
   const key = parsedArgs.positionals[0];
   if (key === undefined) {
-    return error("Missing key.\n");
+    throw new CliUsageError("Missing key.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("press", {
-      key,
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  return createValidatedRequest("press", {
+    key,
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function keyboard(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parsePayloadPositionalsAndOptions(args, {
+function buildKeyboardRequest(argv: readonly string[]): RequestEnvelope {
+  const parsedArgs = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,
     minPositionals: 2,
   });
-  const json = parsedArgs.optionArgs.includes("--json");
-  const positional = parsedArgs.positionals;
-  const subcommand = positional[0];
-  const text = positional[1];
+  const subcommand = parsedArgs.positionals[0];
+  const text = parsedArgs.positionals[1];
   if (subcommand !== "type" && subcommand !== "inserttext") {
-    return error("Missing or invalid keyboard command.\n");
+    throw new CliUsageError("Missing or invalid keyboard command.");
   }
   if (text === undefined) {
-    return error("Missing text.\n");
+    throw new CliUsageError("Missing text.");
   }
-
-  const command = subcommand === "type" ? "keyboard.type" : "keyboard.inserttext";
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      text,
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  return createValidatedRequest(subcommand === "type" ? "keyboard.type" : "keyboard.inserttext", {
+    text,
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
-async function select(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsedArgs = parseSelectArguments(args);
-  const json = parsedArgs.optionArgs.includes("--json");
-  const positional = parsedArgs.positionals;
-  const elementTarget = positional[0];
-  const values = positional.slice(1);
+function buildSelectRequest(argv: readonly string[]): RequestEnvelope {
+  const parsedArgs = parseSelectArguments(argv.slice(1));
+  const elementTarget = parsedArgs.positionals[0];
+  const values = parsedArgs.positionals.slice(1);
   if (elementTarget === undefined) {
-    return error("Missing selector or ref.\n");
+    throw new CliUsageError("Missing selector or ref.");
   }
   if (values.length === 0) {
-    return error("Missing select value.\n");
+    throw new CliUsageError("Missing select value.");
   }
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("select", {
-      ...parseElementTarget(elementTarget),
-      values,
-      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  return createValidatedRequest("select", {
+    ...parseElementTarget(elementTarget),
+    values,
+    ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
 function parseSelectArguments(args: readonly string[]): {
@@ -1506,36 +1602,27 @@ function parseSelectArguments(args: readonly string[]): {
   return { positionals, optionArgs };
 }
 
-async function scroll(
-  command: "scroll" | "swipe",
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
-  const parsedArgs = parsePositionalsAndOptions(args);
-  const json = parsedArgs.optionArgs.includes("--json");
-  const positional = parsedArgs.positionals;
-  const direction = positional[0];
-  if (!isScrollDirection(direction)) {
-    return error(`Invalid direction: ${direction ?? ""}\n`);
+function buildScrollRequest(argv: readonly string[]): RequestEnvelope {
+  const command = argv[0];
+  if (command !== "scroll" && command !== "swipe") {
+    throw new CliUsageError("Invalid scroll command.");
   }
-
-  const maybeDistance = positional[1];
+  const parsedArgs = parsePositionalsAndOptions(argv.slice(1));
+  const direction = parsedArgs.positionals[0];
+  if (!isScrollDirection(direction)) {
+    throw new CliUsageError(`Invalid direction: ${direction ?? ""}`);
+  }
+  const maybeDistance = parsedArgs.positionals[1];
   const hasDistance = maybeDistance !== undefined && /^\d+$/u.test(maybeDistance);
   const distancePx = hasDistance ? Number(maybeDistance) : undefined;
-  const elementTarget = hasDistance ? positional[2] : positional[1];
-
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest(command, {
-      direction,
-      ...(distancePx === undefined ? {} : { distancePx }),
-      ...parseElementTarget(elementTarget),
-      ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
-
-  return formatActionResponse(response, json);
+  const elementTarget = hasDistance ? parsedArgs.positionals[2] : parsedArgs.positionals[1];
+  return createValidatedRequest(command, {
+    direction,
+    ...(distancePx === undefined ? {} : { distancePx }),
+    ...parseElementTarget(elementTarget),
+    ...optionalStringOption(parsedArgs.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
 }
 
 async function createManifestPlan(dependencies: CliDependencies) {
@@ -1710,16 +1797,17 @@ async function sendOrUnavailable<C extends CommandId>(
   dependencies: CliDependencies,
   request: RequestEnvelope<C>,
 ): Promise<ResponseEnvelope<C>> {
+  const validatedRequest = validateProtocolRequest(request);
   try {
     if (dependencies.sendRequest === undefined) {
       throw new LocalIpcError("CONNECTION_FAILED", "No native host IPC client is configured.");
     }
-    return (await dependencies.sendRequest(request)) as ResponseEnvelope<C>;
+    return (await dependencies.sendRequest(validatedRequest)) as ResponseEnvelope<C>;
   } catch (error) {
     if (error instanceof LocalIpcError) {
       return {
-        protocolVersion: request.protocolVersion,
-        id: request.id,
+        protocolVersion: validatedRequest.protocolVersion,
+        id: validatedRequest.id,
         ok: false,
         error: {
           code: "NATIVE_HOST_UNAVAILABLE",
@@ -1779,21 +1867,11 @@ function renderTargetSummary(target: ResolvedTarget): string {
 function isGetKind(
   value: string | undefined,
 ): value is "text" | "html" | "value" | "attr" | "title" | "url" | "count" | "box" | "styles" {
-  return (
-    value === "text" ||
-    value === "html" ||
-    value === "value" ||
-    value === "attr" ||
-    value === "title" ||
-    value === "url" ||
-    value === "count" ||
-    value === "box" ||
-    value === "styles"
-  );
+  return isOneOf(getKinds, value);
 }
 
 function isIsKind(value: string | undefined): value is "visible" | "enabled" | "checked" {
-  return value === "visible" || value === "enabled" || value === "checked";
+  return isOneOf(isKinds, value);
 }
 
 function isElementActionCommand(
@@ -1811,72 +1889,58 @@ function isElementActionCommand(
 }
 
 function isScrollDirection(value: string | undefined): value is "up" | "down" | "left" | "right" {
-  return value === "up" || value === "down" || value === "left" || value === "right";
+  return isOneOf(scrollDirections, value);
 }
 
 function isFindKind(
   value: string | undefined,
 ): value is "role" | "text" | "label" | "placeholder" | "alt" | "title" | "testid" {
-  return (
-    value === "role" ||
-    value === "text" ||
-    value === "label" ||
-    value === "placeholder" ||
-    value === "alt" ||
-    value === "title" ||
-    value === "testid"
-  );
+  return isOneOf(findKinds, value);
 }
 
-function isPotentialBatchCliCommand(value: string | undefined): boolean {
-  return (
-    value === "tab" ||
-    value === "window" ||
-    value === "open" ||
-    value === "back" ||
-    value === "forward" ||
-    value === "reload" ||
-    value === "snapshot" ||
-    value === "ref" ||
-    value === "get" ||
-    value === "is" ||
-    value === "wait" ||
-    value === "eval" ||
-    value === "screenshot" ||
-    value === "drag" ||
-    value === "upload" ||
-    value === "mouse" ||
-    value === "keydown" ||
-    value === "keyup" ||
-    value === "find" ||
-    value === "frame" ||
-    value === "download" ||
-    value === "dialog" ||
-    value === "clipboard" ||
-    value === "cookies" ||
-    value === "storage" ||
-    value === "network" ||
-    value === "console" ||
-    value === "errors" ||
-    value === "highlight" ||
-    value === "pdf" ||
-    value === "set" ||
-    value === "diff" ||
-    value === "click" ||
-    value === "dblclick" ||
-    value === "focus" ||
-    value === "hover" ||
-    value === "check" ||
-    value === "uncheck" ||
-    value === "scrollintoview" ||
-    value === "fill" ||
-    value === "type" ||
-    value === "press" ||
-    value === "keyboard" ||
-    value === "select" ||
-    value === "scroll" ||
-    value === "swipe"
-  );
+function isScreenshotFormat(
+  value: string | undefined,
+): value is (typeof screenshotFormats)[number] {
+  return isOneOf(screenshotFormats, value);
+}
+
+function isDialogAction(value: string | undefined): value is (typeof dialogActions)[number] {
+  return isOneOf(dialogActions, value);
+}
+
+function isClipboardAction(value: string | undefined): value is (typeof clipboardActions)[number] {
+  return isOneOf(clipboardActions, value);
+}
+
+function isCookieAction(value: string | undefined): value is (typeof cookieActions)[number] {
+  return isOneOf(cookieActions, value);
+}
+
+function isStorageArea(value: string | undefined): value is (typeof storageAreas)[number] {
+  return isOneOf(storageAreas, value);
+}
+
+function isStorageAction(value: string | undefined): value is (typeof storageActions)[number] {
+  return isOneOf(storageActions, value);
+}
+
+function isNetworkAction(value: string | undefined): value is (typeof networkActions)[number] {
+  return isOneOf(networkActions, value);
+}
+
+function isLogAction(value: string | undefined): value is (typeof logActions)[number] {
+  return isOneOf(logActions, value);
+}
+
+function isDiffKind(value: string | undefined): value is (typeof diffKinds)[number] {
+  return isOneOf(diffKinds, value);
+}
+
+function isOneOf<const T extends readonly string[]>(
+  values: T,
+  value: string | undefined,
+): value is T[number] {
+  return value !== undefined && values.includes(value);
 }
 
 type ParsedWaitArguments = {
@@ -2040,7 +2104,7 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
       case "--format":
       case "--screenshot-format": {
         const format = readFlagValue(args, index, arg).toLowerCase();
-        if (format !== "png" && format !== "jpeg") {
+        if (!isScreenshotFormat(format)) {
           throw new CliUsageError("Only PNG and JPEG screenshots are supported.");
         }
         parsed.format = format;
@@ -2468,52 +2532,57 @@ async function batchStepFromArgv(
   dependencies: CliDependencies,
   uploadBudget: UploadBudget,
 ): Promise<BatchStep> {
-  if (!isPotentialBatchCliCommand(argv[0])) {
-    throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
-  }
   if (batchArgvReadsStdin(argv)) {
     throw new CliUsageError(`Batch argv step ${index} cannot read from stdin.`);
   }
 
-  if (argv[0] === "upload") {
-    const parsed = parseBatchUploadArguments(argv, index);
-    return {
-      command: "upload",
-      params: await createUploadParams(parsed, dependencies, uploadBudget),
-    };
+  const binding = findCliRouteBindingForArgv(argv);
+  if (binding === undefined || !binding.route.batch) {
+    throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
   }
 
-  let captured: RequestEnvelope | undefined;
-  const parsed = await runCli(argv, {
-    ...dependencies,
-    sendRequest: async (request) => {
-      captured = request;
-      return createErrorResponse(request.id, {
-        code: "UNSUPPORTED_CAPABILITY",
-        message: "Batch parser captured request.",
-      });
-    },
-    clearPairState: async () => {
-      throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
-    },
-  });
-
-  if (captured === undefined) {
-    throw new CliUsageError(
-      parsed.stderr.trim().length === 0
-        ? `Invalid batch argv command at step ${index}.`
-        : `Invalid batch argv step ${index}: ${parsed.stderr.trim()}`,
-    );
+  let request: RequestEnvelope;
+  try {
+    request = await binding.buildRequest(argv, dependencies, { uploadBudget });
+  } catch (error) {
+    if (error instanceof CliUsageError) {
+      throw new CliUsageError(`Invalid batch argv step ${index}: ${error.message}`);
+    }
+    throw error;
   }
 
-  if (!isBatchableCommandId(captured.command)) {
+  if (!isBatchableCommandId(request.command)) {
     throw new CliUsageError(`Invalid batch command at step ${index}.`);
   }
 
   return {
-    command: captured.command,
-    params: stripImplicitBatchTarget(captured.command, captured.params, argv),
+    command: request.command,
+    params: stripImplicitBatchTarget(request.command, request.params, argv),
   };
+}
+
+function findCliRouteBindingForArgv(argv: readonly string[]): CliRouteBinding | undefined {
+  const root = argv[0];
+  if (root === undefined) {
+    return undefined;
+  }
+
+  const positionals = getPositionals(argv);
+  return (
+    cliRouteBindingsForMatching.find((binding) =>
+      routePathMatchesPositionals(binding.route.path, positionals),
+    ) ?? Object.values(cliRouteBindings).find((binding) => binding.route.path[0] === root)
+  );
+}
+
+function routePathMatchesPositionals(
+  routePath: CliRouteMetadata["path"],
+  positionals: readonly string[],
+): boolean {
+  return (
+    positionals.length >= routePath.length &&
+    routePath.every((segment, index) => positionals[index] === segment)
+  );
 }
 
 function batchArgvReadsStdin(argv: readonly string[]): boolean {
@@ -2538,12 +2607,7 @@ function stripImplicitBatchTarget(
 }
 
 function isImplicitBatchDefaultTargetCommand(command: CommandId): boolean {
-  return (
-    command === "tab.select" ||
-    command === "tab.close" ||
-    command === "window.select" ||
-    command === "window.close"
-  );
+  return commandAcceptsProtocolBatchDefaultTarget(command);
 }
 
 function hasExplicitTargetInBatchArgv(command: CommandId, argv: readonly string[]): boolean {
