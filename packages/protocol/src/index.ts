@@ -2159,7 +2159,7 @@ function failure(
 }
 
 function isCommandId(command: string): command is CommandId {
-  return command in commandSchemas;
+  return Object.hasOwn(commandSchemas, command);
 }
 
 export function isBatchableCommandId(command: string): command is CommandId {

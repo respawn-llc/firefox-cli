@@ -16,7 +16,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Both sides keep request promises in maps keyed by request ID without duplicate-ID protection, request timeouts, or complete cleanup on disconnect. Duplicate IDs can overwrite unresolved promises, stalled responses can leak entries, and native disconnects can leave extension callers waiting.
   **Fix:** Introduce a small request tracker abstraction with duplicate-ID rejection, per-request timeout/cancellation, disconnect cleanup, and deterministic structured transport errors. Use it from native-host and extension controller code, and add tests for duplicate IDs, timeout, native disconnect, extension disconnect, and response after timeout.
 
-- [ ] Replace inherited-property command checks in `packages/protocol/src/index.ts` with own-property validation.
+- [x] Replace inherited-property command checks in `packages/protocol/src/index.ts` with own-property validation.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: `commandSchemas` is a normal object at `packages/protocol/src/index.ts:1567-1863`; `isCommandId` uses `command in commandSchemas` at `packages/protocol/src/index.ts:2159-2161`; request parsing dereferences command schema after this guard at `packages/protocol/src/index.ts:2004-2015`.
   **Problem:** Inherited property names from untrusted messages can pass the command guard and crash or misroute validation.

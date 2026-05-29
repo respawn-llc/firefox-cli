@@ -18,6 +18,7 @@ const boundaries: readonly Boundary[] = [
   "host-to-extension",
   "extension-to-content-script",
 ];
+const inheritedCommandNames = ["toString", "constructor", "__proto__"] as const;
 
 const cliIdentity: ComponentIdentity = {
   component: "cli",
@@ -60,6 +61,26 @@ describe("parseBoundaryRequest", () => {
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("UNKNOWN_COMMAND");
     }
+  });
+
+  it.each(inheritedCommandNames)("rejects inherited command name %s", (command) => {
+    let parsed: ReturnType<typeof parseBoundaryRequest> | undefined;
+
+    expect(() => {
+      parsed = parseBoundaryRequest("cli-to-host", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: `request-${command}`,
+        command,
+        params: {},
+      });
+    }).not.toThrow();
+
+    expect(parsed).toMatchObject({
+      ok: false,
+      error: {
+        code: "UNKNOWN_COMMAND",
+      },
+    });
   });
 
   it("rejects protocol version mismatches", () => {
@@ -1195,6 +1216,28 @@ describe("parseBoundaryResponse", () => {
       }
     }
 
+    for (const command of inheritedCommandNames) {
+      let parsed: ReturnType<typeof parseBoundaryRequest> | undefined;
+
+      expect(() => {
+        parsed = parseBoundaryRequest("host-to-extension", {
+          protocolVersion: PROTOCOL_VERSION,
+          id: `batch-inherited-${command}`,
+          command: "batch",
+          params: {
+            steps: [{ command, params: {} }],
+          },
+        });
+      }).not.toThrow();
+
+      expect(parsed).toMatchObject({
+        ok: false,
+        error: {
+          code: "INVALID_ENVELOPE",
+        },
+      });
+    }
+
     for (const result of [
       {
         ok: true,
@@ -1290,6 +1333,61 @@ describe("parseBoundaryResponse", () => {
       if (!parsed.ok) {
         expect(parsed.error.code).toBe("INVALID_RESPONSE");
       }
+    }
+
+    for (const command of inheritedCommandNames) {
+      const successfulResponse = {
+        protocolVersion: PROTOCOL_VERSION,
+        id: `batch-result-inherited-${command}`,
+        ok: true,
+        result: {
+          ok: true,
+          steps: [{ index: 0, command, ok: true, result: {} }],
+          elapsedMs: 5,
+        },
+      };
+      expect(() =>
+        parseBoundaryResponse("host-to-extension", "batch", successfulResponse),
+      ).not.toThrow();
+      expect(parseBoundaryResponse("host-to-extension", "batch", successfulResponse)).toMatchObject(
+        {
+          ok: false,
+          error: {
+            code: "INVALID_RESPONSE",
+          },
+        },
+      );
+
+      const failedResponse = {
+        protocolVersion: PROTOCOL_VERSION,
+        id: `batch-result-failed-inherited-${command}`,
+        ok: true,
+        result: {
+          ok: false,
+          firstFailedIndex: 0,
+          steps: [
+            {
+              index: 0,
+              command,
+              ok: false,
+              error: {
+                code: "TIMEOUT",
+                message: "Timed out.",
+              },
+            },
+          ],
+          elapsedMs: 5,
+        },
+      };
+      expect(() =>
+        parseBoundaryResponse("host-to-extension", "batch", failedResponse),
+      ).not.toThrow();
+      expect(parseBoundaryResponse("host-to-extension", "batch", failedResponse)).toMatchObject({
+        ok: false,
+        error: {
+          code: "INVALID_RESPONSE",
+        },
+      });
     }
   });
 
