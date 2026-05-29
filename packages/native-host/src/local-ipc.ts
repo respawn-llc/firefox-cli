@@ -8,6 +8,19 @@ import {
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
 import { NATIVE_HOST_NAME } from "./host-launch.js";
+import {
+  createLocalIpcErrorResponse,
+  encodeLocalIpcJsonLine,
+  endSocketWithResponse,
+  endSocketWithResponseSync,
+  frameErrorToProtocolError,
+  isMessageTooLargeError,
+  LocalIpcFrameError,
+  readOneJsonLine,
+} from "./local-ipc-frame.js";
+
+export { MAX_LOCAL_IPC_MESSAGE_BYTES } from "./local-ipc-frame.js";
+const DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS = 5_000;
 
 export type LocalIpcEndpoint =
   | {
@@ -28,6 +41,7 @@ export type LocalIpcEndpointOptions = {
 export type LocalIpcServerOptions = {
   readonly endpoint: LocalIpcEndpoint;
   readonly authToken?: string;
+  readonly requestLineTimeoutMs?: number;
   handleMessage(message: unknown): Promise<unknown> | unknown;
 };
 
@@ -54,12 +68,15 @@ export class LocalIpcError extends Error {
 export class LocalIpcServer {
   readonly #endpoint: LocalIpcEndpoint;
   readonly #authToken: string | undefined;
+  readonly #requestLineTimeoutMs: number;
   readonly #handleMessage: LocalIpcServerOptions["handleMessage"];
   #server: Server | null = null;
 
   constructor(options: LocalIpcServerOptions) {
     this.#endpoint = options.endpoint;
     this.#authToken = options.authToken;
+    this.#requestLineTimeoutMs =
+      options.requestLineTimeoutMs ?? DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS;
     this.#handleMessage = options.handleMessage;
   }
 
@@ -74,7 +91,8 @@ export class LocalIpcServer {
       await unlinkStaleSocket(this.#endpoint.path);
     }
 
-    this.#server = createServer((socket) => {
+    this.#server = createServer({ allowHalfOpen: true }, (socket) => {
+      socket.allowHalfOpen = true;
       void this.#handleSocket(socket);
     });
 
@@ -119,17 +137,55 @@ export class LocalIpcServer {
   }
 
   async #handleSocket(socket: Socket): Promise<void> {
+    let readErrorHandled = false;
     try {
-      const message = await readOneJsonLine(socket);
+      const message = await readOneJsonLine(socket, {
+        timeoutMs: this.#requestLineTimeoutMs,
+        onFrameError: (error) => {
+          readErrorHandled = true;
+          const requestId = getRequestIdFromFrameError(error);
+          const protocolError = frameErrorToProtocolError(error);
+          endSocketWithResponseSync(
+            socket,
+            createLocalIpcErrorResponse(
+              requestId,
+              protocolError.code,
+              protocolError.message,
+              protocolError.details,
+            ),
+            requestId,
+          );
+        },
+      });
+      const requestId = getRequestId(message);
       const authorizedMessage = unwrapAuthorizedMessage(message, this.#authToken);
       if (!authorizedMessage.ok) {
-        socket.end(`${JSON.stringify(authorizedMessage.response)}\n`);
+        await endSocketWithResponse(socket, authorizedMessage.response, requestId);
         return;
       }
 
       const response = await this.#handleMessage(authorizedMessage.message);
-      socket.end(`${JSON.stringify(response)}\n`);
+      await endSocketWithResponse(socket, response, getRequestId(authorizedMessage.message));
     } catch (error) {
+      if (error instanceof LocalIpcFrameError) {
+        if (readErrorHandled) {
+          return;
+        }
+
+        const protocolError = frameErrorToProtocolError(error);
+        await endSocketWithResponse(
+          socket,
+          createLocalIpcErrorResponse(
+            getRequestIdFromFrameError(error),
+            protocolError.code,
+            protocolError.message,
+            protocolError.details,
+          ),
+          getRequestIdFromFrameError(error),
+        );
+        return;
+      }
+
       socket.destroy(error instanceof Error ? error : undefined);
     }
   }
@@ -155,7 +211,6 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
   request: RequestEnvelope<C>,
   options: { readonly authToken?: string | null } = {},
 ): Promise<ResponseEnvelope<C>> {
-  const socket = createConnection(endpoint.path);
   const wireMessage =
     options.authToken === undefined || options.authToken === null
       ? request
@@ -163,6 +218,20 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
           authToken: options.authToken,
           message: request,
         };
+
+  let encodedRequest: Buffer;
+  try {
+    encodedRequest = encodeLocalIpcJsonLine(wireMessage);
+  } catch (error) {
+    if (isMessageTooLargeError(error)) {
+      return createLocalIpcErrorResponse(request.id, "OUTPUT_TOO_LARGE", error.message, {
+        ...error.details,
+      }) as ResponseEnvelope<C>;
+    }
+    throw error;
+  }
+
+  const socket = createConnection(endpoint.path);
   const rawResponse = await new Promise<unknown>((resolve, reject) => {
     socket.once("error", (error) => {
       reject(
@@ -172,9 +241,25 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
       );
     });
     socket.once("connect", () => {
-      socket.write(`${JSON.stringify(wireMessage)}\n`);
+      socket.write(encodedRequest);
     });
-    readOneJsonLine(socket).then(resolve, reject);
+    readOneJsonLine(socket).then(resolve, (error: unknown) => {
+      if (error instanceof LocalIpcFrameError) {
+        socket.destroy();
+        const protocolError = frameErrorToProtocolError(error);
+        resolve(
+          createLocalIpcErrorResponse(
+            request.id,
+            protocolError.code,
+            protocolError.message,
+            protocolError.details,
+          ),
+        );
+        return;
+      }
+
+      reject(error);
+    });
   });
 
   const parsed = parseBoundaryResponse("cli-to-host", request.command, rawResponse);
@@ -222,51 +307,6 @@ export async function getOrCreateLocalIpcAuthToken(store: LocalIpcAuthTokenStore
   const token = randomBytes(32).toString("base64url");
   await store.write(token);
   return token;
-}
-
-async function readOneJsonLine(socket: Socket): Promise<unknown> {
-  return new Promise<unknown>((resolve, reject) => {
-    let buffer = "";
-
-    const cleanup = (): void => {
-      socket.off("data", onData);
-      socket.off("end", onEnd);
-      socket.off("error", onError);
-    };
-    const finish = (line: string): void => {
-      cleanup();
-      try {
-        resolve(JSON.parse(line) as unknown);
-      } catch (error) {
-        reject(
-          new LocalIpcError("REQUEST_FAILED", "IPC message is not valid JSON.", {
-            cause: error,
-          }),
-        );
-      }
-    };
-    const onData = (chunk: Buffer): void => {
-      buffer += Buffer.from(chunk).toString("utf8");
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex >= 0) {
-        finish(buffer.slice(0, newlineIndex));
-      }
-    };
-    const onEnd = (): void => {
-      cleanup();
-      reject(
-        new LocalIpcError("REQUEST_FAILED", "IPC connection closed before a response was sent."),
-      );
-    };
-    const onError = (error: Error): void => {
-      cleanup();
-      reject(error);
-    };
-
-    socket.on("data", onData);
-    socket.once("end", onEnd);
-    socket.once("error", onError);
-  });
 }
 
 function unwrapAuthorizedMessage(
@@ -329,6 +369,18 @@ function getRequestId(raw: unknown): string {
   }
 
   return "invalid-request";
+}
+
+function getRequestIdFromFrameError(error: LocalIpcFrameError): string {
+  if (error.rawLine === undefined || error.frameCode === "MESSAGE_TOO_LARGE") {
+    return "invalid-request";
+  }
+
+  try {
+    return getRequestId(JSON.parse(error.rawLine.toString("utf8")) as unknown);
+  } catch {
+    return "invalid-request";
+  }
 }
 
 async function unlinkStaleSocket(path: string): Promise<void> {
