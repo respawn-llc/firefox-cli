@@ -84,7 +84,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Spawn failures can hang or produce unclear failures, cleanup can match by brittle process text, and E2E setup is not fully platform-aware.
   **Fix:** Add a shared script runner utility that handles `spawn` errors, stdout/stderr collection limits, process timeouts, and kill/cleanup. Track child PIDs directly, use platform-aware native manifest planning in E2E, and retain `ps` scanning only as a guarded stale-process fallback.
 
-- [ ] Validate signed extension artifacts, not just their existence.
+- [x] Validate signed extension artifacts, not just their existence.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: `package-check.ts` returns successfully when `extension/firefox-cli.xpi` exists at `scripts/package-check.ts:53-64`, and `requireSignedXpi` only checks access at `scripts/package-check.ts:56-58`.
   **Problem:** A wrong, stale, or corrupt signed XPI can pass release layout checks.

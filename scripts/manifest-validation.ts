@@ -21,6 +21,7 @@ export const extensionManifestSchema = z
       })
       .passthrough(),
     permissions: z.array(z.string().min(1)),
+    host_permissions: z.array(z.string().min(1)).optional(),
     action: z
       .object({
         default_popup: z.string().min(1).optional(),
@@ -42,29 +43,38 @@ export const extensionManifestSchema = z
   .passthrough();
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;
 
-export async function readJsonManifestFile<T>(
-  filePath: string,
+export function parseJsonManifestContent<T>(
+  content: string,
   label: string,
+  location: string,
   schema: z.ZodType<T>,
-): Promise<T> {
-  const content = await readFile(filePath, "utf8");
+): T {
   let raw: unknown;
   try {
     raw = JSON.parse(content) as unknown;
   } catch (error) {
     throw new Error(
-      `Invalid ${label} JSON at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid ${label} JSON at ${location}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(
-      `Invalid ${label} at ${filePath}: ${parsed.error.issues.map(formatIssue).join("; ")}`,
+      `Invalid ${label} at ${location}: ${parsed.error.issues.map(formatIssue).join("; ")}`,
     );
   }
 
   return parsed.data;
+}
+
+export async function readJsonManifestFile<T>(
+  filePath: string,
+  label: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const content = await readFile(filePath, "utf8");
+  return parseJsonManifestContent(content, label, filePath, schema);
 }
 
 function formatIssue(issue: z.core.$ZodIssue): string {

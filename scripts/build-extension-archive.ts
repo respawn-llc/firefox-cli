@@ -1,14 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
-
-const crcTable = Array.from({ length: 256 }, (_, index) => {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) {
-    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-  }
-  return value >>> 0;
-});
+import { calculateCrc32 } from "./zip-archive.js";
 
 const sourceDir = resolve("dist/extension");
 const artifactDir = resolve("dist/extension-artifacts");
@@ -24,7 +17,7 @@ const records = await Promise.all(
     return {
       name,
       data,
-      crc32: crc32(data),
+      crc32: calculateCrc32(data),
     };
   }),
 );
@@ -148,18 +141,4 @@ function createEndRecord(input: {
   buffer.writeUInt32LE(input.centralDirectoryOffset, 16);
   buffer.writeUInt16LE(0, 20);
   return buffer;
-}
-
-function crc32(data: Buffer): number {
-  let value = 0xffffffff;
-
-  for (const byte of data) {
-    const tableValue = crcTable[(value ^ byte) & 0xff];
-    if (tableValue === undefined) {
-      throw new Error("CRC32 table lookup failed.");
-    }
-    value = (value >>> 8) ^ tableValue;
-  }
-
-  return (value ^ 0xffffffff) >>> 0;
 }
