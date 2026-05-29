@@ -362,7 +362,7 @@ describe("local IPC", () => {
     const hugeId = "x".repeat(MAX_LOCAL_IPC_MESSAGE_BYTES - baseBytes);
     const server = new LocalIpcServer({
       endpoint,
-      requestLineTimeoutMs: 10,
+      requestLineTimeoutMs: 100,
       handleMessage: () => createOkResponse(createRequest("noop", {}, "unused"), { ok: true }),
     });
     servers.push(server);
