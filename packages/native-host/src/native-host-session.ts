@@ -16,7 +16,8 @@ import {
   FilePairStateStore,
   approvePairing,
   getOrCreateHostIdentity,
-  verifyPairToken,
+  readPairStateStatus,
+  verifyPairStateStatus,
   type HostIdentityStore,
   type PairStateStore,
 } from "./pair-state.js";
@@ -76,7 +77,7 @@ export async function startNativeHostSession(
   const broker = new NativeHostBroker({
     hostIdentity,
     verifyPairToken: async (token) =>
-      verifyPairToken(await pairStateStore.read(), hostIdentity, token),
+      verifyPairStateStatus(await readPairStateStatus(pairStateStore), hostIdentity, token),
   });
   const nativeConnection = await attachNativeMessagingConnection({
     broker,
@@ -86,14 +87,13 @@ export async function startNativeHostSession(
     productVersion: options.productVersion,
     pairing: {
       hostIdentity,
-      readState: () => pairStateStore.read(),
+      readStateStatus: () => readPairStateStatus(pairStateStore),
       approve: async () => {
         const approval = approvePairing(hostIdentity);
         await pairStateStore.write(approval.state);
         return approval;
       },
       reset: () => pairStateStore.clear(),
-      verify: async (token) => verifyPairToken(await pairStateStore.read(), hostIdentity, token),
     },
   });
   const ipcServer = new LocalIpcServer({

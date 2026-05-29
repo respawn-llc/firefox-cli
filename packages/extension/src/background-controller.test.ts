@@ -226,6 +226,53 @@ describe("FirefoxCliBackgroundController", () => {
     });
   });
 
+  it("preserves stored pair tokens when hello reports invalid native-host pair state", async () => {
+    const port = new FakeNativePort();
+    const storedTokens: (string | null)[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+      storageAdapter: {
+        getPairToken: async () => "stored-token",
+        setPairToken: async (token) => {
+          storedTokens.push(token);
+        },
+      },
+    });
+    controller.start();
+    await flushPromises();
+    const hello = port.messages.at(-1) as ReturnType<typeof createRequest<"hello">>;
+
+    port.emitMessage(
+      createOkResponse(hello, {
+        accepted: true,
+        negotiatedProtocolVersion: 1,
+        peer: {
+          component: "native-host",
+          productName: "firefox-cli",
+          productVersion: "0.0.0",
+          protocolMin: 1,
+          protocolMax: 1,
+          features: [],
+        },
+        pairing: {
+          hostId: "host-1",
+          extensionId: "firefox-cli@example.invalid",
+          approved: false,
+          status: "invalid-pair-state",
+          message: "Stored pair state is invalid.",
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(controller.getStatus()).toMatchObject({
+      approved: false,
+      lastError: "Stored pair state is invalid.",
+    });
+    expect(storedTokens).toEqual([]);
+  });
+
   it("reports disconnects actionably", () => {
     const port = new FakeNativePort();
     const controller = new FirefoxCliBackgroundController({

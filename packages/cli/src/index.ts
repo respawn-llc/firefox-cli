@@ -4,6 +4,8 @@ import {
   FilePairStateStore,
   FileLocalIpcAuthTokenStore,
   LocalIpcError,
+  isPersistedJsonFileError,
+  parseNativeMessagingManifestJson,
   planLocalIpcEndpoint,
   planNativeMessagingManifest,
   sendLocalIpcRequest,
@@ -458,6 +460,9 @@ async function doctor(args: readonly string[], dependencies: CliDependencies): P
       `Path: ${plan.manifestPath}`,
       payload.nativeHostManifest.status === "stale"
         ? `Installed path: ${payload.nativeHostManifest.installedPath}`
+        : undefined,
+      payload.nativeHostManifest.status === "invalid"
+        ? `Validation error: ${payload.nativeHostManifest.reason}`
         : undefined,
       `Extension connection: ${connection.status}`,
       "nextAction" in payload.nativeHostManifest
@@ -1590,6 +1595,12 @@ async function readNativeHostManifestStatus(
       readonly expectedPath: string;
       readonly nextAction: string;
     }
+  | {
+      readonly status: "invalid";
+      readonly path: string;
+      readonly reason: string;
+      readonly nextAction: string;
+    }
 > {
   let content: string;
   try {
@@ -1605,12 +1616,26 @@ async function readNativeHostManifestStatus(
     throw error;
   }
 
-  const installed = JSON.parse(content) as { readonly path?: unknown };
-  if (installed.path !== plan.manifest.path) {
+  let installed: typeof plan.manifest;
+  try {
+    installed = parseNativeMessagingManifestJson(content, plan.manifestPath);
+  } catch (error) {
+    if (isPersistedJsonFileError(error)) {
+      return {
+        status: "invalid",
+        path: plan.manifestPath,
+        reason: error.message,
+        nextAction: "Run `firefox-cli doctor --fix`.",
+      };
+    }
+    throw error;
+  }
+
+  if (!isNativeMessagingManifestCanonical(installed, plan.manifest)) {
     return {
       status: "stale",
       path: plan.manifestPath,
-      installedPath: typeof installed.path === "string" ? installed.path : "<missing>",
+      installedPath: installed.path,
       expectedPath: plan.manifest.path,
       nextAction: "Run `firefox-cli doctor --fix`.",
     };
@@ -1622,8 +1647,29 @@ async function readNativeHostManifestStatus(
   };
 }
 
+function isNativeMessagingManifestCanonical(
+  installed: Awaited<ReturnType<typeof createManifestPlan>>["manifest"],
+  expected: Awaited<ReturnType<typeof createManifestPlan>>["manifest"],
+): boolean {
+  return (
+    installed.name === expected.name &&
+    installed.description === expected.description &&
+    installed.path === expected.path &&
+    installed.type === expected.type &&
+    installed.allowed_extensions.length === expected.allowed_extensions.length &&
+    installed.allowed_extensions.every(
+      (value, index) => value === expected.allowed_extensions[index],
+    )
+  );
+}
+
 async function checkExtensionConnection(dependencies: CliDependencies): Promise<{
-  readonly status: "connected" | "not-approved" | "version-mismatch" | "disconnected";
+  readonly status:
+    | "connected"
+    | "not-approved"
+    | "version-mismatch"
+    | "pairing-mismatch"
+    | "disconnected";
   readonly nextAction?: string;
 }> {
   const response = await sendOrUnavailable(dependencies, createRequest("noop", {}));
@@ -1643,6 +1689,13 @@ async function checkExtensionConnection(dependencies: CliDependencies): Promise<
       status: "version-mismatch",
       nextAction:
         "Upgrade/rebuild firefox-cli, the native host, and the extension so their protocol versions match.",
+    };
+  }
+
+  if (response.error.code === "PAIRING_MISMATCH") {
+    return {
+      status: "pairing-mismatch",
+      nextAction: response.error.message,
     };
   }
 

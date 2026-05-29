@@ -101,9 +101,34 @@ export const helloResultSchema = z.object({
       hostId: z.string().min(1),
       extensionId: z.string().min(1),
       approved: z.boolean(),
+      status: z.enum(["approved", "not-approved", "invalid-pair-state"]).optional(),
+      message: z.string().min(1).optional(),
       generation: z.number().int().positive().optional(),
     })
     .strict()
+    .superRefine((pairing, context) => {
+      if (pairing.approved && pairing.status !== undefined && pairing.status !== "approved") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Approved pairing cannot have an invalid or not-approved status.",
+          path: ["status"],
+        });
+      }
+      if (!pairing.approved && pairing.status === "approved") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unapproved pairing cannot have approved status.",
+          path: ["status"],
+        });
+      }
+      if (pairing.status === "invalid-pair-state" && pairing.message === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid pair-state status requires a message.",
+          path: ["message"],
+        });
+      }
+    })
     .optional(),
 });
 

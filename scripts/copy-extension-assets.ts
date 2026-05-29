@@ -1,19 +1,39 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
+import { extensionManifestSchema, readJsonManifestFile } from "./manifest-validation.js";
 
 const sourceDir = resolve("packages/extension/src");
 const outputDir = resolve("dist/extension");
 
-await mkdir(outputDir, { recursive: true });
+export async function copyExtensionAssets(options: {
+  readonly sourceDir: string;
+  readonly outputDir: string;
+  readonly version: string;
+}): Promise<void> {
+  await mkdir(options.outputDir, { recursive: true });
 
-const manifest = JSON.parse(await readFile(resolve(sourceDir, "manifest.json"), "utf8")) as {
-  version: string;
-};
-manifest.version = rootPackage.version;
+  const manifest = await readJsonManifestFile(
+    resolve(options.sourceDir, "manifest.json"),
+    "source extension manifest",
+    extensionManifestSchema,
+  );
+  manifest.version = options.version;
 
-await writeFile(resolve(outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-await cp(resolve(sourceDir, "popup.html"), resolve(outputDir, "popup.html"));
-await cp(resolve(sourceDir, "popup.css"), resolve(outputDir, "popup.css"));
+  await writeFile(
+    resolve(options.outputDir, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  await cp(resolve(options.sourceDir, "popup.html"), resolve(options.outputDir, "popup.html"));
+  await cp(resolve(options.sourceDir, "popup.css"), resolve(options.outputDir, "popup.css"));
+}
 
-console.log(`Copied extension assets to ${outputDir}`);
+if (import.meta.main) {
+  await copyExtensionAssets({
+    sourceDir,
+    outputDir,
+    version: rootPackage.version,
+  });
+
+  console.log(`Copied extension assets to ${outputDir}`);
+}

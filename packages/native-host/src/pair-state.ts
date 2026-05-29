@@ -1,6 +1,12 @@
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createHash, randomBytes as nodeRandomBytes, randomUUID } from "node:crypto";
 import { dirname, join, posix, win32 } from "node:path";
+import { z } from "zod";
+import {
+  type PersistedJsonFileError,
+  isPersistedJsonFileError,
+  parsePersistedJson,
+} from "./persisted-json.js";
 
 export type PairState = {
   readonly schemaVersion: 1;
@@ -15,6 +21,37 @@ export type HostIdentity = {
   readonly hostId: string;
   readonly extensionId: string;
 };
+
+export const pairStateSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    hostId: z.string().min(1),
+    extensionId: z.string().min(1),
+    tokenHash: z.string().min(1),
+    approvedAt: z.string().min(1),
+    generation: z.number().int().positive(),
+  })
+  .strict();
+
+export const hostIdentitySchema = z
+  .object({
+    hostId: z.string().min(1),
+    extensionId: z.string().min(1),
+  })
+  .strict();
+
+export type PairStateStatus =
+  | {
+      readonly status: "missing";
+    }
+  | {
+      readonly status: "valid";
+      readonly state: PairState;
+    }
+  | {
+      readonly status: "invalid";
+      readonly error: PersistedJsonFileError;
+    };
 
 export type HostIdentityStore = {
   readonly filePath: string;
@@ -33,7 +70,8 @@ export type PairTokenVerification =
         | "TOKEN_REQUIRED"
         | "TOKEN_MISMATCH"
         | "HOST_ID_MISMATCH"
-        | "EXTENSION_ID_MISMATCH";
+        | "EXTENSION_ID_MISMATCH"
+        | "PAIR_STATE_INVALID";
       readonly message: string;
     };
 
@@ -70,7 +108,15 @@ export async function getOrCreateHostIdentity(
   store: HostIdentityStore,
   options: HostIdentityOptions,
 ): Promise<HostIdentity> {
-  const stored = await store.read();
+  let stored: HostIdentity | null;
+  try {
+    stored = await store.read();
+  } catch (error) {
+    if (!isPersistedJsonFileError(error)) {
+      throw error;
+    }
+    stored = null;
+  }
   if (stored !== null && stored.extensionId === options.extensionId) {
     return stored;
   }
@@ -152,6 +198,35 @@ export function verifyPairToken(
   return { ok: true };
 }
 
+export async function readPairStateStatus(store: PairStateStore): Promise<PairStateStatus> {
+  try {
+    const state = await store.read();
+    return state === null ? { status: "missing" } : { status: "valid", state };
+  } catch (error) {
+    if (isPersistedJsonFileError(error)) {
+      return { status: "invalid", error };
+    }
+    throw error;
+  }
+}
+
+export function verifyPairStateStatus(
+  state: PairStateStatus,
+  hostIdentity: HostIdentity,
+  token: string | undefined,
+): PairTokenVerification {
+  if (state.status === "invalid") {
+    return {
+      ok: false,
+      code: "PAIR_STATE_INVALID",
+      message:
+        "Stored pair state is invalid. Reset approval from the extension popup or run `firefox-cli unpair`, then approve firefox-cli again.",
+    };
+  }
+
+  return verifyPairToken(state.status === "missing" ? null : state.state, hostIdentity, token);
+}
+
 export async function unpair(store: PairStateStore): Promise<void> {
   await store.clear();
 }
@@ -191,7 +266,10 @@ export class FilePairStateStore implements PairStateStore {
       throw error;
     }
 
-    return JSON.parse(content) as PairState;
+    return parsePersistedJson(content, pairStateSchema, {
+      filePath: this.filePath,
+      label: "Pair state",
+    });
   }
 
   async write(state: PairState): Promise<void> {
@@ -249,7 +327,10 @@ export class FileHostIdentityStore implements HostIdentityStore {
       throw error;
     }
 
-    return JSON.parse(content) as HostIdentity;
+    return parsePersistedJson(content, hostIdentitySchema, {
+      filePath: this.filePath,
+      label: "Host identity",
+    });
   }
 
   async write(identity: HostIdentity): Promise<void> {

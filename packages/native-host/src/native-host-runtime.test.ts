@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 import { NativeHostBroker } from "./host-broker.js";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
 import { attachNativeMessagingConnection } from "./native-host-runtime.js";
-import { approvePairing, verifyPairToken, type PairState } from "./pair-state.js";
+import { PersistedJsonFileError } from "./persisted-json.js";
+import {
+  approvePairing,
+  verifyPairStateStatus,
+  type PairState,
+  type PairStateStatus,
+} from "./pair-state.js";
 
 describe("native host runtime", () => {
   it("bridges broker requests to the extension over native messaging frames", async () => {
@@ -188,9 +194,11 @@ describe("native host runtime", () => {
       extensionId: "firefox-cli@example.invalid",
     };
     let pairState: PairState | null = null;
+    const readStateStatus = (): PairStateStatus =>
+      pairState === null ? { status: "missing" } : { status: "valid", state: pairState };
     const broker = new NativeHostBroker({
       hostIdentity,
-      verifyPairToken: (token) => verifyPairToken(pairState, hostIdentity, token),
+      verifyPairToken: (token) => verifyPairStateStatus(readStateStatus(), hostIdentity, token),
     });
     await attachNativeMessagingConnection({
       broker,
@@ -200,7 +208,7 @@ describe("native host runtime", () => {
       productVersion: "0.0.0",
       pairing: {
         hostIdentity,
-        readState: async () => pairState,
+        readStateStatus: async () => readStateStatus(),
         approve: async () => {
           const approval = approvePairing(hostIdentity, {
             now: () => new Date("2026-01-02T03:04:05.000Z"),
@@ -212,7 +220,6 @@ describe("native host runtime", () => {
         reset: async () => {
           pairState = null;
         },
-        verify: (token) => verifyPairToken(pairState, hostIdentity, token),
       },
     });
     const extensionReader = new NativeMessagingFrameReader(extensionOutput);
@@ -270,5 +277,76 @@ describe("native host runtime", () => {
     expect(forwarded).toEqual(cliRequest);
     extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
     await expect(brokerResponse).resolves.toEqual(createOkResponse(cliRequest, { ok: true }));
+  });
+
+  it("surfaces invalid persisted pair state without crashing hello or CLI gating", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const hostIdentity = {
+      hostId: "host-1",
+      extensionId: "firefox-cli@example.invalid",
+    };
+    const invalidState: PairStateStatus = {
+      status: "invalid",
+      error: new PersistedJsonFileError({
+        kind: "invalid-shape",
+        filePath: "/state/pair-state.json",
+        label: "Pair state",
+        reason: "generation: Invalid input",
+      }),
+    };
+    const broker = new NativeHostBroker({
+      hostIdentity,
+      verifyPairToken: (token) => verifyPairStateStatus(invalidState, hostIdentity, token),
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: false,
+      productVersion: "0.0.0",
+      pairing: {
+        hostIdentity,
+        readStateStatus: async () => invalidState,
+        approve: async () => {
+          throw new Error("not used");
+        },
+        reset: async () => undefined,
+      },
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const hello = createRequest(
+      "hello",
+      {
+        component: "extension",
+        productName: "firefox-cli",
+        productVersion: "0.0.0",
+        protocolMin: 1,
+        protocolMax: 1,
+        features: [],
+        pairToken: "stored-token",
+      },
+      "hello-invalid",
+    );
+    const helloResponse = extensionReader.read();
+    extensionInput.write(encodeNativeMessageFrame(hello));
+
+    await expect(helloResponse).resolves.toMatchObject({
+      id: "hello-invalid",
+      ok: true,
+      result: {
+        pairing: {
+          approved: false,
+          status: "invalid-pair-state",
+        },
+      },
+    });
+    await expect(
+      broker.handleCliRequest(createRequest("noop", {}, "cli-invalid")),
+    ).resolves.toMatchObject({
+      id: "cli-invalid",
+      ok: false,
+      error: { code: "PAIRING_MISMATCH" },
+    });
   });
 });

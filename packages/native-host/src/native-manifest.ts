@@ -1,7 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
+import { z } from "zod";
 import { resolvePackagedBinary, type PlatformInput } from "./platform-binary.js";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
+import { parsePersistedJson } from "./persisted-json.js";
 
 export type NativeMessagingManifest = {
   readonly name: string;
@@ -10,6 +12,16 @@ export type NativeMessagingManifest = {
   readonly type: "stdio";
   readonly allowed_extensions: readonly string[];
 };
+
+export const nativeMessagingManifestSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().min(1),
+    path: z.string().min(1),
+    type: z.literal("stdio"),
+    allowed_extensions: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
 
 export type NativeMessagingManifestRegistration =
   | {
@@ -92,6 +104,16 @@ export async function writeNativeMessagingManifest(
 ): Promise<void> {
   await mkdir(dirname(plan.manifestPath), { recursive: true });
   await writeFile(plan.manifestPath, `${JSON.stringify(plan.manifest, null, 2)}\n`);
+}
+
+export function parseNativeMessagingManifestJson(
+  content: string,
+  filePath: string,
+): NativeMessagingManifest {
+  return parsePersistedJson(content, nativeMessagingManifestSchema, {
+    filePath,
+    label: "Native messaging manifest",
+  });
 }
 
 function createManifestPlan(

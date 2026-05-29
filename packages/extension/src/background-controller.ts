@@ -362,19 +362,27 @@ export class FirefoxCliBackgroundController {
         this.#pendingCommands.settle(message.id, createErrorResponse(message.id, response.error));
         return;
       }
+      let helloPairingError: string | undefined;
       if (command === "hello" && response.value.ok) {
         const helloResponse = response.value as Extract<ResponseEnvelope<"hello">, { ok: true }>;
         const pairing = helloResponse.result.pairing;
         if (pairing !== undefined) {
           this.#approved = pairing.approved;
-          if (!pairing.approved && this.#pairToken !== null) {
+          if (
+            !pairing.approved &&
+            pairing.status !== "invalid-pair-state" &&
+            this.#pairToken !== null
+          ) {
             this.#pairToken = null;
             await this.#storageAdapter.setPairToken(null);
+          }
+          if (!pairing.approved && pairing.status === "invalid-pair-state") {
+            helloPairingError = pairing.message ?? "Native host pair state is invalid.";
           }
         }
       }
       this.#pendingCommands.settle(message.id, response.value);
-      this.#lastError = undefined;
+      this.#lastError = helloPairingError;
       return;
     }
 

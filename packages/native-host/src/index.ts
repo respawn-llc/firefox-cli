@@ -23,8 +23,10 @@ export {
 } from "./host-launch.js";
 export {
   createNativeMessagingManifest,
+  parseNativeMessagingManifestJson,
   planNativeMessagingManifest,
   writeNativeMessagingManifest,
+  nativeMessagingManifestSchema,
   type NativeMessagingManifest,
   type NativeMessagingManifestOptions,
   type NativeMessagingManifestPlan,
@@ -38,8 +40,11 @@ export {
   createHostIdentity,
   getOrCreateHostIdentity,
   rotatePairToken,
+  readPairStateStatus,
   unpair,
+  verifyPairStateStatus,
   verifyPairToken,
+  type PairStateStatus,
   type HostIdentityStore,
   type HostIdentity,
   type HostIdentityOptions,
@@ -49,6 +54,12 @@ export {
   type PairTokenRotation,
   type PairTokenVerification,
 } from "./pair-state.js";
+export {
+  PersistedJsonFileError,
+  isPersistedJsonFileError,
+  parsePersistedJson,
+  type PersistedJsonErrorKind,
+} from "./persisted-json.js";
 export {
   NativeHostBroker,
   type ExtensionConnection,

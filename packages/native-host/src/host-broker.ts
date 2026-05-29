@@ -18,6 +18,7 @@ import type { HostIdentity, PairTokenVerification } from "./pair-state.js";
 export type ExtensionConnection = {
   readonly approved: boolean;
   readonly token: string | undefined;
+  readonly pairingError?: PairTokenVerification | undefined;
   send(request: RequestEnvelope): Promise<unknown>;
 };
 
@@ -70,6 +71,16 @@ export class NativeHostBroker {
     }
 
     if (!this.#extensionConnection.approved) {
+      const pairingError = this.#extensionConnection.pairingError;
+      if (pairingError !== undefined && !pairingError.ok) {
+        return createErrorResponse(request.id, {
+          code:
+            pairingError.code === "NOT_APPROVED" || pairingError.code === "TOKEN_REQUIRED"
+              ? "NOT_APPROVED"
+              : "PAIRING_MISMATCH",
+          message: pairingError.message,
+        });
+      }
       return createErrorResponse(request.id, {
         code: "NOT_APPROVED",
         message: "Approve firefox-cli in the extension popup before running CLI commands.",

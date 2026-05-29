@@ -209,6 +209,132 @@ describe("runCli", () => {
     ).resolves.toContain(newBinaryPath);
   });
 
+  it("reports and repairs invalid native-host manifest files during doctor", async () => {
+    const homeDir = await createTempDir("firefox-cli-home");
+    const binaryPath = "/opt/firefox-cli/bin/darwin-arm64/firefox-cli";
+    await runCli(["setup", "native-host"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    const manifestPath = join(
+      homeDir,
+      "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json",
+    );
+    await writeFile(manifestPath, "{");
+
+    const checked = await runCli(["doctor", "--json"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    expect(JSON.parse(checked.stdout)).toMatchObject({
+      nativeHostManifest: {
+        status: "invalid",
+        nextAction: "Run `firefox-cli doctor --fix`.",
+      },
+    });
+
+    const fixed = await runCli(["doctor", "--fix", "--json"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+
+    expect(JSON.parse(fixed.stdout)).toMatchObject({
+      nativeHostManifest: {
+        status: "installed",
+      },
+    });
+    await expect(readFile(manifestPath, "utf8")).resolves.toContain(binaryPath);
+  });
+
+  it("does not treat wrong-shape or non-canonical native-host manifests as installed", async () => {
+    const homeDir = await createTempDir("firefox-cli-home");
+    const binaryPath = "/opt/firefox-cli/bin/darwin-arm64/firefox-cli";
+    await runCli(["setup", "native-host"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    const manifestPath = join(
+      homeDir,
+      "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json",
+    );
+    await writeFile(manifestPath, `${JSON.stringify({ path: binaryPath })}\n`);
+
+    const wrongShape = await runCli(["doctor", "--json"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    expect(JSON.parse(wrongShape.stdout)).toMatchObject({
+      nativeHostManifest: {
+        status: "invalid",
+      },
+    });
+
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "firefox_cli",
+          description: "Native messaging host for firefox-cli.",
+          path: binaryPath,
+          type: "stdio",
+          allowed_extensions: ["firefox-cli@example.invalid"],
+          unexpected: true,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const extraFields = await runCli(["doctor", "--json"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    expect(JSON.parse(extraFields.stdout)).toMatchObject({
+      nativeHostManifest: {
+        status: "invalid",
+      },
+    });
+
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "firefox_cli",
+          description: "Native messaging host for firefox-cli.",
+          path: binaryPath,
+          type: "stdio",
+          allowed_extensions: ["other@example.invalid"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const stale = await runCli(["doctor", "--json"], {
+      ...baseDependencies(),
+      binaryPath,
+      homeDir,
+      platform: "darwin",
+    });
+    expect(JSON.parse(stale.stdout)).toMatchObject({
+      nativeHostManifest: {
+        status: "stale",
+        installedPath: binaryPath,
+        expectedPath: binaryPath,
+      },
+    });
+  });
+
   it("reports protocol version mismatch with upgrade remediation", async () => {
     const output = await runCli(["doctor"], {
       ...baseDependencies(),
@@ -224,6 +350,21 @@ describe("runCli", () => {
     expect(output.stdout).toContain(
       "Upgrade/rebuild firefox-cli, the native host, and the extension",
     );
+  });
+
+  it("reports pairing mismatches from doctor without treating the extension as disconnected", async () => {
+    const output = await runCli(["doctor"], {
+      ...baseDependencies(),
+      sendRequest: async (request) =>
+        createErrorResponse(request.id, {
+          code: "PAIRING_MISMATCH",
+          message: "Stored pair state is invalid. Run `firefox-cli unpair`.",
+        }),
+    });
+
+    expect(output.exitCode).toBe(1);
+    expect(output.stdout).toContain("Extension connection: pairing-mismatch");
+    expect(output.stdout).toContain("Connection next action: Stored pair state is invalid.");
   });
 
   it("clears pair state on unpair", async () => {

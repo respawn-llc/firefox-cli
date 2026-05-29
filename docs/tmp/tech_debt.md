@@ -28,7 +28,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** A truncated command containing `--window` or `--tab` can silently target the active tab or window.
   **Fix:** Require explicit values for `--window` and `--tab` by reusing `readFlagValue`, while still accepting the explicit value `active`. Add CLI tests for all command families that accept target options, especially destructive actions like `tab close`, `window close`, `cookies`, `storage`, and `clipboard`.
 
-- [ ] Validate persisted JSON state and manifest files before trusting casts.
+- [x] Validate persisted JSON state and manifest files before trusting casts.
   Source: direct observation with subagent corroboration.
   Evidence: pair state and host identity use `JSON.parse(... ) as PairState` / `as HostIdentity` at `packages/native-host/src/pair-state.ts:183-195` and `packages/native-host/src/pair-state.ts:241-253`; `doctor` manifest status parses to a cast object at `packages/cli/src/index.ts:1567-1603`; package checks parse package and extension manifests with casts at `scripts/package-check.ts:31-79`.
   **Problem:** Corrupt or tampered files can crash setup/doctor/startup flows or be treated as valid with missing fields.

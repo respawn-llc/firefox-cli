@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
@@ -10,7 +10,9 @@ import {
   createHostIdentity,
   getOrCreateHostIdentity,
   rotatePairToken,
+  readPairStateStatus,
   unpair,
+  verifyPairStateStatus,
   verifyPairToken,
 } from "./pair-state.js";
 
@@ -153,6 +155,51 @@ describe("pair state", () => {
     await expect(store.read()).resolves.toBeNull();
   });
 
+  it("rejects malformed pair state without clearing the file", async () => {
+    const rootDir = await createTempDir("firefox-cli-pair-state");
+    const store = new FilePairStateStore({
+      filePath: join(rootDir, "pair-state.json"),
+    });
+
+    await writeFile(store.filePath, "{");
+
+    await expect(store.read()).rejects.toMatchObject({
+      kind: "invalid-json",
+      filePath: store.filePath,
+    });
+    await expect(readFile(store.filePath, "utf8")).resolves.toBe("{");
+  });
+
+  it("classifies wrong-shape pair state as invalid for token verification", async () => {
+    const rootDir = await createTempDir("firefox-cli-pair-state");
+    const store = new FilePairStateStore({
+      filePath: join(rootDir, "pair-state.json"),
+    });
+    const hostIdentity = createHostIdentity({
+      extensionId: FIREFOX_CLI_EXTENSION_ID,
+      generateId: () => "host-1",
+    });
+    await writeFile(
+      store.filePath,
+      JSON.stringify({
+        schemaVersion: 1,
+        hostId: "host-1",
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        tokenHash: "hash",
+        approvedAt: "2026-01-02T03:04:05.000Z",
+        generation: "1",
+      }),
+    );
+
+    const status = await readPairStateStatus(store);
+
+    expect(status).toMatchObject({ status: "invalid" });
+    expect(verifyPairStateStatus(status, hostIdentity, "token")).toMatchObject({
+      ok: false,
+      code: "PAIR_STATE_INVALID",
+    });
+  });
+
   it("persists the host identity across native-host restarts", async () => {
     const rootDir = await createTempDir("firefox-cli-host-identity");
     const store = new FileHostIdentityStore({
@@ -182,5 +229,24 @@ describe("pair state", () => {
       const mode = (await stat(store.filePath)).mode & 0o777;
       expect(mode).toBe(0o600);
     }
+  });
+
+  it("regenerates malformed host identity files without clearing pair state", async () => {
+    const rootDir = await createTempDir("firefox-cli-host-identity");
+    const store = new FileHostIdentityStore({
+      filePath: join(rootDir, "host-identity.json"),
+    });
+    await writeFile(store.filePath, JSON.stringify({ extensionId: FIREFOX_CLI_EXTENSION_ID }));
+
+    const identity = await getOrCreateHostIdentity(store, {
+      extensionId: FIREFOX_CLI_EXTENSION_ID,
+      generateId: () => "host-2",
+    });
+
+    expect(identity).toEqual({
+      hostId: "host-2",
+      extensionId: FIREFOX_CLI_EXTENSION_ID,
+    });
+    await expect(readFile(store.filePath, "utf8")).resolves.toContain("host-2");
   });
 });

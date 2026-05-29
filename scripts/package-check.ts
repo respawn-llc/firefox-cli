@@ -2,6 +2,12 @@ import { access, readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
 import { resolvePackagedBinary, type PlatformInput } from "@firefox-cli/native-host";
+import {
+  extensionManifestSchema,
+  packageManifestSchema,
+  readJsonManifestFile,
+  type ExtensionManifest,
+} from "./manifest-validation.js";
 
 export type PackageCheckOptions = {
   readonly packageRoot: string;
@@ -29,11 +35,11 @@ export async function verifyPackageLayout(
 }
 
 async function verifyPackageJson(packageRoot: string): Promise<void> {
-  const packageJson = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8")) as {
-    name?: string;
-    version?: string;
-    bin?: Record<string, string>;
-  };
+  const packageJson = await readJsonManifestFile(
+    resolve(packageRoot, "package.json"),
+    "package manifest",
+    packageManifestSchema,
+  );
 
   if (packageJson.name !== "firefox-cli") {
     throw new Error(
@@ -64,12 +70,11 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
   } catch {
     const manifestPath = resolve(options.packageRoot, "extension/development/manifest.json");
     await access(manifestPath);
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      readonly version?: string;
-      readonly background?: { readonly scripts?: readonly string[] };
-      readonly permissions?: readonly string[];
-      readonly action?: { readonly default_popup?: string };
-    };
+    const manifest = await readJsonManifestFile(
+      manifestPath,
+      "development extension manifest",
+      extensionManifestSchema,
+    );
     if (manifest.version !== rootPackage.version) {
       throw new Error(
         `Expected extension version ${rootPackage.version}, received ${manifest.version ?? "<missing>"}`,
@@ -81,11 +86,7 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
 
 async function verifyDevelopmentExtensionBundle(
   packageRoot: string,
-  manifest: {
-    readonly background?: { readonly scripts?: readonly string[] };
-    readonly permissions?: readonly string[];
-    readonly action?: { readonly default_popup?: string };
-  },
+  manifest: ExtensionManifest,
 ): Promise<void> {
   const extensionRoot = resolve(packageRoot, "extension/development");
   const requiredFiles = ["background.js", "content.js", "popup.js", "popup.html"] as const;

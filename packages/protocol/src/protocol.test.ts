@@ -254,6 +254,31 @@ describe("parseBoundaryResponse", () => {
     });
   });
 
+  it("rejects impossible hello pairing status combinations", () => {
+    const request = createRequest("hello", cliIdentity, "hello-1");
+    const parsed = parseBoundaryResponse("host-to-extension", "hello", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: request.id,
+      ok: true,
+      result: {
+        accepted: true,
+        negotiatedProtocolVersion: PROTOCOL_VERSION,
+        peer: cliIdentity,
+        pairing: {
+          hostId: "host-1",
+          extensionId: "firefox-cli@example.invalid",
+          approved: true,
+          status: "invalid-pair-state",
+        },
+      },
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error.code).toBe("INVALID_RESPONSE");
+    }
+  });
+
   it("validates tab list responses", () => {
     const request = createRequest("tabs.list", {}, "request-1");
     const response = createOkResponse(request, {

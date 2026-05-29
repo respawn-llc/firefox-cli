@@ -29,6 +29,47 @@ describe("verifyPackageLayout", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects malformed and wrong-shape package manifests", async () => {
+    const malformed = await createPackageRoot();
+    await writeFile(join(malformed, "package.json"), "{");
+    await expect(verifyPackageLayout({ packageRoot: malformed, platform })).rejects.toThrow(
+      "Invalid package manifest JSON",
+    );
+
+    const wrongShape = await createPackageRoot();
+    await writeFile(
+      join(wrongShape, "package.json"),
+      JSON.stringify({ name: "firefox-cli", version: 1, bin: "bin/firefox-cli.js" }),
+    );
+    await expect(verifyPackageLayout({ packageRoot: wrongShape, platform })).rejects.toThrow(
+      "Invalid package manifest",
+    );
+  });
+
+  it("rejects malformed and wrong-shape development extension manifests", async () => {
+    const malformed = await createPackageRoot();
+    await writeFile(join(malformed, "extension/development/manifest.json"), "{");
+    await expect(verifyPackageLayout({ packageRoot: malformed, platform })).rejects.toThrow(
+      "Invalid development extension manifest JSON",
+    );
+
+    const wrongShape = await createPackageRoot();
+    await writeFile(
+      join(wrongShape, "extension/development/manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "firefox-cli",
+        version: rootPackage.version,
+        background: { scripts: "background.js" },
+        permissions: "scripting",
+        action: { default_popup: "popup.html" },
+      }),
+    );
+    await expect(verifyPackageLayout({ packageRoot: wrongShape, platform })).rejects.toThrow(
+      "Invalid development extension manifest",
+    );
+  });
+
   it("fails when packaged extension metadata drifts from the product version", async () => {
     const packageRoot = await createPackageRoot({ extensionVersion: "9.9.9" });
 
@@ -93,6 +134,8 @@ async function createPackageRoot(
     join(packageRoot, "extension/development/manifest.json"),
     `${JSON.stringify(
       {
+        manifest_version: 3,
+        name: "firefox-cli",
         version: options.extensionVersion ?? rootPackage.version,
         background: { scripts: ["background.js"] },
         permissions: ["scripting"],

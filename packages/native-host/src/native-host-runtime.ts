@@ -15,10 +15,11 @@ import type { NativeHostBroker } from "./host-broker.js";
 import { NativeMessagingFrameReader, writeNativeMessage } from "./native-messaging-frame.js";
 import type {
   HostIdentity,
-  PairState,
+  PairStateStatus,
   PairTokenRotation,
   PairTokenVerification,
 } from "./pair-state.js";
+import { verifyPairStateStatus } from "./pair-state.js";
 
 const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
 
@@ -40,10 +41,9 @@ export type AttachNativeMessagingConnectionOptions = {
 
 export type NativeMessagingPairingController = {
   readonly hostIdentity: HostIdentity;
-  readState(): Promise<PairState | null>;
+  readStateStatus(): Promise<PairStateStatus>;
   approve(): Promise<PairTokenRotation>;
   reset(): Promise<void>;
-  verify(token: string | undefined): Promise<PairTokenVerification> | PairTokenVerification;
 };
 
 export async function attachNativeMessagingConnection(
@@ -66,9 +66,11 @@ export async function attachNativeMessagingConnection(
   const connectionState: {
     approved: boolean;
     token: string | undefined;
+    pairingError: PairTokenVerification | undefined;
   } = {
     approved: options.approved,
     token: options.token,
+    pairingError: undefined,
   };
   const extensionConnection = {
     get approved() {
@@ -76,6 +78,9 @@ export async function attachNativeMessagingConnection(
     },
     get token() {
       return connectionState.token;
+    },
+    get pairingError() {
+      return connectionState.pairingError;
     },
     send: async (request: RequestEnvelope): Promise<unknown> => {
       const tracked = pending.track(request);
@@ -147,6 +152,7 @@ async function runReadLoop(options: {
   readonly connectionState: {
     approved: boolean;
     token: string | undefined;
+    pairingError: PairTokenVerification | undefined;
   };
 }): Promise<void> {
   while (true) {
@@ -186,6 +192,7 @@ async function handleExtensionRequest(options: {
   readonly connectionState: {
     approved: boolean;
     token: string | undefined;
+    pairingError: PairTokenVerification | undefined;
   };
 }): Promise<ResponseEnvelope> {
   const { message, productVersion, pairing, connectionState } = options;
@@ -197,11 +204,15 @@ async function handleExtensionRequest(options: {
   const request = parsed.value;
   if (request.command === "hello") {
     const helloRequest = request as RequestEnvelope<"hello">;
-    const pairState = pairing === undefined ? null : await pairing.readState();
+    const pairState = pairing === undefined ? undefined : await pairing.readStateStatus();
     const pairVerification =
-      pairing === undefined ? undefined : await pairing.verify(helloRequest.params.pairToken);
+      pairing === undefined || pairState === undefined
+        ? undefined
+        : verifyPairStateStatus(pairState, pairing.hostIdentity, helloRequest.params.pairToken);
     connectionState.token = helloRequest.params.pairToken;
     connectionState.approved = pairVerification?.ok ?? connectionState.approved;
+    connectionState.pairingError =
+      pairVerification === undefined || pairVerification.ok ? undefined : pairVerification;
 
     return createOkResponse(request, {
       accepted: true,
@@ -221,7 +232,11 @@ async function handleExtensionRequest(options: {
               hostId: pairing.hostIdentity.hostId,
               extensionId: pairing.hostIdentity.extensionId,
               approved: pairVerification?.ok ?? false,
-              ...(pairState === null ? {} : { generation: pairState.generation }),
+              status: helloPairingStatus(pairState, pairVerification),
+              ...(pairVerification === undefined || pairVerification.ok
+                ? {}
+                : { message: pairVerification.message }),
+              ...(pairState?.status === "valid" ? { generation: pairState.state.generation } : {}),
             },
           }),
     });
@@ -238,6 +253,7 @@ async function handleExtensionRequest(options: {
     const approval = await pairing.approve();
     connectionState.approved = true;
     connectionState.token = approval.token;
+    connectionState.pairingError = undefined;
     return createOkResponse(request, {
       hostId: approval.state.hostId,
       extensionId: approval.state.extensionId,
@@ -258,6 +274,7 @@ async function handleExtensionRequest(options: {
     await pairing.reset();
     connectionState.approved = false;
     connectionState.token = undefined;
+    connectionState.pairingError = undefined;
     return createOkResponse(request, { ok: true });
   }
 
@@ -266,6 +283,21 @@ async function handleExtensionRequest(options: {
   }
 
   return createOkResponse(request, { ok: true });
+}
+
+function helloPairingStatus(
+  state: PairStateStatus | undefined,
+  verification: PairTokenVerification | undefined,
+): "approved" | "not-approved" | "invalid-pair-state" {
+  if (verification?.ok) {
+    return "approved";
+  }
+
+  if (state?.status === "invalid") {
+    return "invalid-pair-state";
+  }
+
+  return "not-approved";
 }
 
 function isResponseLike(message: unknown): message is { readonly id: string } {
