@@ -22,7 +22,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Inherited property names from untrusted messages can pass the command guard and crash or misroute validation.
   **Fix:** Use `Object.hasOwn(commandSchemas, command)` or a null-prototype command registry. Add protocol tests for prototype property names such as `toString`, `constructor`, and `__proto__` at request parsing and batch parsing boundaries.
 
-- [ ] Make missing target flag values fail fast in `packages/cli/src/index.ts`.
+- [x] Make missing target flag values fail fast in `packages/cli/src/index.ts`.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: `parseTargetOptions` reads `args[index + 1]` without requiring presence at `packages/cli/src/index.ts:2786-2796`; `parseTargetValue(undefined)` returns active target at `packages/cli/src/index.ts:2802-2805`.
   **Problem:** A truncated command containing `--window` or `--tab` can silently target the active tab or window.

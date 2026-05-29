@@ -1478,7 +1478,14 @@ function parseSelectArguments(args: readonly string[]): {
       continue;
     }
 
-    if (arg === "--tab" || arg === "--window" || arg === "--generation") {
+    if (arg === "--tab" || arg === "--window") {
+      const value = readFlagValue(args, index, arg);
+      optionArgs.push(arg, value);
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--generation") {
       const value = args[index + 1];
       if (value !== undefined) {
         optionArgs.push(arg, value);
@@ -2788,10 +2795,10 @@ function parseTargetOptions(args: readonly string[]): TargetSelector {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--window") {
-      target = mergeTarget(target, { window: parseTargetValue(args[index + 1]) });
+      target = mergeTarget(target, { window: parseTargetValue(readFlagValue(args, index, arg)) });
       index += 1;
     } else if (arg === "--tab") {
-      target = mergeTarget(target, { tab: parseTargetValue(args[index + 1]) });
+      target = mergeTarget(target, { tab: parseTargetValue(readFlagValue(args, index, arg)) });
       index += 1;
     }
   }

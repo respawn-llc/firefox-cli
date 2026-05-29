@@ -396,6 +396,152 @@ describe("runCli", () => {
     });
   });
 
+  it("rejects missing target flag values before sending requests", async () => {
+    const cwd = await createTempDir("firefox-cli-target-flags");
+    await writeFile(join(cwd, "fixture.txt"), "upload body");
+    const cases: readonly {
+      readonly name: string;
+      readonly argv: readonly string[];
+    }[] = [
+      { name: "tab close", argv: ["tab", "close"] },
+      { name: "window close", argv: ["window", "close"] },
+      { name: "open", argv: ["open", "example.com"] },
+      { name: "back", argv: ["back"] },
+      { name: "forward", argv: ["forward"] },
+      { name: "reload", argv: ["reload"] },
+      { name: "snapshot", argv: ["snapshot"] },
+      { name: "ref", argv: ["ref", "@e1"] },
+      { name: "get", argv: ["get", "title"] },
+      { name: "is", argv: ["is", "visible", "#main"] },
+      { name: "wait", argv: ["wait", "#main"] },
+      { name: "eval", argv: ["eval", "document.title"] },
+      { name: "screenshot", argv: ["screenshot", "page.png"] },
+      { name: "drag", argv: ["drag", "#source", "#target"] },
+      { name: "upload", argv: ["upload", "#file", "fixture.txt"] },
+      { name: "mouse", argv: ["mouse", "wheel", "#feed"] },
+      { name: "keydown", argv: ["keydown", "A"] },
+      { name: "keyup", argv: ["keyup", "A"] },
+      { name: "find", argv: ["find", "text", "Ready"] },
+      { name: "frame", argv: ["frame"] },
+      { name: "dialog", argv: ["dialog", "status"] },
+      { name: "clipboard", argv: ["clipboard", "copy", "#copy"] },
+      { name: "storage", argv: ["storage", "local", "set", "phase", "8"] },
+      { name: "console", argv: ["console", "list"] },
+      { name: "errors", argv: ["errors", "clear"] },
+      { name: "highlight", argv: ["highlight", "#save"] },
+      { name: "pdf", argv: ["pdf", "page.pdf"] },
+      { name: "set viewport", argv: ["set", "viewport", "1200", "800"] },
+      { name: "diff", argv: ["diff", "title", "Expected title"] },
+      { name: "batch", argv: ["batch", JSON.stringify([{ command: "snapshot", params: {} }])] },
+      { name: "element action", argv: ["click", "#save"] },
+      { name: "fill", argv: ["fill", "#name", "Nikita"] },
+      { name: "type", argv: ["type", "#name", "Nikita"] },
+      { name: "press", argv: ["press", "Enter"] },
+      { name: "keyboard", argv: ["keyboard", "type", "hello"] },
+      { name: "select", argv: ["select", "#plan", "pro"] },
+      { name: "scroll", argv: ["scroll", "down"] },
+      { name: "swipe", argv: ["swipe", "left"] },
+    ];
+    const flags = ["--tab", "--window"] as const;
+
+    for (const flag of flags) {
+      for (const testCase of cases) {
+        await expect(
+          runCli([...testCase.argv, flag], {
+            ...baseDependencies(),
+            cwd,
+            sendRequest: async () => {
+              throw new Error(`Unexpected request for ${testCase.name} ${flag}`);
+            },
+          }),
+        ).resolves.toEqual({
+          exitCode: 1,
+          stdout: "",
+          stderr: `Missing value for ${flag}.\n`,
+        });
+      }
+    }
+
+    await expect(
+      runCli(["select", "#plan", "pro", "--tab", "--json"], {
+        ...baseDependencies(),
+        sendRequest: async () => {
+          throw new Error("Unexpected request for select --tab --json");
+        },
+      }),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Missing value for --tab.\n",
+    });
+  });
+
+  it("accepts explicit active target flag values", async () => {
+    const tabOutput = await runCli(["tab", "close", "--tab", "active"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "tab.close",
+          params: {
+            target: {
+              tab: { kind: "active" },
+            },
+          },
+        });
+        return createOkResponse(request, { closedTabId: 42 });
+      },
+    });
+    const windowOutput = await runCli(["window", "close", "--window", "active"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "window.close",
+          params: {
+            target: {
+              window: { kind: "active" },
+            },
+          },
+        });
+        return createOkResponse(request, { closedWindowId: 7 });
+      },
+    });
+    const clickOutput = await runCli(["click", "#save", "--tab", "active"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "click",
+          params: {
+            selector: "#save",
+            target: {
+              tab: { kind: "active" },
+            },
+          },
+        });
+        return createOkResponse(request, {
+          action: "click",
+          ok: true,
+          element: actionElement("button", "Save"),
+        });
+      },
+    });
+
+    expect(tabOutput).toEqual({
+      exitCode: 0,
+      stdout: "Closed tab 42\n",
+      stderr: "",
+    });
+    expect(windowOutput).toEqual({
+      exitCode: 0,
+      stdout: "Closed window 7\n",
+      stderr: "",
+    });
+    expect(clickOutput).toEqual({
+      exitCode: 0,
+      stdout: "click ok button Save\n",
+      stderr: "",
+    });
+  });
+
   it("lists Firefox windows in compact text output", async () => {
     const output = await runCli(["window"], {
       ...baseDependencies(),
@@ -1402,6 +1548,13 @@ describe("runCli", () => {
       exitCode: 1,
       stdout: "",
       stderr: "Batch argv step 0 cannot read from stdin.\n",
+    });
+    await expect(
+      runCli(["batch", JSON.stringify([["tab", "close", "--tab"]])], baseDependencies()),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid batch argv step 0: Missing value for --tab.\n",
     });
     await expect(
       runCli(["batch", JSON.stringify([{ command: "batch", params: {} }])], baseDependencies()),
