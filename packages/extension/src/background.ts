@@ -1,5 +1,6 @@
 import { FirefoxCliBackgroundController } from "./background-controller.js";
 import { executeEvalInPage } from "./eval-executor.js";
+import { createGlobMatcher } from "./glob.js";
 import manifest from "./manifest.json" with { type: "json" };
 import { NetworkRequestTracker } from "./network-tracker.js";
 
@@ -77,6 +78,8 @@ const controller = new FirefoxCliBackgroundController({
     },
     waitForDownload: async (options) => {
       const startedAt = Date.now();
+      const matchesFilename =
+        options.filenameGlob === undefined ? undefined : createGlobMatcher(options.filenameGlob);
       while (Date.now() - startedAt < options.timeoutMs) {
         const downloads = await browser.downloads.search(
           options.downloadId === undefined ? {} : { id: options.downloadId },
@@ -84,8 +87,7 @@ const controller = new FirefoxCliBackgroundController({
         const match = downloads.find(
           (download) =>
             (options.downloadId === undefined || download.id === options.downloadId) &&
-            (options.filenameGlob === undefined ||
-              matchesGlob(download.filename ?? "", options.filenameGlob)),
+            (matchesFilename === undefined || matchesFilename(download.filename ?? "")),
         );
         if (match?.state === "complete") {
           return toDownloadResult(match);
@@ -305,11 +307,4 @@ function toCookieSummary(cookie: {
     ...(cookie.domain === undefined ? {} : { domain: cookie.domain }),
     ...(cookie.path === undefined ? {} : { path: cookie.path }),
   };
-}
-
-function matchesGlob(value: string, glob: string): boolean {
-  return new RegExp(
-    `^${glob.replace(/[|\\{}()[\]^$+?.]/gu, "\\$&").replaceAll("*", ".*")}$`,
-    "u",
-  ).test(value);
 }

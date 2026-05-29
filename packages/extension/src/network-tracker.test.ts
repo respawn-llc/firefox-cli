@@ -105,4 +105,30 @@ describe("NetworkRequestTracker", () => {
       { id: "asset", url: "https://example.test/app.js" },
     ]);
   });
+
+  it("uses shared glob semantics for URL filters", () => {
+    const tracker = new NetworkRequestTracker();
+
+    for (const [requestId, url] of [
+      ["query", "https://example.test/api?x=1"],
+      ["path", "https://example.test/api/x=1"],
+      ["meta", "https://example.test/file+name[1].json"],
+    ] as const) {
+      tracker.recordStart({ requestId, tabId: 101, url });
+      tracker.recordEnd({ requestId });
+    }
+
+    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/api?x=1" })).toEqual([
+      { id: "query", url: "https://example.test/api?x=1" },
+    ]);
+    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/file+name[1].json" })).toEqual(
+      [{ id: "meta", url: "https://example.test/file+name[1].json" }],
+    );
+
+    tracker.clear({ tabId: 101, urlGlob: "https://example.test/api*" });
+
+    expect(tracker.list({ tabId: 101 })).toEqual([
+      { id: "meta", url: "https://example.test/file+name[1].json" },
+    ]);
+  });
 });

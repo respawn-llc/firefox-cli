@@ -1,4 +1,5 @@
 import type { NetworkResult } from "@firefox-cli/protocol";
+import { createGlobMatcher } from "./glob.js";
 
 export type NetworkRequestRecord = {
   readonly id: string;
@@ -85,10 +86,10 @@ export class NetworkRequestTracker {
     readonly tabId: number;
     readonly urlGlob?: string;
   }): NonNullable<NetworkResult["requests"]> {
+    const matchesUrl =
+      options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     return this.#recordsForTab(options.tabId)
-      .filter(
-        (request) => options.urlGlob === undefined || matchesGlob(request.url, options.urlGlob),
-      )
+      .filter((request) => matchesUrl === undefined || matchesUrl(request.url))
       .sort((left, right) => left.startedAt - right.startedAt)
       .map(toNetworkRequestSummary);
   }
@@ -99,11 +100,11 @@ export class NetworkRequestTracker {
       return;
     }
 
+    const matchesUrl =
+      options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     this.#completedByTabId.set(
       options.tabId,
-      completed.filter(
-        (request) => options.urlGlob !== undefined && !matchesGlob(request.url, options.urlGlob),
-      ),
+      completed.filter((request) => matchesUrl !== undefined && !matchesUrl(request.url)),
     );
   }
 
@@ -161,11 +162,4 @@ function toNetworkRequestSummary(
     ...(request.type === undefined ? {} : { type: request.type }),
     ...(request.statusCode === undefined ? {} : { statusCode: request.statusCode }),
   };
-}
-
-function matchesGlob(value: string, glob: string): boolean {
-  return new RegExp(
-    `^${glob.replace(/[|\\{}()[\]^$+?.]/gu, "\\$&").replaceAll("*", ".*")}$`,
-    "u",
-  ).test(value);
 }

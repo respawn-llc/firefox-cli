@@ -447,6 +447,36 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([]);
   });
 
+  it("preserves URL wait question-mark wildcard glob semantics", async () => {
+    const wildcardAdapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { url: "https://example.test/a" })]),
+    ]);
+
+    await expect(
+      handleBrowserRequest(
+        createRequest("wait", { kind: "url", urlGlob: "https://example.test/?" }, "wait-url-q"),
+        wildcardAdapter,
+      ),
+    ).resolves.toMatchObject({ ok: true, result: { value: "https://example.test/a" } });
+
+    const queryAdapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [
+        tabSummary(101, 0, true, 10, { url: "https://example.test/api/x=1" }),
+      ]),
+    ]);
+
+    await expect(
+      handleBrowserRequest(
+        createRequest(
+          "wait",
+          { kind: "url", urlGlob: "https://example.test/api?x=1" },
+          "wait-url-query",
+        ),
+        queryAdapter,
+      ),
+    ).resolves.toMatchObject({ ok: true, result: { value: "https://example.test/api/x=1" } });
+  });
+
   it("routes document waits to content script and adds target metadata", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),

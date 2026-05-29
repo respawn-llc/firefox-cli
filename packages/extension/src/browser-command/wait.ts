@@ -1,5 +1,6 @@
 import type { RequestEnvelope, WaitResult } from "@firefox-cli/protocol";
 import type { EvalExecutorResult } from "../eval-executor.js";
+import { createGlobMatcher } from "../glob.js";
 import { delay } from "./async.js";
 import { DEFAULT_WAIT_INTERVAL_MS, DEFAULT_WAIT_TIMEOUT_MS } from "./constants.js";
 import { BrowserCommandError } from "./errors.js";
@@ -14,6 +15,7 @@ export async function waitForUrl(
   const startedAt = Date.now();
   const timeoutMs = params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const intervalMs = params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS;
+  const matchesUrlGlob = createGlobMatcher(params.urlGlob ?? "", { questionMark: "wildcard" });
   while (true) {
     const match = findTabById(await getOrderedWindows(adapter), tabId);
     if (match === undefined) {
@@ -21,7 +23,7 @@ export async function waitForUrl(
     }
 
     const url = match.tab.url ?? "";
-    if (matchesGlob(url, params.urlGlob ?? "")) {
+    if (matchesUrlGlob(url)) {
       return {
         kind: "url",
         matched: true,
@@ -145,15 +147,4 @@ function toFunctionWaitValue(value: unknown): FunctionWaitValue {
   }
 
   return String(value);
-}
-
-function matchesGlob(value: string, glob: string): boolean {
-  return new RegExp(
-    `^${escapeRegExp(glob).replaceAll("\\*", ".*").replaceAll("\\?", ".")}$`,
-    "u",
-  ).test(value);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[|\\{}()[\]^$+?.*]/gu, "\\$&");
 }

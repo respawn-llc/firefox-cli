@@ -104,7 +104,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** If the action command union drifts, invalid values can return `undefined` and fail later at protocol validation.
   **Fix:** Add an exhaustive helper that throws a controlled content action error, and add compile-time plus runtime tests that new action commands must be handled.
 
-- [ ] Replace manual glob-to-regex helpers with a shared tested utility.
+- [x] Replace manual glob-to-regex helpers with a shared tested utility.
   Source: direct observation.
   Evidence: browser command code builds glob regexes at `packages/extension/src/browser-commands.ts:1368-1377`; background code has a separate implementation at `packages/extension/src/background.ts:351-355`.
   **Problem:** Duplicate glob conversion code can drift and produce different matching behavior for URLs, downloads, and network filters.
