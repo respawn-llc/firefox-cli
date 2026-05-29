@@ -16,9 +16,13 @@ export async function handleBrowserRequest(
   try {
     return await dispatchBrowserRequest(request, adapter);
   } catch (error) {
-    return createErrorResponse(request.id, {
-      code: error instanceof BrowserCommandError ? error.code : "PERMISSION_DENIED",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    return createErrorResponse(
+      request.id,
+      {
+        code: error instanceof BrowserCommandError ? error.code : "PERMISSION_DENIED",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      request.protocolVersion,
+    );
   }
 }

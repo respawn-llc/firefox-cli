@@ -63,10 +63,15 @@ export type BackgroundBrowserAdapter = {
   }): Promise<NonNullable<CookieResult["cookie"]>>;
   removeCookie(options: { readonly url: string; readonly name: string }): Promise<void>;
   listNetworkRequests(options: {
+    readonly tabId: number;
     readonly urlGlob?: string;
   }): Promise<NonNullable<NetworkResult["requests"]>>;
-  clearNetworkRequests(): Promise<void>;
+  clearNetworkRequests(options: {
+    readonly tabId: number;
+    readonly urlGlob?: string;
+  }): Promise<void>;
   waitForNetworkIdle(options: {
+    readonly tabId: number;
     readonly timeoutMs: number;
     readonly idleMs: number;
   }): Promise<void>;

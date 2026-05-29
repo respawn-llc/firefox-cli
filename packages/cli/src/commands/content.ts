@@ -207,7 +207,7 @@ export function buildStorageRequest(argv: readonly string[]): RequestEnvelope {
 
 export function buildNetworkRequest(argv: readonly string[]): RequestEnvelope {
   const args = argv.slice(1);
-  parseTargetOptions(args);
+  const target = parseTargetOptions(args);
   const action = getPositionals(args)[0] ?? "list";
   if (!isNetworkAction(action)) {
     throw new CliUsageError("Missing or invalid network action.");
@@ -215,6 +215,7 @@ export function buildNetworkRequest(argv: readonly string[]): RequestEnvelope {
   return createValidatedRequest("network", {
     action,
     ...optionalStringOption(args, ["--url"], "urlGlob"),
+    ...optionalTarget(target),
   });
 }
 

@@ -1,17 +1,9 @@
 import { FirefoxCliBackgroundController } from "./background-controller.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import manifest from "./manifest.json" with { type: "json" };
+import { NetworkRequestTracker } from "./network-tracker.js";
 
-const networkRequests: {
-  id: string;
-  url: string;
-  method?: string;
-  type?: string;
-  statusCode?: number;
-  startedAt: number;
-  completedAt?: number;
-}[] = [];
-const MAX_NETWORK_REQUESTS = 1_000;
+const networkTracker = new NetworkRequestTracker();
 
 const controller = new FirefoxCliBackgroundController({
   browserAdapter: {
@@ -130,18 +122,20 @@ const controller = new FirefoxCliBackgroundController({
       await browser.cookies.remove(options);
     },
     listNetworkRequests: async (options) =>
-      networkRequests
-        .filter(
-          (request) => options.urlGlob === undefined || matchesGlob(request.url, options.urlGlob),
-        )
-        .map(toNetworkRequestSummary),
-    clearNetworkRequests: async () => {
-      networkRequests.length = 0;
+      networkTracker.list({
+        tabId: options.tabId,
+        ...(options.urlGlob === undefined ? {} : { urlGlob: options.urlGlob }),
+      }),
+    clearNetworkRequests: async (options) => {
+      networkTracker.clear({
+        tabId: options.tabId,
+        ...(options.urlGlob === undefined ? {} : { urlGlob: options.urlGlob }),
+      });
     },
     waitForNetworkIdle: async (options) => {
       const startedAt = Date.now();
       while (Date.now() - startedAt < options.timeoutMs) {
-        if (isNetworkIdle(options.idleMs)) {
+        if (networkTracker.isIdle({ tabId: options.tabId, idleMs: options.idleMs })) {
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -208,14 +202,14 @@ browser.runtime.onMessage.addListener((message: { readonly type?: string }) =>
 
 browser.webRequest?.onBeforeRequest?.addListener(
   (details) => {
-    networkRequests.push({
-      id: String(details.requestId),
+    const tabId = (details as { readonly tabId?: number }).tabId;
+    networkTracker.recordStart({
+      requestId: details.requestId,
+      ...(tabId === undefined ? {} : { tabId }),
       url: details.url,
       ...(details.method === undefined ? {} : { method: details.method }),
       ...(details.type === undefined ? {} : { type: details.type }),
-      startedAt: Date.now(),
     });
-    pruneNetworkRequests();
   },
   { urls: ["<all_urls>"] },
 );
@@ -227,42 +221,7 @@ function markNetworkComplete(details: {
   readonly requestId: string | number;
   readonly statusCode?: number;
 }): void {
-  const existing = networkRequests.find((request) => request.id === String(details.requestId));
-  if (existing !== undefined) {
-    if (details.statusCode !== undefined) {
-      existing.statusCode = details.statusCode;
-    }
-    existing.completedAt = Date.now();
-  }
-}
-
-function isNetworkIdle(idleMs: number): boolean {
-  if (networkRequests.some((request) => request.completedAt === undefined)) {
-    return false;
-  }
-
-  const lastActivityAt = Math.max(
-    0,
-    ...networkRequests.map((request) => request.completedAt ?? request.startedAt),
-  );
-  return Date.now() - lastActivityAt >= idleMs;
-}
-
-function pruneNetworkRequests(): void {
-  const extraCount = networkRequests.length - MAX_NETWORK_REQUESTS;
-  if (extraCount > 0) {
-    networkRequests.splice(0, extraCount);
-  }
-}
-
-function toNetworkRequestSummary(request: (typeof networkRequests)[number]) {
-  return {
-    id: request.id,
-    url: request.url,
-    ...(request.method === undefined ? {} : { method: request.method }),
-    ...(request.type === undefined ? {} : { type: request.type }),
-    ...(request.statusCode === undefined ? {} : { statusCode: request.statusCode }),
-  };
+  networkTracker.recordEnd(details);
 }
 
 function toDownloadResult(item: {

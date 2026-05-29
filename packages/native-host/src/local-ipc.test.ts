@@ -437,7 +437,7 @@ describe("local IPC", () => {
 
     expect(forwardedRequest).toMatchObject({
       id: request.id,
-      protocolVersion: 1,
+      protocolVersion: 2,
       command: "capabilities",
     });
     expect(response).toEqual({
@@ -445,6 +445,53 @@ describe("local IPC", () => {
       id: request.id,
       ok: true,
       result: { capabilities: [...kernelCapabilities] },
+    });
+  });
+
+  it("rejects scoped-network commands locally when negotiation falls back to protocol v1", async () => {
+    const rootDir = await createTempDir("fc-ipc-scoped-network-v1");
+    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    let forwardedRequest: unknown;
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      protocolRange: { protocolMin: 1, protocolMax: 1 },
+    });
+    broker.connectExtension({
+      approved: true,
+      token: undefined,
+      send: async (request) => {
+        forwardedRequest = request;
+        return createOkResponse(request, { action: "list", ok: true, requests: [] });
+      },
+    });
+    const server = new LocalIpcServer({
+      endpoint,
+      enableProtocolNegotiation: true,
+      handleMessage: (message, context) => broker.handleCliRequest(message, context),
+    });
+    servers.push(server);
+    await server.start();
+
+    const request = createRequest("network", { action: "list" }, "network-v1", 2);
+    const response = await sendNegotiatedLocalIpcRequest(endpoint, request, {
+      protocolRange: { protocolMin: 1, protocolMax: 2 },
+    });
+
+    expect(forwardedRequest).toBeUndefined();
+    expect(response).toMatchObject({
+      protocolVersion: 1,
+      id: request.id,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        details: {
+          requiredProtocolVersion: 2,
+          negotiatedProtocolVersion: 1,
+        },
+      },
     });
   });
 

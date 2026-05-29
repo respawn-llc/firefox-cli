@@ -71,6 +71,7 @@ export const evalWaitHandlers: BrowserHandlerMap = {
       const startedAt = Date.now();
       const timeoutMs = command.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
       await adapter.waitForNetworkIdle({
+        tabId: resolved.tab.id,
         timeoutMs,
         idleMs: command.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
       });
@@ -89,7 +90,7 @@ export const evalWaitHandlers: BrowserHandlerMap = {
 
     const waitResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!waitResponse.ok) {
-      return createErrorResponse(command.id, waitResponse.error);
+      return createErrorResponse(command.id, waitResponse.error, command.protocolVersion);
     }
 
     const result: WaitResult = {

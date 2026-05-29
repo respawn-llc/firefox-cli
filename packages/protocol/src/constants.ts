@@ -1,7 +1,7 @@
 export const PRODUCT_NAME = "firefox-cli";
 export const NATIVE_HOST_NAME = "firefox_cli";
 export const FIREFOX_CLI_EXTENSION_ID = "firefox-cli@example.invalid";
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const PROTOCOL_MIN_VERSION = 1;
 export const PROTOCOL_MAX_VERSION = PROTOCOL_VERSION;
 export const MAX_EVAL_SCRIPT_BYTES = 100_000;

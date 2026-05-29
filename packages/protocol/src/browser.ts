@@ -404,6 +404,7 @@ export type StorageResult = z.infer<typeof storageResultSchema>;
 export const networkActions = ["list", "clear"] as const;
 export const networkParamsSchema = z
   .object({
+    target: targetSelectorSchema.optional(),
     action: z.enum(networkActions),
     urlGlob: z.string().min(1).optional(),
   })

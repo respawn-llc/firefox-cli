@@ -13,8 +13,10 @@ import {
   createOkResponse,
   createProtocolSession,
   createLocalComponentIdentity,
+  createRequestProtocolMismatchError,
   createRequest,
   gatedCapabilities,
+  getRequestProtocolCompatibility,
   getCliRoutes,
   getCommandCliRoutes,
   isActionCommand,
@@ -213,7 +215,11 @@ describe("protocol negotiation", () => {
           {
             accepted: true,
             negotiatedProtocolVersion: 1,
-            peer: createLocalComponentIdentity("native-host", "0.0.0"),
+            peer: {
+              ...createLocalComponentIdentity("native-host", "0.0.0"),
+              protocolMin: 1,
+              protocolMax: 1,
+            },
           },
           1,
         ),
@@ -348,6 +354,7 @@ describe("protocol command metadata", () => {
       "dialog",
       "clipboard",
       "storage",
+      "network",
       "console",
       "errors",
       "highlight",
@@ -393,6 +400,73 @@ describe("protocol command metadata", () => {
     const timeoutRebaseCommands = commandIds().filter(commandAcceptsBatchTimeout);
 
     expect(timeoutRebaseCommands).toEqual(["wait", "eval", "screenshot"]);
+  });
+});
+
+describe("request protocol compatibility", () => {
+  it("requires protocol v2 for scoped network semantics", () => {
+    const network = createRequest("network", { action: "list" }, "network-v2");
+    const networkIdle = createRequest(
+      "wait",
+      { kind: "load-state", state: "networkidle" },
+      "networkidle-v2",
+    );
+    const batch = createRequest(
+      "batch",
+      {
+        steps: [
+          { command: "snapshot", params: {} },
+          { command: "network", params: { action: "clear" } },
+        ],
+      },
+      "batch-v2",
+    );
+
+    for (const request of [network, networkIdle, batch]) {
+      expect(getRequestProtocolCompatibility(request, 1)).toMatchObject({
+        compatible: false,
+        requiredProtocolVersion: 2,
+      });
+      expect(
+        parseBoundaryRequest(
+          "host-to-extension",
+          { ...request, protocolVersion: 1 },
+          { protocolVersion: 1 },
+        ),
+      ).toMatchObject({
+        ok: false,
+        error: {
+          code: "VERSION_MISMATCH",
+          details: {
+            requiredProtocolVersion: 2,
+            negotiatedProtocolVersion: 1,
+          },
+        },
+      });
+      expect(
+        parseBoundaryRequest("host-to-extension", request, { protocolVersion: 2 }),
+      ).toMatchObject({
+        ok: true,
+      });
+    }
+  });
+
+  it("keeps non-network commands compatible with protocol v1 sessions", () => {
+    const request = createRequest("capabilities", {}, "capabilities-v1", 1);
+
+    expect(getRequestProtocolCompatibility(request, 1)).toEqual({
+      compatible: true,
+      requiredProtocolVersion: 1,
+    });
+    expect(
+      createRequestProtocolMismatchError(createRequest("network", { action: "list" }), 1),
+    ).toMatchObject({
+      code: "VERSION_MISMATCH",
+      details: {
+        requiredProtocolVersion: 2,
+        negotiatedProtocolVersion: 1,
+      },
+    });
   });
 });
 

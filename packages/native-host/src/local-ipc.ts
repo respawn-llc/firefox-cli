@@ -7,6 +7,8 @@ import {
   createLocalComponentIdentity,
   createProtocolSession,
   createRequest,
+  createRequestProtocolMismatchError,
+  getRequestProtocolCompatibility,
   localProtocolVersionRange,
   parseBoundaryResponse,
   type ProtocolSession,
@@ -363,6 +365,7 @@ export async function sendNegotiatedLocalIpcRequest<C extends RequestEnvelope["c
   }
 
   const socket = await connectLocalIpcSocket(endpoint);
+  let destroySocketOnReturn = true;
   try {
     const rawHelloResponse = await writeAndReadLocalIpcResponse(socket, encodedHello, hello.id);
     const parsedHello = parseBoundaryResponse("cli-to-host", "hello", rawHelloResponse, {
@@ -383,6 +386,20 @@ export async function sendNegotiatedLocalIpcRequest<C extends RequestEnvelope["c
     }
 
     const protocolSession = createProtocolSession(parsedHello.value.protocolVersion);
+    const compatibility = getRequestProtocolCompatibility(request, protocolSession.protocolVersion);
+    if (!compatibility.compatible) {
+      destroySocketOnReturn = false;
+      // The host is waiting for the second frame on this negotiated socket. End the write side
+      // cleanly and let the host close after its frame-error response so it does not race a
+      // client-side destroy with an EPIPE.
+      socket.once("error", () => undefined);
+      socket.end();
+      return protocolSession.createErrorResponse(
+        request.id,
+        createRequestProtocolMismatchError(request, protocolSession.protocolVersion),
+      ) as ResponseEnvelope<C>;
+    }
+
     let encodedRequest: Buffer;
     try {
       encodedRequest = encodeLocalIpcJsonLine(
@@ -408,7 +425,9 @@ export async function sendNegotiatedLocalIpcRequest<C extends RequestEnvelope["c
 
     return parsed.value as ResponseEnvelope<C>;
   } finally {
-    socket.destroy();
+    if (destroySocketOnReturn) {
+      socket.destroy();
+    }
   }
 }
 

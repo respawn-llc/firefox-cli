@@ -2285,6 +2285,13 @@ describe("runCli", () => {
         expected: { command: "network", params: { action: "list", urlGlob: "example.test" } },
       },
       {
+        argv: ["network", "clear", "--tab", "id:7", "--json"],
+        expected: {
+          command: "network",
+          params: { action: "clear", target: { tab: { kind: "id", id: 7 } } },
+        },
+      },
+      {
         argv: ["console", "list", "--json"],
         expected: { command: "console", params: { action: "list" } },
       },

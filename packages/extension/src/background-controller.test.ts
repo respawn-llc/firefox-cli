@@ -663,19 +663,24 @@ async function completeNativeHello(port: FakeNativePort): Promise<void> {
   }
 
   const hello = latest as ReturnType<typeof createRequest<"hello">>;
+  const negotiatedProtocolVersion = hello.params.protocolMax;
   port.emitMessage(
-    createOkResponse(hello, {
-      accepted: true,
-      negotiatedProtocolVersion: hello.protocolVersion,
-      peer: {
-        component: "native-host",
-        productName: "firefox-cli",
-        productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: 1,
-        features: [],
+    createOkResponse(
+      hello,
+      {
+        accepted: true,
+        negotiatedProtocolVersion,
+        peer: {
+          component: "native-host",
+          productName: "firefox-cli",
+          productVersion: "0.0.0",
+          protocolMin: 1,
+          protocolMax: negotiatedProtocolVersion,
+          features: [],
+        },
       },
-    }),
+      negotiatedProtocolVersion,
+    ),
   );
   await flushPromises();
 }

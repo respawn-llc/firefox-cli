@@ -215,7 +215,7 @@ export const cliRouteBindings = {
   network: bindCliRoute(
     "network",
     "network",
-    "firefox-cli network list|clear [--json]",
+    "firefox-cli network list|clear [--window target] [--tab target] [--json]",
     buildNetworkRequest,
   ),
   console: bindCliRoute(

@@ -113,6 +113,99 @@ describe("browser batch command handling", () => {
     ]);
   });
 
+  it("uses the locked default target for network and network-idle batch steps", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
+    ]);
+    adapter.networkRequests = [
+      { id: "locked", tabId: 101, url: "https://example.test/locked" },
+      { id: "active-after-select", tabId: 102, url: "https://example.test/active" },
+    ];
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          target: { tab: { kind: "id", id: 101 } },
+          steps: [
+            { command: "tab.select", params: { target: { tab: { kind: "id", id: 102 } } } },
+            { command: "network", params: { action: "list" } },
+            { command: "wait", params: { kind: "load-state", state: "networkidle" } },
+          ],
+        },
+        "batch-network-locked-target",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        steps: [
+          { index: 0, command: "tab.select", ok: true },
+          {
+            index: 1,
+            command: "network",
+            ok: true,
+            result: { requests: [{ id: "locked" }] },
+          },
+          { index: 2, command: "wait", ok: true, result: { target: { tabId: 101 } } },
+        ],
+      },
+    });
+    expect(adapter.networkListRequests).toEqual([{ tabId: 101 }]);
+    expect(adapter.networkIdleWaits).toEqual([{ tabId: 101, timeoutMs: 30_000, idleMs: 100 }]);
+  });
+
+  it("preserves explicit network batch step target overrides", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
+    ]);
+    adapter.networkRequests = [
+      { id: "default", tabId: 101, url: "https://example.test/default" },
+      { id: "override", tabId: 102, url: "https://example.test/override" },
+    ];
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          target: { tab: { kind: "id", id: 101 } },
+          steps: [
+            {
+              command: "network",
+              params: { target: { tab: { kind: "id", id: 102 } }, action: "list" },
+            },
+            {
+              command: "wait",
+              params: {
+                target: { tab: { kind: "id", id: 102 } },
+                kind: "load-state",
+                state: "networkidle",
+              },
+            },
+          ],
+        },
+        "batch-network-step-override",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        steps: [
+          { index: 0, command: "network", ok: true, result: { requests: [{ id: "override" }] } },
+          { index: 1, command: "wait", ok: true, result: { target: { tabId: 102 } } },
+        ],
+      },
+    });
+    expect(adapter.networkListRequests).toEqual([{ tabId: 102 }]);
+    expect(adapter.networkIdleWaits).toEqual([{ tabId: 102, timeoutMs: 30_000, idleMs: 100 }]);
+  });
+
   it("continues failed steps unless bail is enabled", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),

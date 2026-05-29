@@ -66,7 +66,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Any CLI/native-host/extension version skew causes hard failure even when a compatible range could exist.
   **Fix:** Define negotiated protocol state for CLI-to-host and host-to-extension sessions, store it on the connection, and validate subsequent envelopes against the negotiated version. Add tests for compatible overlap, no overlap, old CLI with new extension, and new CLI with old native host.
 
-- [ ] Scope network tracking per tab and per command target.
+- [x] Scope network tracking per tab and per command target.
   Source: subagent-assisted finding, verified directly against code.
   Evidence: `networkRequests` is one global array at `packages/extension/src/background.ts:5-14`; webRequest listeners capture `<all_urls>` without tab scoping at `packages/extension/src/background.ts:209-224`; listing and idle checks read global state at `packages/extension/src/background.ts:132-149` and `packages/extension/src/background.ts:239-249`; browser command network handling does not pass resolved target context at `packages/extension/src/browser-commands.ts:637-649`.
   **Problem:** Unrelated tabs can affect `network list` and `wait --load networkidle`, causing flaky waits and incorrect results.

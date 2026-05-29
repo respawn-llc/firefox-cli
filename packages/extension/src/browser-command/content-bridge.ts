@@ -1,6 +1,8 @@
 import {
+  PROTOCOL_VERSION,
   createErrorResponse,
   parseBoundaryResponse,
+  withRequestProtocolVersion,
   type ContentCommandId,
   type RequestEnvelope,
   type ResponseEnvelope,
@@ -14,8 +16,9 @@ export async function sendContentCommand<C extends ContentCommandId>(
   command: RequestEnvelope<C>,
 ): Promise<ResponseEnvelope<C>> {
   let rawContentResponse: unknown;
+  const contentCommand = withRequestProtocolVersion(command, PROTOCOL_VERSION);
   try {
-    rawContentResponse = await adapter.sendContentRequest(tabId, command);
+    rawContentResponse = await adapter.sendContentRequest(tabId, contentCommand);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new BrowserCommandError(
@@ -28,9 +31,14 @@ export async function sendContentCommand<C extends ContentCommandId>(
     "extension-to-content-script",
     command.command,
     rawContentResponse,
+    { protocolVersion: PROTOCOL_VERSION },
   );
   if (!contentResponse.ok) {
-    return createErrorResponse(command.id, contentResponse.error) as ResponseEnvelope<C>;
+    return createErrorResponse(
+      command.id,
+      contentResponse.error,
+      command.protocolVersion,
+    ) as ResponseEnvelope<C>;
   }
 
   return contentResponse.value as ResponseEnvelope<C>;

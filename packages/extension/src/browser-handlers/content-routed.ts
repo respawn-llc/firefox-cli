@@ -28,7 +28,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const snapshotResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!snapshotResponse.ok) {
-      return createErrorResponse(command.id, snapshotResponse.error);
+      return createErrorResponse(command.id, snapshotResponse.error, command.protocolVersion);
     }
 
     const result: SnapshotResult = {
@@ -42,7 +42,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const refResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!refResponse.ok) {
-      return createErrorResponse(command.id, refResponse.error);
+      return createErrorResponse(command.id, refResponse.error, command.protocolVersion);
     }
 
     const result: RefResolveResult = {
@@ -65,7 +65,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
 
     const getResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!getResponse.ok) {
-      return createErrorResponse(command.id, getResponse.error);
+      return createErrorResponse(command.id, getResponse.error, command.protocolVersion);
     }
 
     const result: GetResult = {
@@ -79,7 +79,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const isResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!isResponse.ok) {
-      return createErrorResponse(command.id, isResponse.error);
+      return createErrorResponse(command.id, isResponse.error, command.protocolVersion);
     }
 
     const result: IsResult = {
@@ -93,7 +93,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const findResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!findResponse.ok) {
-      return createErrorResponse(command.id, findResponse.error);
+      return createErrorResponse(command.id, findResponse.error, command.protocolVersion);
     }
     const result: FindResult = { ...findResponse.result, target: resolved.target };
     return createOkResponse(command, result);
@@ -103,7 +103,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const frameResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!frameResponse.ok) {
-      return createErrorResponse(command.id, frameResponse.error);
+      return createErrorResponse(command.id, frameResponse.error, command.protocolVersion);
     }
     const result: FrameResult = { ...frameResponse.result, target: resolved.target };
     return createOkResponse(command, result);
@@ -113,7 +113,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const dialogResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!dialogResponse.ok) {
-      return createErrorResponse(command.id, dialogResponse.error);
+      return createErrorResponse(command.id, dialogResponse.error, command.protocolVersion);
     }
     return createOkResponse(command, dialogResponse.result);
   },
@@ -122,7 +122,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const storageResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!storageResponse.ok) {
-      return createErrorResponse(command.id, storageResponse.error);
+      return createErrorResponse(command.id, storageResponse.error, command.protocolVersion);
     }
     const result: StorageResult = storageResponse.result;
     return createOkResponse(command, result);
@@ -136,7 +136,7 @@ export const contentRoutedHandlers: BrowserHandlerMap = {
     const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     const highlightResponse = await sendContentCommand(adapter, resolved.tab.id, command);
     if (!highlightResponse.ok) {
-      return createErrorResponse(command.id, highlightResponse.error);
+      return createErrorResponse(command.id, highlightResponse.error, command.protocolVersion);
     }
     const result: HighlightResult = { ...highlightResponse.result, target: resolved.target };
     return createOkResponse(command, result);
@@ -167,7 +167,7 @@ export async function handleActionCommand(
   const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
   const actionResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!actionResponse.ok) {
-    return createErrorResponse(command.id, actionResponse.error);
+    return createErrorResponse(command.id, actionResponse.error, command.protocolVersion);
   }
 
   const result: ActionResult = {
@@ -184,7 +184,7 @@ async function handleLogCommand(
   const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
   const logResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!logResponse.ok) {
-    return createErrorResponse(command.id, logResponse.error);
+    return createErrorResponse(command.id, logResponse.error, command.protocolVersion);
   }
   return createOkResponse(command, logResponse.result as ConsoleResult | ErrorsResult);
 }

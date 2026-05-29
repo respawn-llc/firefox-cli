@@ -276,6 +276,20 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "snapshot" }]);
   });
 
+  it("uses local protocol version for same-extension content-script messages", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-v1", 1),
+      adapter,
+    );
+
+    expect(response).toMatchObject({ protocolVersion: 1, ok: true });
+    expect(adapter.contentRequestVersions).toEqual([PROTOCOL_VERSION]);
+  });
+
   it("routes ref resolution to the same tab content registry across CLI invocations", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -524,8 +538,83 @@ describe("browser command handling", () => {
         },
       },
     });
-    expect(adapter.networkIdleWaits).toEqual([{ timeoutMs: 500, idleMs: 75 }]);
+    expect(adapter.networkIdleWaits).toEqual([{ tabId: 101, timeoutMs: 500, idleMs: 75 }]);
     expect(adapter.contentRequests).toEqual([]);
+  });
+
+  it("uses the resolved target tab for network-idle waits", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
+    ]);
+
+    await expect(
+      handleBrowserRequest(
+        createRequest(
+          "wait",
+          {
+            target: { tab: { kind: "id", id: 102 } },
+            kind: "load-state",
+            state: "networkidle",
+            timeoutMs: 500,
+            intervalMs: 75,
+          },
+          "wait-networkidle-target",
+        ),
+        adapter,
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        target: { tabId: 102 },
+      },
+    });
+    expect(adapter.networkIdleWaits).toEqual([{ tabId: 102, timeoutMs: 500, idleMs: 75 }]);
+  });
+
+  it("lists and clears network requests for the resolved target tab only", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
+    ]);
+    adapter.networkRequests = [
+      { id: "target", tabId: 102, url: "https://example.test/api" },
+      { id: "active", tabId: 101, url: "https://example.test/api" },
+    ];
+
+    await expect(
+      handleBrowserRequest(
+        createRequest(
+          "network",
+          {
+            target: { tab: { kind: "id", id: 102 } },
+            action: "list",
+            urlGlob: "example.test/api",
+          },
+          "network-list-target",
+        ),
+        adapter,
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        requests: [{ id: "target", url: "https://example.test/api" }],
+      },
+    });
+    await expect(
+      handleBrowserRequest(
+        createRequest(
+          "network",
+          { target: { tab: { kind: "id", id: 102 } }, action: "clear" },
+          "network-clear-target",
+        ),
+        adapter,
+      ),
+    ).resolves.toMatchObject({ ok: true });
+
+    expect(adapter.networkListRequests).toEqual([{ tabId: 102, urlGlob: "example.test/api" }]);
+    expect(adapter.networkClearRequests).toEqual([{ tabId: 102 }]);
+    expect(adapter.networkRequests).toEqual([
+      { id: "active", tabId: 101, url: "https://example.test/api" },
+    ]);
   });
 
   it("runs eval in the resolved tab main world and adds target metadata", async () => {
@@ -697,7 +786,7 @@ describe("browser command handling", () => {
         }),
       ]),
     ]);
-    adapter.networkRequests = [{ id: "1", url: "https://example.test/api" }];
+    adapter.networkRequests = [{ id: "1", tabId: 101, url: "https://example.test/api" }];
 
     await expect(
       handleBrowserRequest(
@@ -795,9 +884,11 @@ describe("browser command handling", () => {
       ok: true,
       result: { action: "list", requests: [{ id: "1", url: "https://example.test/api" }] },
     });
+    expect(adapter.networkListRequests).toEqual([{ tabId: 101, urlGlob: "example.test/api" }]);
     await expect(
       handleBrowserRequest(createRequest("network", { action: "clear" }, "network-clear"), adapter),
     ).resolves.toMatchObject({ ok: true, result: { action: "clear", ok: true } });
+    expect(adapter.networkClearRequests).toEqual([{ tabId: 101 }]);
     expect(adapter.networkRequests).toEqual([]);
 
     await expect(
@@ -963,11 +1054,12 @@ describe("browser command handling", () => {
     adapter.contentFailure = new Error("Missing host permission for the tab");
 
     const response = await handleBrowserRequest(
-      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1", 1),
       adapter,
     );
 
     expect(response).toMatchObject({
+      protocolVersion: 1,
       ok: false,
       error: {
         code: "SCRIPT_INJECTION_FAILED",

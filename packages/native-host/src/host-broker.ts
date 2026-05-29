@@ -3,7 +3,9 @@ import { writeFile } from "node:fs/promises";
 import {
   MAX_SCREENSHOT_BYTES,
   createLocalComponentIdentity,
+  createRequestProtocolMismatchError,
   createProtocolSession,
+  getRequestProtocolCompatibility,
   localProtocolVersionRange,
   parseBoundaryRequest,
   type BatchResult,
@@ -141,6 +143,17 @@ export class NativeHostBroker {
             : "PAIRING_MISMATCH",
         message: pairVerification.message,
       });
+    }
+
+    const extensionCompatibility = getRequestProtocolCompatibility(
+      request,
+      extensionSession.value.protocolVersion,
+    );
+    if (!extensionCompatibility.compatible) {
+      return cliSession.createErrorResponse(
+        request.id,
+        createRequestProtocolMismatchError(request, extensionSession.value.protocolVersion),
+      );
     }
 
     const extensionRequest = extensionSession.value.withRequestVersion(request);

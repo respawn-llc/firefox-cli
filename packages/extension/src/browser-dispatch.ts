@@ -39,10 +39,14 @@ export async function dispatchBrowserRequest(
     try {
       return await dispatchBrowserRequest(stepRequest, stepAdapter);
     } catch (error) {
-      return createErrorResponse(stepRequest.id, {
-        code: error instanceof BrowserCommandError ? error.code : "PERMISSION_DENIED",
-        message: error instanceof Error ? error.message : String(error),
-      });
+      return createErrorResponse(
+        stepRequest.id,
+        {
+          code: error instanceof BrowserCommandError ? error.code : "PERMISSION_DENIED",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        stepRequest.protocolVersion,
+      );
     }
   };
   if (request.command === "batch") {
@@ -63,10 +67,14 @@ export async function dispatchBrowserRequest(
     | undefined;
 
   if (handler === undefined) {
-    return createErrorResponse(request.id, {
-      code: "UNSUPPORTED_CAPABILITY",
-      message: `Unsupported browser command: ${request.command}`,
-    });
+    return createErrorResponse(
+      request.id,
+      {
+        code: "UNSUPPORTED_CAPABILITY",
+        message: `Unsupported browser command: ${request.command}`,
+      },
+      request.protocolVersion,
+    );
   }
 
   return (await handler(request, adapter, {

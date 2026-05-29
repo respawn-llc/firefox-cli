@@ -50,7 +50,7 @@ export const phase8BrowserHandlers: BrowserHandlerMap = {
         : command;
     const clipboardResponse = await sendContentCommand(adapter, resolved.tab.id, contentCommand);
     if (!clipboardResponse.ok) {
-      return createErrorResponse(command.id, clipboardResponse.error);
+      return createErrorResponse(command.id, clipboardResponse.error, command.protocolVersion);
     }
     if (command.params.action === "copy" && clipboardResponse.result.text !== undefined) {
       await adapter.writeClipboard(clipboardResponse.result.text);
@@ -92,14 +92,19 @@ export const phase8BrowserHandlers: BrowserHandlerMap = {
   },
   network: async (request, adapter) => {
     const command = request as RequestEnvelope<"network">;
+    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
     if (command.params.action === "clear") {
-      await adapter.clearNetworkRequests();
+      await adapter.clearNetworkRequests({
+        tabId: resolved.tab.id,
+        ...(command.params.urlGlob === undefined ? {} : { urlGlob: command.params.urlGlob }),
+      });
       return createOkResponse(command, { action: "clear", ok: true });
     }
     return createOkResponse(command, {
       action: "list",
       ok: true,
       requests: await adapter.listNetworkRequests({
+        tabId: resolved.tab.id,
         ...(command.params.urlGlob === undefined ? {} : { urlGlob: command.params.urlGlob }),
       }),
     });

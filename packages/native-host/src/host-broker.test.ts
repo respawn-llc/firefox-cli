@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createProtocolSession,
   createOkResponse,
   createRequest,
   kernelCapabilities,
@@ -29,6 +30,7 @@ describe("NativeHostBroker", () => {
         features: [],
       },
       "hello-1",
+      1,
     );
 
     await expect(broker.handleCliRequest(hello)).resolves.toMatchObject({
@@ -92,6 +94,42 @@ describe("NativeHostBroker", () => {
     expect(parseBoundaryResponse("cli-to-host", "capabilities", response)).toEqual({
       ok: true,
       value: createOkResponse(request, { capabilities: [...kernelCapabilities] }),
+    });
+  });
+
+  it("rejects scoped-network commands before forwarding to protocol v1 extensions", async () => {
+    const request = createRequest("network", { action: "list" }, "network-v1-extension");
+    let forwardedRequest: unknown;
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+    });
+    broker.connectExtension({
+      approved: true,
+      token: "test-token",
+      protocolState: { state: "negotiated", session: createProtocolSession(1) },
+      send: async (forwarded) => {
+        forwardedRequest = forwarded;
+        return createOkResponse(forwarded, { action: "list", ok: true, requests: [] });
+      },
+    });
+
+    const response = await broker.handleCliRequest(request);
+
+    expect(forwardedRequest).toBeUndefined();
+    expect(response).toMatchObject({
+      protocolVersion: request.protocolVersion,
+      id: request.id,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        details: {
+          requiredProtocolVersion: 2,
+          negotiatedProtocolVersion: 1,
+        },
+      },
     });
   });
 
@@ -415,7 +453,7 @@ describe("NativeHostBroker", () => {
     });
 
     expect(await broker.handleCliRequest("{")).toEqual({
-      protocolVersion: 1,
+      protocolVersion: 2,
       id: "invalid-request",
       ok: false,
       error: {

@@ -213,11 +213,11 @@ export const phase8CommandEntries = defineCommandEntries({
     result: networkResultSchema,
     status: "mvp",
     owner: "extension",
-    target: "none",
+    target: "optional",
     content: "never",
     action: false,
     timeout: "none",
-    batch: { allowed: true },
+    batch: { allowed: true, extensionDefaultTarget: true },
     cliRoutes: [{ id: "network", path: ["network"], batch: true }],
   },
   console: {

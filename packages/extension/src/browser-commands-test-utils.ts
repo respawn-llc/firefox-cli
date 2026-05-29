@@ -17,6 +17,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   readonly focusedWindows: number[] = [];
   readonly navigations: { readonly tabId: number; readonly url: string }[] = [];
   readonly contentRequests: { readonly tabId: number; readonly command: string }[] = [];
+  readonly contentRequestVersions: number[] = [];
   readonly evalRequests: { readonly tabId: number; readonly payload: EvalExecutorPayload }[] = [];
   readonly captureRequests: {
     readonly windowId: number;
@@ -33,9 +34,15 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     readonly timeoutMs: number;
     readonly intervalMs: number;
   }[] = [];
-  readonly networkIdleWaits: { readonly timeoutMs: number; readonly idleMs: number }[] = [];
+  readonly networkListRequests: { readonly tabId: number; readonly urlGlob?: string }[] = [];
+  readonly networkClearRequests: { readonly tabId: number; readonly urlGlob?: string }[] = [];
+  readonly networkIdleWaits: {
+    readonly tabId: number;
+    readonly timeoutMs: number;
+    readonly idleMs: number;
+  }[] = [];
   clipboardText = "";
-  networkRequests: { readonly id: string; readonly url: string }[] = [];
+  networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
   contentFailure: Error | undefined;
   evalFailure: Error | undefined;
   evalResult: EvalExecutorResult | undefined;
@@ -150,6 +157,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
 
   async sendContentRequest(tabId: number, request: RequestEnvelope): Promise<unknown> {
     this.contentRequests.push({ tabId, command: request.command });
+    this.contentRequestVersions.push(request.protocolVersion);
     if (this.contentFailure !== undefined) {
       throw this.contentFailure;
     }
@@ -362,17 +370,27 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
 
   async removeCookie(): Promise<void> {}
 
-  async listNetworkRequests(options: { readonly urlGlob?: string }) {
-    return this.networkRequests.filter(
-      (request) => options.urlGlob === undefined || request.url.includes(options.urlGlob),
+  async listNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }) {
+    this.networkListRequests.push(options);
+    return this.networkRequests
+      .filter((request) => request.tabId === options.tabId)
+      .filter((request) => options.urlGlob === undefined || request.url.includes(options.urlGlob));
+  }
+
+  async clearNetworkRequests(options: {
+    readonly tabId: number;
+    readonly urlGlob?: string;
+  }): Promise<void> {
+    this.networkClearRequests.push(options);
+    this.networkRequests = this.networkRequests.filter(
+      (request) =>
+        request.tabId !== options.tabId ||
+        (options.urlGlob !== undefined && !request.url.includes(options.urlGlob)),
     );
   }
 
-  async clearNetworkRequests(): Promise<void> {
-    this.networkRequests = [];
-  }
-
   async waitForNetworkIdle(options: {
+    readonly tabId: number;
     readonly timeoutMs: number;
     readonly idleMs: number;
   }): Promise<void> {
