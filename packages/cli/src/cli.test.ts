@@ -2,6 +2,9 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import {
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_FILES,
+  MAX_UPLOAD_TOTAL_BYTES,
   createErrorResponse,
   createOkResponse,
   gatedCapabilities,
@@ -1611,6 +1614,70 @@ describe("runCli", () => {
     });
   });
 
+  it("runs batch argv upload steps through a shared upload budget", async () => {
+    const output = await runCli(
+      [
+        "batch",
+        JSON.stringify([
+          ["upload", "#one", "one.bin"],
+          ["upload", "#two", "two.bin"],
+        ]),
+      ],
+      {
+        ...baseDependencies(),
+        statUploadFile: async () => ({ size: 3, isFile: true }),
+        readUploadFile: async (path) => Buffer.from(path.endsWith("one.bin") ? "one" : "two"),
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({
+            command: "batch",
+            params: {
+              steps: [
+                {
+                  command: "upload",
+                  params: {
+                    selector: "#one",
+                    files: [{ name: "one.bin", dataBase64: "b25l" }],
+                  },
+                },
+                {
+                  command: "upload",
+                  params: {
+                    selector: "#two",
+                    files: [{ name: "two.bin", dataBase64: "dHdv" }],
+                  },
+                },
+              ],
+            },
+          });
+          return createOkResponse(request, {
+            ok: true,
+            steps: [
+              {
+                index: 0,
+                command: "upload",
+                ok: true,
+                result: { action: "upload", ok: true, valueLength: 1 },
+              },
+              {
+                index: 1,
+                command: "upload",
+                ok: true,
+                result: { action: "upload", ok: true, valueLength: 1 },
+              },
+            ],
+            elapsedMs: 4,
+          });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "0 upload ok\n1 upload ok\nbatch ok in 4ms\n",
+      stderr: "",
+    });
+  });
+
   it("preserves batch target locking for argv steps with implicit active targets", async () => {
     const output = await runCli(
       [
@@ -2129,6 +2196,207 @@ describe("runCli", () => {
     }
   });
 
+  it("rejects upload file counts before filesystem work or requests", async () => {
+    let statCalls = 0;
+    let readCalls = 0;
+    let requestCalls = 0;
+    const output = await runCli(
+      [
+        "upload",
+        "#file",
+        ...Array.from({ length: MAX_UPLOAD_FILES + 1 }, (_, index) => `${index}.bin`),
+      ],
+      {
+        ...baseDependencies(),
+        statUploadFile: async () => {
+          statCalls += 1;
+          return { size: 1, isFile: true };
+        },
+        readUploadFile: async () => {
+          readCalls += 1;
+          return new Uint8Array([1]);
+        },
+        sendRequest: async (request) => {
+          requestCalls += 1;
+          return createOkResponse(request, { action: "upload", ok: true, valueLength: 1 });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: `Upload accepts at most ${MAX_UPLOAD_FILES} files.\n`,
+    });
+    expect(statCalls).toBe(0);
+    expect(readCalls).toBe(0);
+    expect(requestCalls).toBe(0);
+  });
+
+  it("rejects upload metadata limits before reading file contents or sending requests", async () => {
+    const halfTotal = Math.floor(MAX_UPLOAD_TOTAL_BYTES / 2) + 1;
+    const cases: readonly {
+      readonly argv: readonly string[];
+      readonly sizes: Readonly<Record<string, number>>;
+      readonly stderr: string;
+      readonly expectedStatCalls: number;
+    }[] = [
+      {
+        argv: ["upload", "#file", "big.bin"],
+        sizes: { "big.bin": MAX_UPLOAD_FILE_BYTES + 1 },
+        stderr: `Upload file exceeds ${MAX_UPLOAD_FILE_BYTES} byte per-file limit: big.bin (${MAX_UPLOAD_FILE_BYTES + 1} bytes).\n`,
+        expectedStatCalls: 1,
+      },
+      {
+        argv: ["upload", "#file", "one.bin", "two.bin"],
+        sizes: { "one.bin": halfTotal, "two.bin": halfTotal },
+        stderr: `Upload files exceed ${MAX_UPLOAD_TOTAL_BYTES} byte total limit (${halfTotal * 2} bytes).\n`,
+        expectedStatCalls: 2,
+      },
+    ];
+
+    for (const testCase of cases) {
+      let statCalls = 0;
+      let readCalls = 0;
+      let requestCalls = 0;
+      const output = await runCli(testCase.argv, {
+        ...baseDependencies(),
+        statUploadFile: async (path) => {
+          statCalls += 1;
+          return { size: testCase.sizes[path.split("/").at(-1) ?? ""] ?? 1, isFile: true };
+        },
+        readUploadFile: async () => {
+          readCalls += 1;
+          return new Uint8Array([1]);
+        },
+        sendRequest: async (request) => {
+          requestCalls += 1;
+          return createOkResponse(request, { action: "upload", ok: true, valueLength: 1 });
+        },
+      });
+
+      expect(output).toEqual({
+        exitCode: 1,
+        stdout: "",
+        stderr: testCase.stderr,
+      });
+      expect(statCalls).toBe(testCase.expectedStatCalls);
+      expect(readCalls).toBe(0);
+      expect(requestCalls).toBe(0);
+    }
+  });
+
+  it("rejects upload files that grow past stat limits before sending requests", async () => {
+    let readCalls = 0;
+    let requestCalls = 0;
+    const output = await runCli(["upload", "#file", "growing.bin"], {
+      ...baseDependencies(),
+      statUploadFile: async () => ({ size: 1, isFile: true }),
+      readUploadFile: async () => {
+        readCalls += 1;
+        return new Uint8Array(MAX_UPLOAD_FILE_BYTES + 1);
+      },
+      sendRequest: async (request) => {
+        requestCalls += 1;
+        return createOkResponse(request, { action: "upload", ok: true, valueLength: 1 });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: `Upload file exceeds ${MAX_UPLOAD_FILE_BYTES} byte per-file limit: growing.bin (${MAX_UPLOAD_FILE_BYTES + 1} bytes).\n`,
+    });
+    expect(readCalls).toBe(1);
+    expect(requestCalls).toBe(0);
+  });
+
+  it("rejects batch argv upload aggregate metadata before reading file contents", async () => {
+    const halfTotal = Math.floor(MAX_UPLOAD_TOTAL_BYTES / 2) + 1;
+    let readCalls = 0;
+    let requestCalls = 0;
+    const output = await runCli(
+      [
+        "batch",
+        JSON.stringify([
+          ["upload", "#file", "one.bin"],
+          ["upload", "#file", "two.bin"],
+        ]),
+      ],
+      {
+        ...baseDependencies(),
+        statUploadFile: async (path) => ({
+          size: path.endsWith("one.bin") || path.endsWith("two.bin") ? halfTotal : 1,
+          isFile: true,
+        }),
+        readUploadFile: async () => {
+          readCalls += 1;
+          return new Uint8Array([1]);
+        },
+        sendRequest: async (request) => {
+          requestCalls += 1;
+          return createOkResponse(request, {
+            ok: true,
+            elapsedMs: 1,
+            steps: [],
+          });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: `Upload files exceed ${MAX_UPLOAD_TOTAL_BYTES} byte total limit (${halfTotal * 2} bytes).\n`,
+    });
+    expect(readCalls).toBe(0);
+    expect(requestCalls).toBe(0);
+  });
+
+  it("rejects raw batch upload aggregate payloads before sending requests", async () => {
+    let requestCalls = 0;
+    const halfTotal = Math.floor(MAX_UPLOAD_TOTAL_BYTES / 2) + 1;
+    const output = await runCli(
+      [
+        "batch",
+        JSON.stringify([
+          {
+            command: "upload",
+            params: {
+              selector: "#file",
+              files: [{ name: "one.bin", dataBase64: uploadData(halfTotal) }],
+            },
+          },
+          {
+            command: "upload",
+            params: {
+              selector: "#file",
+              files: [{ name: "two.bin", dataBase64: uploadData(halfTotal) }],
+            },
+          },
+        ]),
+      ],
+      {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          requestCalls += 1;
+          return createOkResponse(request, {
+            ok: true,
+            elapsedMs: 1,
+            steps: [],
+          });
+        },
+      },
+    );
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: `Batch request is invalid: Upload files exceed the ${MAX_UPLOAD_TOTAL_BYTES} byte total limit.\n`,
+    });
+    expect(requestCalls).toBe(0);
+  });
+
   it("rejects malformed interaction arguments at the CLI boundary", async () => {
     await expect(runCli(["click"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
@@ -2272,4 +2540,8 @@ function targetSummary() {
     title: "Example",
     url: "https://example.com/",
   };
+}
+
+function uploadData(bytes: number): string {
+  return Buffer.alloc(bytes).toString("base64");
 }

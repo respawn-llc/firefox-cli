@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_TOTAL_BYTES,
   PROTOCOL_VERSION,
   createOkResponse,
   createRequest,
@@ -28,6 +30,10 @@ const cliIdentity: ComponentIdentity = {
   protocolMax: 1,
   features: [],
 };
+
+function uploadData(bytes: number): string {
+  return Buffer.alloc(bytes).toString("base64");
+}
 
 describe("parseBoundaryRequest", () => {
   it.each(boundaries)("validates hello requests across %s", (boundary) => {
@@ -1120,6 +1126,78 @@ describe("parseBoundaryResponse", () => {
         id: "upload-invalid",
         command: "upload",
         params: { selector: "input[type=file]", files: [] },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_ENVELOPE" } });
+  });
+
+  it("enforces upload decoded byte limits on requests and batches", () => {
+    const halfTotal = Math.floor(MAX_UPLOAD_TOTAL_BYTES / 2) + 1;
+    const validUpload = createRequest(
+      "upload",
+      {
+        selector: "input[type=file]",
+        files: [
+          { name: "one.bin", dataBase64: uploadData(MAX_UPLOAD_FILE_BYTES) },
+          {
+            name: "two.bin",
+            dataBase64: uploadData(MAX_UPLOAD_TOTAL_BYTES - MAX_UPLOAD_FILE_BYTES),
+          },
+        ],
+      },
+      "upload-valid-limit",
+    );
+    expect(parseBoundaryRequest("host-to-extension", validUpload)).toMatchObject({ ok: true });
+
+    for (const params of [
+      {
+        selector: "input[type=file]",
+        files: [{ name: "bad.bin", dataBase64: "not_base64!" }],
+      },
+      {
+        selector: "input[type=file]",
+        files: [{ name: "too-large.bin", dataBase64: uploadData(MAX_UPLOAD_FILE_BYTES + 1) }],
+      },
+      {
+        selector: "input[type=file]",
+        files: [
+          { name: "one.bin", dataBase64: uploadData(halfTotal) },
+          { name: "two.bin", dataBase64: uploadData(halfTotal) },
+        ],
+      },
+    ]) {
+      expect(
+        parseBoundaryRequest("host-to-extension", {
+          protocolVersion: PROTOCOL_VERSION,
+          id: "upload-byte-invalid",
+          command: "upload",
+          params,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "INVALID_ENVELOPE" } });
+    }
+
+    expect(
+      parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "batch-upload-byte-invalid",
+        command: "batch",
+        params: {
+          steps: [
+            {
+              command: "upload",
+              params: {
+                selector: "input[type=file]",
+                files: [{ name: "one.bin", dataBase64: uploadData(halfTotal) }],
+              },
+            },
+            {
+              command: "upload",
+              params: {
+                selector: "input[type=file]",
+                files: [{ name: "two.bin", dataBase64: uploadData(halfTotal) }],
+              },
+            },
+          ],
+        },
       }),
     ).toMatchObject({ ok: false, error: { code: "INVALID_ENVELOPE" } });
   });

@@ -19,6 +19,7 @@ export type ActionErrorCode =
   | "ELEMENT_DISABLED"
   | "NOT_EDITABLE"
   | "ACTION_REJECTED"
+  | "OUTPUT_TOO_LARGE"
   | "NO_FOCUSED_ELEMENT"
   | "INVALID_KEY"
   | "OPTION_NOT_FOUND";

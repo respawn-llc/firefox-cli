@@ -10,6 +10,9 @@ export const MAX_EVAL_SCRIPT_BYTES = 100_000;
 export const MAX_EVAL_RESULT_BYTES = 900_000;
 export const MAX_SCREENSHOT_BYTES = 8_000_000;
 export const MAX_BATCH_RESULT_BYTES = 900_000;
+export const MAX_UPLOAD_FILES = 20;
+export const MAX_UPLOAD_FILE_BYTES = 512_000;
+export const MAX_UPLOAD_TOTAL_BYTES = 640_000;
 
 export const componentSchema = z.enum(["cli", "native-host", "extension", "content-script"]);
 export type Component = z.infer<typeof componentSchema>;
@@ -71,6 +74,17 @@ export type ProtocolError = z.infer<typeof protocolErrorSchema>;
 export type ParseResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: ProtocolError };
+
+const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+
+export function getBase64DecodedByteLength(value: string): number | null {
+  if (value.length === 0 || value.length % 4 !== 0 || !base64Pattern.test(value)) {
+    return null;
+  }
+
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
+}
 
 export const capabilitySchema = z.object({
   command: z.string().min(1),
@@ -1069,13 +1083,75 @@ export const uploadFileSchema = z
     mimeType: z.string().min(1).optional(),
     dataBase64: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((file, context) => {
+    const decodedBytes = getBase64DecodedByteLength(file.dataBase64);
+    if (decodedBytes === null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Upload file data must be valid base64.",
+        path: ["dataBase64"],
+      });
+      return;
+    }
+
+    if (decodedBytes > MAX_UPLOAD_FILE_BYTES) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Upload file exceeds the ${MAX_UPLOAD_FILE_BYTES} byte per-file limit.`,
+        path: ["dataBase64"],
+        params: {
+          actualBytes: decodedBytes,
+          maxBytes: MAX_UPLOAD_FILE_BYTES,
+        },
+      });
+    }
+  });
 export type UploadFile = z.infer<typeof uploadFileSchema>;
 
-export const uploadParamsSchema = phase8ElementTargetParamsSchema.extend({
-  files: z.array(uploadFileSchema).min(1).max(20),
-});
+export const uploadParamsSchema = phase8ElementTargetParamsSchema
+  .extend({
+    files: z.array(uploadFileSchema).min(1).max(MAX_UPLOAD_FILES),
+  })
+  .superRefine((params, context) => {
+    addUploadTotalIssue(params.files, context, ["files"]);
+  });
 export type UploadParams = z.infer<typeof uploadParamsSchema>;
+
+export function getUploadFilesDecodedByteLength(
+  files: readonly Pick<UploadFile, "dataBase64">[],
+): number | null {
+  let total = 0;
+  for (const file of files) {
+    const decodedBytes = getBase64DecodedByteLength(file.dataBase64);
+    if (decodedBytes === null) {
+      return null;
+    }
+    total += decodedBytes;
+  }
+  return total;
+}
+
+function addUploadTotalIssue(
+  files: readonly Pick<UploadFile, "dataBase64">[],
+  context: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  const totalBytes = getUploadFilesDecodedByteLength(files);
+  if (totalBytes === null || totalBytes <= MAX_UPLOAD_TOTAL_BYTES) {
+    return;
+  }
+
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: `Upload files exceed the ${MAX_UPLOAD_TOTAL_BYTES} byte total limit.`,
+    path,
+    params: {
+      actualBytes: totalBytes,
+      maxBytes: MAX_UPLOAD_TOTAL_BYTES,
+    },
+  });
+}
 
 export const mouseParamsSchema = z
   .object({
@@ -1466,7 +1542,19 @@ export const batchParamsSchema = z
     timeoutMs: z.number().int().positive().max(600_000).optional(),
     maxResultBytes: z.number().int().positive().max(MAX_BATCH_RESULT_BYTES).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((params, context) => {
+    const uploadFiles = params.steps.flatMap((step) => {
+      if (step.command !== "upload") {
+        return [];
+      }
+
+      const parsed = uploadParamsSchema.safeParse(step.params);
+      return parsed.success ? parsed.data.files : [];
+    });
+
+    addUploadTotalIssue(uploadFiles, context, ["steps"]);
+  });
 export type BatchParams = z.infer<typeof batchParamsSchema>;
 
 const batchStepResultBaseSchema = z

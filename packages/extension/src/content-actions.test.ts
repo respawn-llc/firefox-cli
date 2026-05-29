@@ -1,4 +1,4 @@
-import { createRequest, type ResponseEnvelope } from "@firefox-cli/protocol";
+import { MAX_UPLOAD_FILE_BYTES, createRequest, type ResponseEnvelope } from "@firefox-cli/protocol";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
@@ -217,6 +217,44 @@ describe("content actions", () => {
       "keydown:A",
       "keyup:A",
     ]);
+  });
+
+  it("rejects oversized uploads before assigning files or dispatching change", () => {
+    const { window } = new JSDOM(`<input id="file" type="file">`, {
+      url: "https://example.test/",
+    });
+    const file = window.document.querySelector<HTMLInputElement>("#file");
+    if (file === null) {
+      throw new Error("fixture missing file input");
+    }
+    let changes = 0;
+    file.addEventListener("change", () => {
+      changes += 1;
+    });
+
+    const response = handleContentScriptRequest(
+      createRequest(
+        "upload",
+        {
+          selector: "#file",
+          files: [
+            {
+              name: "big.bin",
+              dataBase64: Buffer.alloc(MAX_UPLOAD_FILE_BYTES + 1).toString("base64"),
+            },
+          ],
+        },
+        "upload-too-large",
+      ),
+      { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: "OUTPUT_TOO_LARGE" },
+    });
+    expect(file.files).toHaveLength(0);
+    expect(changes).toBe(0);
   });
 
   it("fills editable controls and rejects disabled or non-editable elements", () => {

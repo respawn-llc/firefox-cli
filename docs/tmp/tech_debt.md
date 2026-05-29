@@ -40,7 +40,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** The extension lint/signing toolchain currently brings in one high-severity and two moderate-severity advisories through transitive dependencies.
   **Fix:** Try upgrading `web-ext` to the latest compatible major and run `bun run extension:lint`, `bun run package:check`, and `bun run release:check`. If the major upgrade is blocked, pin safe transitive overrides or isolate extension linting in a locked tool wrapper with an explicit expiration ticket.
 
-- [ ] Add upload payload size limits across CLI, protocol, and content action code.
+- [x] Add upload payload size limits across CLI, protocol, and content action code.
   Source: direct observation.
   Evidence: CLI reads every upload file fully and base64-encodes it at `packages/cli/src/index.ts:913-928`; `uploadFileSchema` only requires non-empty `dataBase64` at `packages/protocol/src/index.ts:1039-1050`; content action decodes every base64 string into bytes at `packages/extension/src/content-actions.ts:87-105`.
   **Problem:** Upload has a max file count but no per-file or total byte limit before memory allocation and cross-process transport.

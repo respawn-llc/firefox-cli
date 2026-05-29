@@ -1,5 +1,10 @@
 import { PassThrough } from "node:stream";
-import { createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
+import {
+  MAX_UPLOAD_FILE_BYTES,
+  createOkResponse,
+  createRequest,
+  kernelCapabilities,
+} from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { NativeHostBroker } from "./host-broker.js";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
@@ -75,6 +80,47 @@ describe("native host runtime", () => {
 
     extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
     await expect(firstResponse).resolves.toEqual(createOkResponse(request, { ok: true }));
+  });
+
+  it("rejects oversized upload requests before writing to the extension connection", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const outputChunks: Buffer[] = [];
+    extensionOutput.on("data", (chunk: Buffer) => {
+      outputChunks.push(Buffer.from(chunk));
+    });
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: true,
+    });
+    const request = createRequest(
+      "upload",
+      {
+        selector: "#file",
+        files: [
+          {
+            name: "too-large.bin",
+            dataBase64: Buffer.alloc(MAX_UPLOAD_FILE_BYTES + 1).toString("base64"),
+          },
+        ],
+      },
+      "upload-too-large",
+    );
+
+    await expect(broker.handleCliRequest(request)).resolves.toMatchObject({
+      id: "invalid-request",
+      ok: false,
+      error: { code: "INVALID_ENVELOPE" },
+    });
+    expect(outputChunks).toHaveLength(0);
   });
 
   it("resolves pending broker requests with TIMEOUT and ignores late responses", async () => {

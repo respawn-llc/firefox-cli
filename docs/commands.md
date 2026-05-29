@@ -114,7 +114,7 @@ Waits accept `--timeout ms` and `--interval ms`.
 | `firefox-cli scroll|swipe up|down|left|right [px] [selector\|@ref] [--json]` | Scroll page or element. |
 | `firefox-cli scrollintoview <selector\|@ref> [--json]` | Scroll an element into view. |
 | `firefox-cli drag <source-selector\|@ref> <target-selector\|@ref> [--json]` | Dispatch a drag/drop sequence. |
-| `firefox-cli upload <selector\|@ref> <file...> [--json]` | Set files on a file input and dispatch change events. |
+| `firefox-cli upload <selector\|@ref> <file...> [--json]` | Set files on a file input and dispatch change events. Each file is limited to 512,000 bytes; upload bytes are limited to 640,000 per command or across all upload steps in a batch. |
 | `firefox-cli mouse move|down|up|wheel [selector\|@ref] [--json]` | Dispatch mouse or wheel events. |
 | `firefox-cli keydown|keyup <key> [selector\|@ref] [--json]` | Dispatch key events. |
 

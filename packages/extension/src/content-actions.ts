@@ -1,3 +1,8 @@
+import {
+  getBase64DecodedByteLength,
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_TOTAL_BYTES,
+} from "@firefox-cli/protocol";
 import type {
   ActionResult,
   DragParams,
@@ -97,7 +102,26 @@ function uploadAction(options: ActionOptions, params: UploadParams): ContentActi
   }
   const dataTransfer = createDataTransfer(resolution.element);
   const files: File[] = [];
+  let totalBytes = 0;
   for (const file of params.files) {
+    const decodedBytes = getBase64DecodedByteLength(file.dataBase64);
+    if (decodedBytes === null) {
+      throw options.createError("ACTION_REJECTED", "Upload file data must be valid base64.");
+    }
+    if (decodedBytes > MAX_UPLOAD_FILE_BYTES) {
+      throw options.createError(
+        "OUTPUT_TOO_LARGE",
+        `Upload file exceeds the ${MAX_UPLOAD_FILE_BYTES} byte per-file limit.`,
+      );
+    }
+    totalBytes += decodedBytes;
+    if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+      throw options.createError(
+        "OUTPUT_TOO_LARGE",
+        `Upload files exceed the ${MAX_UPLOAD_TOTAL_BYTES} byte total limit.`,
+      );
+    }
+
     const bytes = Uint8Array.from(view.atob(file.dataBase64), (char) => char.charCodeAt(0));
     const uploaded = new view.File([bytes], file.name, { type: file.mimeType ?? "" });
     files.push(uploaded);

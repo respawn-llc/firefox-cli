@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, open as openFile, readFile, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import {
   FilePairStateStore,
@@ -12,10 +12,15 @@ import {
   writeNativeMessagingManifest,
 } from "@firefox-cli/native-host";
 import {
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_FILES,
+  MAX_UPLOAD_TOTAL_BYTES,
+  batchParamsSchema,
   createErrorResponse,
   createRequest,
   type ActionResult,
   type BatchResult,
+  type BatchParams,
   type BatchStep,
   type CommandId,
   type EvalResult,
@@ -26,6 +31,7 @@ import {
   type ScreenshotResult,
   type TabSummary,
   type TargetSelector,
+  type UploadParams,
   type WaitResult,
   gatedCapabilities,
   isBatchableCommandId,
@@ -67,7 +73,19 @@ export type CliDependencies = {
   readonly cwd?: string;
   sendRequest?(request: RequestEnvelope): Promise<ResponseEnvelope>;
   readStdin?(): Promise<string>;
+  statUploadFile?(path: string): Promise<CliUploadFileStat>;
+  readUploadFile?(path: string, limits: UploadReadLimits): Promise<Uint8Array>;
   clearPairState?(): Promise<void>;
+};
+
+export type CliUploadFileStat = {
+  readonly size: number;
+  readonly isFile: boolean;
+};
+
+export type UploadReadLimits = {
+  readonly maxFileBytes: number;
+  readonly maxRemainingTotalBytes: number;
 };
 
 export async function runCli(
@@ -916,28 +934,13 @@ async function drag(args: readonly string[], dependencies: CliDependencies): Pro
 }
 
 async function upload(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
-  const parsed = parsePositionalsAndOptions(args, { preserveUnknownOptions: true });
-  const [elementTarget, ...paths] = parsed.positionals;
-  if (elementTarget === undefined || paths.length === 0) {
-    return error("Missing upload selector/ref or file path.\n");
-  }
-  const files = await Promise.all(
-    paths.map(async (path) => {
-      const absolutePath = resolve(dependencies.cwd ?? process.cwd(), path);
-      return {
-        name: basename(path),
-        dataBase64: (await readFile(absolutePath)).toString("base64"),
-      };
-    }),
-  );
+  const parsed = parseUploadArguments(args);
+  const params = await createUploadParams(parsed, dependencies, createUploadBudget());
   return formatActionResponse(
     await sendOrUnavailable(
       dependencies,
       createRequest("upload", {
-        ...parseElementTarget(elementTarget),
-        files,
-        ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
-        ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+        ...params,
       }),
     ),
     parsed.optionArgs.includes("--json"),
@@ -1304,20 +1307,18 @@ async function diffCommand(
 async function batch(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   const parsedArgs = parseBatchArguments(args);
   const steps = await readBatchSteps(parsedArgs, dependencies);
-  const response = await sendOrUnavailable(
-    dependencies,
-    createRequest("batch", {
-      steps,
-      ...(parsedArgs.bail ? { bail: true } : {}),
-      ...(parsedArgs.timeout === undefined
-        ? {}
-        : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-      ...(parsedArgs.maxResultBytes === undefined
-        ? {}
-        : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
-      ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
-    }),
-  );
+  const params = parseBatchParamsForCli({
+    steps,
+    ...(parsedArgs.bail ? { bail: true } : {}),
+    ...(parsedArgs.timeout === undefined
+      ? {}
+      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxResultBytes === undefined
+      ? {}
+      : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+    ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
+  });
+  const response = await sendOrUnavailable(dependencies, createRequest("batch", params));
 
   if (!response.ok) {
     return error(formatProtocolError(response.error));
@@ -2173,6 +2174,233 @@ async function readEvalScript(
   return script;
 }
 
+type ParsedUploadArguments = {
+  readonly elementTarget: string;
+  readonly paths: readonly string[];
+  readonly optionArgs: readonly string[];
+};
+
+type UploadBudget = {
+  bytes: number;
+};
+
+type UploadFilePlan = {
+  readonly inputPath: string;
+  readonly absolutePath: string;
+  readonly size: number;
+};
+
+function parseUploadArguments(args: readonly string[]): ParsedUploadArguments {
+  const parsed = parsePositionalsAndOptions(args, { preserveUnknownOptions: true });
+  const [elementTarget, ...paths] = parsed.positionals;
+  if (elementTarget === undefined || paths.length === 0) {
+    throw new CliUsageError("Missing upload selector/ref or file path.");
+  }
+  if (paths.length > MAX_UPLOAD_FILES) {
+    throw new CliUsageError(`Upload accepts at most ${MAX_UPLOAD_FILES} files.`);
+  }
+
+  return {
+    elementTarget,
+    paths,
+    optionArgs: parsed.optionArgs,
+  };
+}
+
+async function createUploadParams(
+  parsed: ParsedUploadArguments,
+  dependencies: CliDependencies,
+  uploadBudget: UploadBudget,
+): Promise<UploadParams> {
+  const files = await readUploadFiles(parsed.paths, dependencies, uploadBudget);
+  return {
+    ...parseElementTarget(parsed.elementTarget),
+    files,
+    ...optionalStringOption(parsed.optionArgs, ["--generation"], "generationId"),
+    ...optionalTarget(parseTargetOptions(parsed.optionArgs)),
+  };
+}
+
+function createUploadBudget(): UploadBudget {
+  return { bytes: 0 };
+}
+
+async function readUploadFiles(
+  paths: readonly string[],
+  dependencies: CliDependencies,
+  uploadBudget: UploadBudget,
+): Promise<UploadParams["files"]> {
+  const plans = await statUploadFiles(paths, dependencies);
+  assertUploadPlanBudget(plans, uploadBudget.bytes);
+
+  const files: UploadParams["files"] = [];
+  for (const plan of plans) {
+    const rawBytes = await readUploadFileBytes(plan, dependencies, {
+      maxFileBytes: MAX_UPLOAD_FILE_BYTES,
+      maxRemainingTotalBytes: MAX_UPLOAD_TOTAL_BYTES - uploadBudget.bytes,
+    });
+    if (rawBytes.byteLength > MAX_UPLOAD_FILE_BYTES) {
+      throw uploadFileTooLarge(plan.inputPath, rawBytes.byteLength);
+    }
+    if (uploadBudget.bytes + rawBytes.byteLength > MAX_UPLOAD_TOTAL_BYTES) {
+      throw uploadTotalTooLarge(uploadBudget.bytes + rawBytes.byteLength);
+    }
+    const bytes = Buffer.from(rawBytes);
+    uploadBudget.bytes += bytes.byteLength;
+    files.push({
+      name: basename(plan.inputPath),
+      dataBase64: bytes.toString("base64"),
+    });
+  }
+
+  return files;
+}
+
+async function statUploadFiles(
+  paths: readonly string[],
+  dependencies: CliDependencies,
+): Promise<readonly UploadFilePlan[]> {
+  if (paths.length > MAX_UPLOAD_FILES) {
+    throw new CliUsageError(`Upload accepts at most ${MAX_UPLOAD_FILES} files.`);
+  }
+
+  return Promise.all(
+    paths.map(async (inputPath) => {
+      const absolutePath = resolve(dependencies.cwd ?? process.cwd(), inputPath);
+      const fileStat = await statUploadPath(absolutePath, dependencies);
+      if (!fileStat.isFile) {
+        throw new CliUsageError(`Upload path is not a file: ${inputPath}`);
+      }
+      if (fileStat.size > MAX_UPLOAD_FILE_BYTES) {
+        throw uploadFileTooLarge(inputPath, fileStat.size);
+      }
+
+      return {
+        inputPath,
+        absolutePath,
+        size: fileStat.size,
+      };
+    }),
+  );
+}
+
+function assertUploadPlanBudget(plans: readonly UploadFilePlan[], existingBytes: number): void {
+  const plannedBytes = plans.reduce((total, plan) => total + plan.size, 0);
+  const aggregateBytes = existingBytes + plannedBytes;
+  if (aggregateBytes > MAX_UPLOAD_TOTAL_BYTES) {
+    throw uploadTotalTooLarge(aggregateBytes);
+  }
+}
+
+async function statUploadPath(
+  absolutePath: string,
+  dependencies: CliDependencies,
+): Promise<CliUploadFileStat> {
+  if (dependencies.statUploadFile !== undefined) {
+    return dependencies.statUploadFile(absolutePath);
+  }
+
+  const fileStat = await stat(absolutePath);
+  return {
+    size: fileStat.size,
+    isFile: fileStat.isFile(),
+  };
+}
+
+async function readUploadFileBytes(
+  plan: UploadFilePlan,
+  dependencies: CliDependencies,
+  limits: UploadReadLimits,
+): Promise<Uint8Array> {
+  if (dependencies.readUploadFile !== undefined) {
+    return dependencies.readUploadFile(plan.absolutePath, limits);
+  }
+
+  const handle = await openFile(plan.absolutePath, "r");
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    for await (const chunk of handle.createReadStream({ highWaterMark: 64 * 1024 })) {
+      const bytes = Buffer.from(chunk);
+      totalBytes += bytes.byteLength;
+      if (totalBytes > limits.maxFileBytes) {
+        throw uploadFileTooLarge(plan.inputPath, totalBytes);
+      }
+      if (totalBytes > limits.maxRemainingTotalBytes) {
+        throw uploadTotalTooLarge(
+          MAX_UPLOAD_TOTAL_BYTES - limits.maxRemainingTotalBytes + totalBytes,
+        );
+      }
+      chunks.push(bytes);
+    }
+  } finally {
+    await handle.close();
+  }
+
+  return Buffer.concat(chunks, totalBytes);
+}
+
+function uploadFileTooLarge(path: string, actualBytes: number): CliUsageError {
+  return new CliUsageError(
+    `Upload file exceeds ${MAX_UPLOAD_FILE_BYTES} byte per-file limit: ${path} (${actualBytes} bytes).`,
+  );
+}
+
+function uploadTotalTooLarge(actualBytes: number): CliUsageError {
+  return new CliUsageError(
+    `Upload files exceed ${MAX_UPLOAD_TOTAL_BYTES} byte total limit (${actualBytes} bytes).`,
+  );
+}
+
+function parseBatchParamsForCli(params: BatchParams): BatchParams {
+  const parsed = batchParamsSchema.safeParse(params);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  const firstIssue = parsed.error.issues[0];
+  throw new CliUsageError(
+    firstIssue === undefined
+      ? "Batch request is invalid."
+      : `Batch request is invalid: ${firstIssue.message}`,
+  );
+}
+
+async function validateBatchArgvUploadMetadata(
+  rawSteps: readonly unknown[],
+  dependencies: CliDependencies,
+): Promise<void> {
+  let plannedBytes = 0;
+  for (const [index, rawStep] of rawSteps.entries()) {
+    if (
+      !Array.isArray(rawStep) ||
+      !rawStep.every((value): value is string => typeof value === "string") ||
+      rawStep[0] !== "upload"
+    ) {
+      continue;
+    }
+
+    const parsed = parseBatchUploadArguments(rawStep, index);
+    const plans = await statUploadFiles(parsed.paths, dependencies);
+    const stepBytes = plans.reduce((total, plan) => total + plan.size, 0);
+    plannedBytes += stepBytes;
+    if (plannedBytes > MAX_UPLOAD_TOTAL_BYTES) {
+      throw uploadTotalTooLarge(plannedBytes);
+    }
+  }
+}
+
+function parseBatchUploadArguments(argv: readonly string[], index: number): ParsedUploadArguments {
+  try {
+    return parseUploadArguments(argv.slice(1));
+  } catch (error) {
+    if (error instanceof CliUsageError) {
+      throw new CliUsageError(`Invalid batch argv step ${index}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
 async function readBatchSteps(
   args: ParsedBatchArguments,
   dependencies: CliDependencies,
@@ -2192,9 +2420,12 @@ async function readBatchSteps(
     throw new CliUsageError("Batch JSON must be an array.");
   }
 
+  await validateBatchArgvUploadMetadata(raw, dependencies);
+
   const steps: BatchStep[] = [];
+  const uploadBudget = createUploadBudget();
   for (const [index, rawStep] of raw.entries()) {
-    steps.push(await parseBatchStep(rawStep, index, dependencies));
+    steps.push(await parseBatchStep(rawStep, index, dependencies, uploadBudget));
   }
   if (steps.length === 0) {
     throw new CliUsageError("Batch requires at least one step.");
@@ -2207,12 +2438,13 @@ async function parseBatchStep(
   rawStep: unknown,
   index: number,
   dependencies: CliDependencies,
+  uploadBudget: UploadBudget,
 ): Promise<BatchStep> {
   if (Array.isArray(rawStep)) {
     if (!rawStep.every((value): value is string => typeof value === "string")) {
       throw new CliUsageError(`Batch argv step ${index} must contain only strings.`);
     }
-    return batchStepFromArgv(rawStep, index, dependencies);
+    return batchStepFromArgv(rawStep, index, dependencies, uploadBudget);
   }
 
   if (!isRecord(rawStep)) {
@@ -2234,12 +2466,21 @@ async function batchStepFromArgv(
   argv: readonly string[],
   index: number,
   dependencies: CliDependencies,
+  uploadBudget: UploadBudget,
 ): Promise<BatchStep> {
   if (!isPotentialBatchCliCommand(argv[0])) {
     throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
   }
   if (batchArgvReadsStdin(argv)) {
     throw new CliUsageError(`Batch argv step ${index} cannot read from stdin.`);
+  }
+
+  if (argv[0] === "upload") {
+    const parsed = parseBatchUploadArguments(argv, index);
+    return {
+      command: "upload",
+      params: await createUploadParams(parsed, dependencies, uploadBudget),
+    };
   }
 
   let captured: RequestEnvelope | undefined;

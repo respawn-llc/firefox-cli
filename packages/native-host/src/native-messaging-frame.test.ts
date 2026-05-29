@@ -1,4 +1,9 @@
 import { PassThrough, Writable } from "node:stream";
+import {
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_TOTAL_BYTES,
+  createRequest,
+} from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import {
   MAX_NATIVE_MESSAGE_OUTGOING_BYTES,
@@ -7,6 +12,7 @@ import {
   encodeNativeMessageFrame,
   writeNativeMessage,
 } from "./native-messaging-frame.js";
+import { encodeLocalIpcJsonLine } from "./local-ipc-frame.js";
 
 describe("native messaging frames", () => {
   it("encodes JSON with a 32-bit little-endian byte length header", () => {
@@ -78,6 +84,26 @@ describe("native messaging frames", () => {
     expect(() => encodeNativeMessageFrame(payload)).toThrow(/exceeds native messaging limit/);
   });
 
+  it("keeps max normal upload requests within CLI and native messaging frame caps", () => {
+    const request = createRequest(
+      "upload",
+      {
+        selector: "#file",
+        files: [
+          { name: "one.bin", dataBase64: uploadData(MAX_UPLOAD_FILE_BYTES) },
+          {
+            name: "two.bin",
+            dataBase64: uploadData(MAX_UPLOAD_TOTAL_BYTES - MAX_UPLOAD_FILE_BYTES),
+          },
+        ],
+      },
+      "upload-max-frame",
+    );
+
+    expect(() => encodeLocalIpcJsonLine(request)).not.toThrow();
+    expect(() => encodeNativeMessageFrame(request)).not.toThrow();
+  });
+
   it("writes only frame bytes to the supplied stdout stream", async () => {
     const chunks: Buffer[] = [];
     const stdout = new Writable({
@@ -92,3 +118,7 @@ describe("native messaging frames", () => {
     expect(Buffer.concat(chunks)).toEqual(encodeNativeMessageFrame({ ok: true }));
   });
 });
+
+function uploadData(bytes: number): string {
+  return Buffer.alloc(bytes).toString("base64");
+}
