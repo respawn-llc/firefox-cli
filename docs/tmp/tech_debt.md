@@ -110,7 +110,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Duplicate glob conversion code can drift and produce different matching behavior for URLs, downloads, and network filters.
   **Fix:** Move glob matching to a small shared module with strict escaping and tests for wildcards, question marks, regex metacharacters, empty globs, and path/URL examples.
 
-- [ ] Reduce direct DOM monkeypatching and mutation in content utilities where possible.
+- [x] Reduce direct DOM monkeypatching and mutation in content utilities where possible.
   Source: direct observation.
   Evidence: console capture replaces global console methods at `packages/extension/src/content-snapshot.ts:525-545`; highlight writes inline styles and dataset fields at `packages/extension/src/content-snapshot.ts:251-274`; upload creates partial `DataTransfer` / `FileList` shims at `packages/extension/src/content-actions.ts:701-733` and `packages/extension/src/content-actions.ts:736-764`.
   **Problem:** These invasive page mutations can conflict with target pages or browser behavior and are hard to clean up consistently.

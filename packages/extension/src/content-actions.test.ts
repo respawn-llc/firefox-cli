@@ -261,6 +261,87 @@ describe("content actions", () => {
     ]);
   });
 
+  it("keeps drag and upload shims local to events and file inputs", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="source">Card</button>
+        <div id="drop">Drop target</div>
+        <input id="file" type="file">
+      </main>`,
+      {
+        url: "https://example.test/",
+        pretendToBeVisual: true,
+      },
+    );
+    const source = window.document.querySelector("#source");
+    const file = window.document.querySelector<HTMLInputElement>("#file");
+    if (source === null || file === null) {
+      throw new Error("fixture missing shim elements");
+    }
+    const originalDataTransfer = window.DataTransfer;
+    const originalFileList = window.FileList;
+    const originalEventDataTransfer = Object.getOwnPropertyDescriptor(
+      window.Event.prototype,
+      "dataTransfer",
+    );
+    const originalInputFiles = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "files",
+    );
+    let dragStartEvent: Event | undefined;
+    source.addEventListener("dragstart", (event) => {
+      dragStartEvent = event;
+    });
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    };
+
+    handleContentScriptRequest(
+      createRequest("drag", { sourceSelector: "#source", targetSelector: "#drop" }, "drag-shim"),
+      base,
+    );
+    expect(dragStartEvent).toBeDefined();
+    expect("dataTransfer" in (dragStartEvent as Event)).toBe(true);
+    if (typeof window.DragEvent !== "function") {
+      expect(Object.hasOwn(dragStartEvent as Event, "dataTransfer")).toBe(true);
+    }
+    expect(Object.getOwnPropertyDescriptor(window.Event.prototype, "dataTransfer")).toEqual(
+      originalEventDataTransfer,
+    );
+
+    for (const [id, name, text] of [
+      ["upload-shim-1", "first.txt", "first"],
+      ["upload-shim-2", "second.txt", "second"],
+    ] as const) {
+      handleContentScriptRequest(
+        createRequest(
+          "upload",
+          {
+            selector: "#file",
+            files: [{ name, dataBase64: window.btoa(text) }],
+          },
+          id,
+        ),
+        base,
+      );
+    }
+
+    expect(file.files).toHaveLength(1);
+    expect(file.files?.item(0)?.name).toBe("second.txt");
+    expect(window.DataTransfer).toBe(originalDataTransfer);
+    expect(window.FileList).toBe(originalFileList);
+    expect(Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "files")).toEqual(
+      originalInputFiles,
+    );
+    const ownFiles = Object.getOwnPropertyDescriptor(file, "files");
+    if (ownFiles !== undefined) {
+      expect(ownFiles.configurable).toBe(true);
+      expect((ownFiles.value as FileList).item(0)?.name).toBe("second.txt");
+    }
+  });
+
   it("rejects oversized uploads before assigning files or dispatching change", () => {
     const { window } = new JSDOM(`<input id="file" type="file">`, {
       url: "https://example.test/",

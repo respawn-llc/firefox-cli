@@ -22,6 +22,12 @@ import type {
   EditableValueElement,
   ElementResolution,
 } from "./content-action-types.js";
+import {
+  assignFileInputFiles,
+  createDomDataTransfer,
+  createLocalFileList,
+  dispatchDragEventWithDataTransfer,
+} from "./content-dom-adapter.js";
 
 const DEFAULT_SCROLL_DISTANCE_PX = 600;
 
@@ -82,7 +88,7 @@ function dragAction(options: ActionOptions, params: DragParams): ContentActionRe
   const target = resolveRequiredDragElement(options, params, "target");
   assertActionableElement(options, source.element);
   assertActionableElement(options, target.element);
-  const dataTransfer = createDataTransfer(source.element);
+  const dataTransfer = createDomDataTransfer(source.element);
   dispatchDragEvent(source.element, "dragstart", dataTransfer);
   dispatchDragEvent(target.element, "dragenter", dataTransfer);
   dispatchDragEvent(target.element, "dragover", dataTransfer);
@@ -106,7 +112,7 @@ function uploadAction(options: ActionOptions, params: UploadParams): ContentActi
   ) {
     throw options.createError("ACTION_REJECTED", "Upload action requires a file input.");
   }
-  const dataTransfer = createDataTransfer(resolution.element);
+  const dataTransfer = createDomDataTransfer(resolution.element);
   const files: File[] = [];
   let totalBytes = 0;
   for (const file of params.files) {
@@ -135,7 +141,7 @@ function uploadAction(options: ActionOptions, params: UploadParams): ContentActi
   }
   assignFiles(
     resolution.element,
-    dataTransfer.files.length > 0 ? dataTransfer.files : createFileList(files),
+    dataTransfer.files.length > 0 ? dataTransfer.files : createLocalFileList(files),
   );
   dispatchInputEvents(resolution.element);
   return {
@@ -705,92 +711,11 @@ function dispatchWheelEvent(
 }
 
 function dispatchDragEvent(element: Element, type: string, dataTransfer: DataTransfer): void {
-  const view = requireElementWindow(element);
-  const DragEventConstructor = view.DragEvent;
-  const event =
-    typeof DragEventConstructor === "function"
-      ? new DragEventConstructor(type, {
-          bubbles: true,
-          cancelable: true,
-          dataTransfer,
-        })
-      : new view.Event(type, {
-          bubbles: true,
-          cancelable: true,
-        });
-  if (!("dataTransfer" in event)) {
-    Object.defineProperty(event, "dataTransfer", {
-      configurable: true,
-      enumerable: true,
-      value: dataTransfer,
-    });
-  }
-  element.dispatchEvent(event);
-}
-
-function createDataTransfer(element: Element): DataTransfer {
-  const view = requireElementWindow(element);
-  const DataTransferConstructor = view.DataTransfer;
-  if (typeof DataTransferConstructor === "function") {
-    return new DataTransferConstructor();
-  }
-
-  const files: File[] = [];
-  return {
-    dropEffect: "none",
-    effectAllowed: "all",
-    get files() {
-      return createFileList(files);
-    },
-    items: {
-      add: (file: File) => {
-        files.push(file);
-        return file;
-      },
-      clear: () => {
-        files.length = 0;
-      },
-      get length() {
-        return files.length;
-      },
-      remove: () => undefined,
-    },
-    types: [],
-    clearData: () => undefined,
-    getData: () => "",
-    setData: () => undefined,
-    setDragImage: () => undefined,
-  } as unknown as DataTransfer;
+  dispatchDragEventWithDataTransfer(element, type, dataTransfer);
 }
 
 function assignFiles(input: HTMLInputElement, files: FileList): void {
-  try {
-    input.files = files;
-    return;
-  } catch {
-    Object.defineProperty(input, "files", {
-      configurable: true,
-      value: files,
-    });
-  }
-}
-
-function createFileList(files: readonly File[]): FileList {
-  const list = {
-    length: files.length,
-    item: (index: number) => files[index] ?? null,
-    [Symbol.iterator]: function* iterator() {
-      yield* files;
-    },
-  };
-  for (const [index, file] of files.entries()) {
-    Object.defineProperty(list, index, {
-      configurable: true,
-      enumerable: true,
-      value: file,
-    });
-  }
-  return list as unknown as FileList;
+  assignFileInputFiles(input, files);
 }
 
 function dispatchKeyboardEvent(element: Element, type: string, key: string): void {

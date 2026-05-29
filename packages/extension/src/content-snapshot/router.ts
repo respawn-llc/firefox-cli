@@ -25,6 +25,7 @@ import {
 } from "./commands/page-state.js";
 import { queryOptionalElement, resolveElement } from "./dom.js";
 import { ContentSnapshotError, createContentErrorResponse } from "./errors.js";
+import { applyElementHighlight, type HighlightScheduler } from "./highlight.js";
 import { createConsoleResult, createErrorsResult, installWindowLogCapture } from "./log-capture.js";
 import { createSnapshotResult } from "./snapshot-render.js";
 
@@ -36,6 +37,7 @@ export function handleContentScriptRequest(
     readonly now?: number;
     readonly clock?: () => number;
     readonly sleep?: (durationMs: number) => Promise<void>;
+    readonly highlightScheduler?: HighlightScheduler;
   },
 ): ResponseEnvelope | Promise<ResponseEnvelope> {
   installWindowLogCapture(options.document.defaultView);
@@ -214,9 +216,12 @@ export function handleContentScriptRequest(
       );
       const view = options.document.defaultView;
       if (view !== null && element instanceof view.HTMLElement) {
-        element.dataset.firefoxCliHighlight = "true";
-        element.style.outline = "3px solid #ff9500";
-        element.style.outlineOffset = "2px";
+        applyElementHighlight(element, {
+          ...(params.durationMs === undefined ? {} : { durationMs: params.durationMs }),
+          ...(options.highlightScheduler === undefined
+            ? {}
+            : { scheduler: options.highlightScheduler }),
+        });
       }
       return createOkResponse(command, {
         ok: true,

@@ -30,10 +30,34 @@ type LogCaptureState = {
   consoleEntries: LogEntryStore;
   errorEntries: LogEntryStore;
   capturedWindows: WeakSet<Window>;
+  consolePatch?: ConsolePatch;
+  errorListeners: WeakMap<object, ErrorListenerRegistration>;
 };
 
 const LOG_CAPTURE_STATE_KEY = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
 const TRUNCATED_TEXT_SUFFIX = "... [truncated]";
+const CONSOLE_LEVELS = ["log", "info", "warn", "error"] as const;
+
+type ConsolePatch = {
+  restore(): void;
+};
+
+type ErrorListenerTarget = {
+  readonly addEventListener?: (
+    type: string,
+    listener: EventListener,
+    options?: boolean | AddEventListenerOptions,
+  ) => void;
+  readonly removeEventListener?: (
+    type: string,
+    listener: EventListener,
+    options?: boolean | EventListenerOptions,
+  ) => void;
+};
+
+type ErrorListenerRegistration = {
+  restore(target: ErrorListenerTarget): void;
+};
 
 export class BoundedLogBuffer implements LogEntryStore {
   readonly #entryKey: LogResultEntryKey;
@@ -206,11 +230,13 @@ function getLogCaptureState(): LogCaptureState {
     consoleEntries: new BoundedLogBuffer("entries"),
     errorEntries: new BoundedLogBuffer("errors"),
     capturedWindows: new WeakSet<Window>(),
+    errorListeners: new WeakMap<object, ErrorListenerRegistration>(),
   };
   const state = global[LOG_CAPTURE_STATE_KEY];
   state.consoleEntries = normalizeLogEntryStore("entries", state.consoleEntries);
   state.errorEntries = normalizeLogEntryStore("errors", state.errorEntries);
   state.capturedWindows ??= new WeakSet<Window>();
+  state.errorListeners ??= new WeakMap<object, ErrorListenerRegistration>();
   state.installed ??= false;
   return state as LogCaptureState;
 }
@@ -225,17 +251,7 @@ export function installLogCapture(): void {
   }
   state.installed = true;
 
-  for (const level of ["log", "info", "warn", "error"] as const) {
-    const original = console[level]?.bind(console);
-    console[level] = (...args: unknown[]) => {
-      state.consoleEntries.push({
-        level,
-        text: args.map(String).join(" "),
-        timestamp: Date.now(),
-      });
-      original?.(...args);
-    };
-  }
+  state.consolePatch ??= installConsolePatch(state);
   installErrorListeners(global, state);
 }
 
@@ -248,26 +264,90 @@ export function installWindowLogCapture(view: Window | null): void {
   installErrorListeners(view, state);
 }
 
-function installErrorListeners(
-  target: {
-    readonly addEventListener?: typeof addEventListener;
-  },
-  state: LogCaptureState,
-): void {
-  target.addEventListener?.("error", (event) => {
+export function restoreLogCapture(): void {
+  const state = getLogCaptureState();
+  const global = globalThis as typeof globalThis & ErrorListenerTarget;
+  state.consolePatch?.restore();
+  delete state.consolePatch;
+  restoreErrorListeners(global, state);
+  state.installed = false;
+}
+
+export function restoreWindowLogCapture(view: Window | null): void {
+  if (view === null) {
+    return;
+  }
+
+  const state = getLogCaptureState();
+  restoreErrorListeners(view, state);
+  state.capturedWindows.delete(view);
+}
+
+function installConsolePatch(state: LogCaptureState): ConsolePatch {
+  const patched = CONSOLE_LEVELS.map((level) => {
+    const original = console[level];
+    const originalCall = original?.bind(console);
+    const wrapper = (...args: unknown[]) => {
+      state.consoleEntries.push({
+        level,
+        text: args.map(String).join(" "),
+        timestamp: Date.now(),
+      });
+      originalCall?.(...args);
+    };
+    console[level] = wrapper;
+    return { level, original, wrapper };
+  });
+
+  return {
+    restore: () => {
+      for (const { level, original, wrapper } of patched) {
+        if (console[level] === wrapper) {
+          console[level] = original;
+        }
+      }
+    },
+  };
+}
+
+function installErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): void {
+  if (state.errorListeners.has(target)) {
+    return;
+  }
+
+  const errorListener: EventListener = (event) => {
+    const error = event as ErrorEvent;
     state.errorEntries.push({
       level: "error",
-      text: event.message,
+      text: error.message,
       timestamp: Date.now(),
     });
-  });
-  target.addEventListener?.("unhandledrejection", (event) => {
+  };
+  const rejectionListener: EventListener = (event) => {
+    const rejection = event as PromiseRejectionEvent;
     state.errorEntries.push({
       level: "unhandledrejection",
-      text: String(event.reason),
+      text: String(rejection.reason),
       timestamp: Date.now(),
     });
+  };
+  target.addEventListener?.("error", errorListener);
+  target.addEventListener?.("unhandledrejection", rejectionListener);
+  state.errorListeners.set(target, {
+    restore: (restoreTarget) => {
+      restoreTarget.removeEventListener?.("error", errorListener);
+      restoreTarget.removeEventListener?.("unhandledrejection", rejectionListener);
+    },
   });
+}
+
+function restoreErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): void {
+  const registration = state.errorListeners.get(target);
+  if (registration === undefined) {
+    return;
+  }
+  registration.restore(target);
+  state.errorListeners.delete(target);
 }
 
 export function createConsoleResult(

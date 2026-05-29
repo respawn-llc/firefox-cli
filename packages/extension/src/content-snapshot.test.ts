@@ -15,7 +15,16 @@ import {
 import { describeFrame } from "./content-snapshot/accessibility.js";
 import { escapeCssString } from "./content-snapshot/format.js";
 import { createContentMessageHandler } from "./content.js";
-import { BoundedLogBuffer, createConsoleResult } from "./content-snapshot/log-capture.js";
+import type { HighlightScheduler } from "./content-snapshot/highlight.js";
+import {
+  BoundedLogBuffer,
+  createConsoleResult,
+  createErrorsResult,
+  installLogCapture,
+  installWindowLogCapture,
+  restoreLogCapture,
+  restoreWindowLogCapture,
+} from "./content-snapshot/log-capture.js";
 
 describe("content snapshot", () => {
   it("emits compact interactive refs with accessible names", () => {
@@ -1096,7 +1105,7 @@ describe("content snapshot", () => {
 
     expect(
       handleContentScriptRequest(
-        createRequest("highlight", { selector: "#highlight", durationMs: 1000 }, "highlight-1"),
+        createRequest("highlight", { selector: "#highlight" }, "highlight-1"),
         base,
       ),
     ).toMatchObject({
@@ -1109,6 +1118,186 @@ describe("content snapshot", () => {
     const highlighted = window.document.querySelector<HTMLElement>("#highlight");
     expect(highlighted?.dataset.firefoxCliHighlight).toBe("true");
     expect(highlighted?.style.outline).toContain("#ff9500");
+  });
+
+  it("cleans up timed highlights without mutating non-target elements", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="target" data-firefox-cli-highlight="existing" style="outline: 1px solid red; outline-offset: 4px;">Target</button>
+        <button id="other" data-firefox-cli-highlight="true" style="outline: 2px dotted blue; outline-offset: 8px;">Other</button>
+      </main>`,
+      { url: "https://example.test/", pretendToBeVisual: true },
+    );
+    const target = window.document.querySelector<HTMLElement>("#target");
+    const other = window.document.querySelector<HTMLElement>("#other");
+    if (target === null || other === null) {
+      throw new Error("fixture missing highlight elements");
+    }
+    const scheduler = createManualHighlightScheduler();
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+      highlightScheduler: scheduler.scheduler,
+    };
+    const originalTarget = readHighlightFields(target);
+    const originalOther = readHighlightFields(other);
+
+    expect(
+      handleContentScriptRequest(
+        createRequest("highlight", { selector: "#target", durationMs: 100 }, "highlight-timed"),
+        base,
+      ),
+    ).toMatchObject({ ok: true, result: { ok: true } });
+    expect(target.getAttribute("data-firefox-cli-highlight")).toBe("true");
+    expect(target.style.outline).toContain("#ff9500");
+    expect(readHighlightFields(other)).toEqual(originalOther);
+    expect(scheduler.activeTimers()).toHaveLength(1);
+
+    scheduler.runOnlyTimer();
+
+    expect(readHighlightFields(target)).toEqual(originalTarget);
+    expect(readHighlightFields(other)).toEqual(originalOther);
+    expect(scheduler.activeTimers()).toHaveLength(0);
+  });
+
+  it("restores the previous highlighted element before highlighting another element", () => {
+    const { window } = new JSDOM(
+      `<main>
+        <button id="first" style="outline: 1px solid red; outline-offset: 4px;">First</button>
+        <button id="second">Second</button>
+      </main>`,
+      { url: "https://example.test/", pretendToBeVisual: true },
+    );
+    const first = window.document.querySelector<HTMLElement>("#first");
+    const second = window.document.querySelector<HTMLElement>("#second");
+    if (first === null || second === null) {
+      throw new Error("fixture missing highlight targets");
+    }
+    const scheduler = createManualHighlightScheduler();
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+      highlightScheduler: scheduler.scheduler,
+    };
+    const originalFirst = readHighlightFields(first);
+
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#first" }, "highlight-first"),
+      base,
+    );
+    expect(first.style.outline).toContain("#ff9500");
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#second" }, "highlight-second"),
+      base,
+    );
+
+    expect(readHighlightFields(first)).toEqual(originalFirst);
+    expect(second.getAttribute("data-firefox-cli-highlight")).toBe("true");
+    expect(second.style.outline).toContain("#ff9500");
+    expect(scheduler.activeTimers()).toHaveLength(0);
+  });
+
+  it("preserves page-owned highlight field changes during cleanup and re-highlight", () => {
+    const { window } = new JSDOM(`<button id="target">Target</button>`, {
+      url: "https://example.test/",
+      pretendToBeVisual: true,
+    });
+    const target = window.document.querySelector<HTMLElement>("#target");
+    if (target === null) {
+      throw new Error("fixture missing highlight target");
+    }
+    const scheduler = createManualHighlightScheduler();
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+      highlightScheduler: scheduler.scheduler,
+    };
+
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#target", durationMs: 100 }, "highlight-owned-1"),
+      base,
+    );
+    target.setAttribute("data-firefox-cli-highlight", "page");
+    target.style.outline = "4px solid blue";
+    target.style.outlineOffset = "6px";
+    scheduler.runOnlyTimer();
+    expect(readHighlightFields(target)).toEqual({
+      marker: "page",
+      outline: "4px solid blue",
+      outlineOffset: "6px",
+    });
+
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#target", durationMs: 100 }, "highlight-owned-2"),
+      base,
+    );
+    target.setAttribute("data-firefox-cli-highlight", "page-again");
+    target.style.outline = "5px solid green";
+    target.style.outlineOffset = "7px";
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#target", durationMs: 200 }, "highlight-owned-3"),
+      base,
+    );
+    expect(scheduler.activeTimers()).toHaveLength(1);
+    scheduler.runOnlyTimer();
+    expect(readHighlightFields(target)).toEqual({
+      marker: "page-again",
+      outline: "5px solid green",
+      outlineOffset: "7px",
+    });
+  });
+
+  it("handles persistent and timed highlight transitions deterministically", () => {
+    const { window } = new JSDOM(`<button id="target">Target</button>`, {
+      url: "https://example.test/",
+      pretendToBeVisual: true,
+    });
+    const target = window.document.querySelector<HTMLElement>("#target");
+    if (target === null) {
+      throw new Error("fixture missing highlight target");
+    }
+    const scheduler = createManualHighlightScheduler();
+    const base = {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+      highlightScheduler: scheduler.scheduler,
+    };
+
+    handleContentScriptRequest(
+      createRequest(
+        "highlight",
+        { selector: "#target", durationMs: 100 },
+        "highlight-transition-1",
+      ),
+      base,
+    );
+    expect(scheduler.activeTimers()).toHaveLength(1);
+    handleContentScriptRequest(
+      createRequest("highlight", { selector: "#target" }, "highlight-transition-2"),
+      base,
+    );
+    expect(scheduler.activeTimers()).toHaveLength(0);
+    expect(target.style.outline).toContain("#ff9500");
+
+    handleContentScriptRequest(
+      createRequest(
+        "highlight",
+        { selector: "#target", durationMs: 100 },
+        "highlight-transition-3",
+      ),
+      base,
+    );
+    expect(scheduler.activeTimers()).toHaveLength(1);
+    scheduler.runOnlyTimer();
+    expect(readHighlightFields(target)).toEqual({
+      marker: null,
+      outline: "",
+      outlineOffset: "",
+    });
   });
 
   it("captures facade-installed console logs in the same buffer cleared by content commands", () => {
@@ -1381,6 +1570,83 @@ describe("content snapshot", () => {
     }
   });
 
+  it("restores and reinstalls console capture without replacing buffers", () => {
+    restoreLogCapture();
+    const baselineLog = console.log;
+    const passthroughCalls: unknown[][] = [];
+    console.log = (...args: unknown[]) => {
+      passthroughCalls.push(args);
+    };
+
+    try {
+      installLogCapture();
+      createConsoleResult("clear");
+      console.log("captured-once");
+
+      expect(createConsoleResult("list")).toMatchObject({
+        entries: [expect.objectContaining({ text: "captured-once" })],
+      });
+      expect(passthroughCalls).toEqual([["captured-once"]]);
+
+      restoreLogCapture();
+      console.log("after-restore");
+      expect(
+        createConsoleResult("list").entries?.some((entry) => entry.text === "after-restore"),
+      ).toBe(false);
+      expect(passthroughCalls).toEqual([["captured-once"], ["after-restore"]]);
+
+      installLogCapture();
+      console.log("after-reinstall");
+      const listed = createConsoleResult("list");
+      expect(listed.entries?.filter((entry) => entry.text === "after-reinstall")).toHaveLength(1);
+      expect(listed.entries?.filter((entry) => entry.text === "captured-once")).toHaveLength(1);
+    } finally {
+      restoreLogCapture();
+      console.log = baselineLog;
+      installLogCapture();
+    }
+  });
+
+  it("restores target window error listeners and reinstalls without duplicate captures", () => {
+    const firstDom = new JSDOM(`<main></main>`, { url: "https://first.example.test/" });
+    const secondDom = new JSDOM(`<main></main>`, { url: "https://second.example.test/" });
+    const firstWindow = firstDom.window as unknown as Window;
+    const secondWindow = secondDom.window as unknown as Window;
+
+    createErrorsResult("clear");
+    installWindowLogCapture(firstWindow);
+    installWindowLogCapture(secondWindow);
+    firstDom.window.dispatchEvent(
+      new firstDom.window.ErrorEvent("error", { message: "window-error-1" }),
+    );
+    expect(createErrorsResult("list")).toMatchObject({
+      errors: [expect.objectContaining({ text: "window-error-1" })],
+    });
+
+    restoreWindowLogCapture(firstWindow);
+    firstDom.window.dispatchEvent(
+      new firstDom.window.ErrorEvent("error", { message: "window-error-2" }),
+    );
+    secondDom.window.dispatchEvent(
+      new secondDom.window.ErrorEvent("error", { message: "window-error-3" }),
+    );
+    expect(
+      createErrorsResult("list").errors?.some((entry) => entry.text === "window-error-2"),
+    ).toBe(false);
+    expect(
+      createErrorsResult("list").errors?.filter((entry) => entry.text === "window-error-3"),
+    ).toHaveLength(1);
+
+    installWindowLogCapture(firstWindow);
+    installWindowLogCapture(firstWindow);
+    firstDom.window.dispatchEvent(
+      new firstDom.window.ErrorEvent("error", { message: "window-error-4" }),
+    );
+    expect(
+      createErrorsResult("list").errors?.filter((entry) => entry.text === "window-error-4"),
+    ).toHaveLength(1);
+  });
+
   it("returns an async protocol envelope for browser.tabs.sendMessage", async () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
@@ -1412,6 +1678,50 @@ function captureConsoleLogWithoutStdout(...args: readonly unknown[]): void {
   } finally {
     process.stdout.write = originalWrite;
   }
+}
+
+function readHighlightFields(element: HTMLElement): {
+  readonly marker: string | null;
+  readonly outline: string;
+  readonly outlineOffset: string;
+} {
+  return {
+    marker: element.getAttribute("data-firefox-cli-highlight"),
+    outline: element.style.outline,
+    outlineOffset: element.style.outlineOffset,
+  };
+}
+
+function createManualHighlightScheduler(): {
+  readonly scheduler: HighlightScheduler;
+  readonly activeTimers: () => readonly number[];
+  readonly runOnlyTimer: () => void;
+} {
+  let nextTimer = 0;
+  const timers = new Map<number, () => void>();
+  return {
+    scheduler: {
+      setTimeout: (callback) => {
+        nextTimer += 1;
+        timers.set(nextTimer, callback);
+        return nextTimer;
+      },
+      clearTimeout: (timer) => {
+        timers.delete(timer as number);
+      },
+    },
+    activeTimers: () => Array.from(timers.keys()),
+    runOnlyTimer: () => {
+      const activeTimers = Array.from(timers.entries());
+      expect(activeTimers).toHaveLength(1);
+      const [timer, callback] = activeTimers[0] ?? [];
+      if (timer === undefined || callback === undefined) {
+        throw new Error("expected one active highlight timer");
+      }
+      timers.delete(timer);
+      callback();
+    },
+  };
 }
 
 function encodedByteLength(value: string): number {
