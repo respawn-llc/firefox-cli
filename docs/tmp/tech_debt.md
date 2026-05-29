@@ -34,7 +34,7 @@ Scope: current tracked `firefox-cli` repository state. Focus on architecture, ma
   **Problem:** Corrupt or tampered files can crash setup/doctor/startup flows or be treated as valid with missing fields.
   **Fix:** Add runtime schemas for native manifests, pair state, host identity, package manifests, and extension manifests. Return actionable invalid-state statuses from `doctor`, regenerate host identity when safe, clear unusable pair state only through explicit repair paths, and test malformed JSON, wrong shape, and stale-but-parseable files.
 
-- [ ] Upgrade or remediate the vulnerable `web-ext` dependency chain in root tooling.
+- [x] Upgrade or remediate the vulnerable `web-ext` dependency chain in root tooling.
   Source: directly observed from local package-manager checks.
   Evidence: `bun audit` reports `web-ext` transitive vulnerabilities in `tmp`, `ajv`, and `uuid`; `bun outdated` reports `web-ext` current `8.10.0` and latest `10.2.0`.
   **Problem:** The extension lint/signing toolchain currently brings in one high-severity and two moderate-severity advisories through transitive dependencies.
