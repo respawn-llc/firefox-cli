@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { z } from "zod";
 import {
   getBinaryName,
   getPlatformKey,
@@ -21,12 +22,30 @@ import {
   startManagedProcess,
   type ManagedProcess,
 } from "./process-runner.js";
+import { parseJsonWithSchema } from "./manifest-validation.js";
 
 type CliRun = {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
 };
+
+const doctorStatusSchema = z
+  .object({
+    extensionConnection: z
+      .object({
+        status: z.string().min(1).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const capabilitiesOutputSchema = z
+  .object({
+    capabilities: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
 
 if (process.env.FIREFOX_CLI_E2E_DISPOSABLE !== "1") {
   console.log("Disposable Firefox E2E skipped. Set FIREFOX_CLI_E2E_DISPOSABLE=1 to run it.");
@@ -260,16 +279,12 @@ async function waitForDoctorStatus(options: {
       if (result.exitCode !== 0 && result.stdout.trim().length === 0) {
         return false;
       }
-      let payload: { readonly extensionConnection?: { readonly status?: string } };
-      try {
-        payload = JSON.parse(result.stdout) as typeof payload;
-      } catch (error) {
-        throw new Error(
-          `doctor --json returned invalid JSON while waiting for ${options.status}: ${
-            error instanceof Error ? error.message : String(error)
-          }\nstdout=${result.stdout}\nstderr=${result.stderr}`,
-        );
-      }
+      const payload = parseJsonWithSchema(
+        result.stdout,
+        "doctor --json output",
+        "disposable Firefox doctor stdout",
+        doctorStatusSchema,
+      );
       return payload.extensionConnection?.status === options.status;
     },
     {
@@ -321,9 +336,12 @@ function doctorReportsConnected(result: CliRun): boolean {
     return false;
   }
   try {
-    const payload = JSON.parse(result.stdout) as {
-      readonly extensionConnection?: { readonly status?: string };
-    };
+    const payload = parseJsonWithSchema(
+      result.stdout,
+      "doctor --json output",
+      "disposable Firefox doctor stdout",
+      doctorStatusSchema,
+    );
     return payload.extensionConnection?.status === "connected";
   } catch {
     return false;
@@ -335,9 +353,12 @@ function capabilitiesReportsReady(result: CliRun): boolean {
     return false;
   }
   try {
-    const payload = JSON.parse(result.stdout) as {
-      readonly capabilities?: readonly unknown[];
-    };
+    const payload = parseJsonWithSchema(
+      result.stdout,
+      "capabilities --json output",
+      "disposable Firefox capabilities stdout",
+      capabilitiesOutputSchema,
+    );
     return Array.isArray(payload.capabilities);
   } catch {
     return false;
@@ -349,7 +370,12 @@ async function runCliJson<T>(args: readonly string[], env: NodeJS.ProcessEnv): P
   if (result.exitCode !== 0) {
     throw new Error(`firefox-cli ${args.join(" ")} failed:\n${result.stderr}\n${result.stdout}`);
   }
-  return JSON.parse(result.stdout) as T;
+  return parseJsonWithSchema(
+    result.stdout,
+    `firefox-cli ${args.join(" ")} output`,
+    `firefox-cli ${args.join(" ")} stdout`,
+    z.unknown(),
+  ) as T;
 }
 
 async function runCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<CliRun> {

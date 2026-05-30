@@ -8,6 +8,12 @@ import {
   type PlatformInput,
 } from "@firefox-cli/native-host";
 import {
+  hashFile,
+  hashPayloadMap,
+  packagedSignedExtensionProvenanceFile,
+  readSignedExtensionProvenance,
+} from "./extension-artifact-provenance.js";
+import {
   extensionManifestSchema,
   parseJsonManifestContent,
   packageManifestSchema,
@@ -134,6 +140,7 @@ async function verifySignedExtensionArtifact(input: {
 
   verifySignedExtensionMetadata(signatureEntries);
   verifySignedExtensionDigests(signatureEntries, xpiPayload);
+  await verifySignedExtensionProvenance(input.packageRoot, input.artifactPath, xpiPayload);
 
   const manifestData = xpiPayload.get("manifest.json");
   if (manifestData === undefined) {
@@ -149,6 +156,30 @@ async function verifySignedExtensionArtifact(input: {
   verifyExpectedExtensionManifest(manifest);
   await verifyExtensionBundlePayload(xpiPayload);
   await verifyPayloadMatchesDevelopmentBundle(input.packageRoot, xpiPayload);
+}
+
+async function verifySignedExtensionProvenance(
+  packageRoot: string,
+  artifactPath: string,
+  xpiPayload: ReadonlyMap<string, Buffer>,
+): Promise<void> {
+  const provenancePath = resolve(packageRoot, "extension", packagedSignedExtensionProvenanceFile);
+  const provenance = await readSignedExtensionProvenance(provenancePath).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Expected signed extension provenance at ${provenancePath}: ${message}`);
+  });
+
+  if (provenance.packageVersion !== rootPackage.version) {
+    throw new Error(
+      `Expected signed extension provenance version ${rootPackage.version}, received ${provenance.packageVersion}`,
+    );
+  }
+  if (provenance.xpiSha256 !== (await hashFile(artifactPath))) {
+    throw new Error("Signed extension provenance digest does not match packaged XPI.");
+  }
+  if (provenance.sourceSha256 !== hashPayloadMap(xpiPayload)) {
+    throw new Error("Signed extension provenance source digest does not match packaged XPI.");
+  }
 }
 
 function verifySignedExtensionMetadata(entries: ReadonlyMap<string, Buffer>): void {

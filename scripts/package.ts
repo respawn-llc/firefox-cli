@@ -1,7 +1,12 @@
-import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
+import {
+  packagedSignedExtensionProvenanceFile,
+  signedExtensionProvenanceArtifactName,
+} from "./extension-artifact-provenance.js";
+import { resetGeneratedArtifact } from "./generated-artifacts.js";
 
 const packageRoot = resolve("dist/package");
 const platformKey = getPlatformKey();
@@ -41,9 +46,7 @@ await copySignedExtensionXpi(packageRoot);
 console.log(`Assembled package at ${packageRoot}`);
 
 async function resetGeneratedPackage(path: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await rm(path, { force: true, recursive: true });
-  await mkdir(path, { recursive: true });
+  await resetGeneratedArtifact(path);
 }
 
 async function writePackageJson(path: string): Promise<void> {
@@ -94,5 +97,25 @@ async function copySignedExtensionXpi(path: string): Promise<void> {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to copy FIREFOX_CLI_SIGNED_XPI from ${sourcePath}: ${message}`);
     }
+    return;
   }
+
+  await copySignedExtensionProvenance(path, sourcePath);
+}
+
+async function copySignedExtensionProvenance(
+  packagePath: string,
+  signedXpiPath: string,
+): Promise<void> {
+  const envPath = process.env.FIREFOX_CLI_SIGNED_XPI_PROVENANCE;
+  const defaultPath =
+    process.env.FIREFOX_CLI_SIGNED_XPI === undefined ||
+    process.env.FIREFOX_CLI_SIGNED_XPI.length === 0
+      ? resolve(
+          "dist/extension-artifacts",
+          signedExtensionProvenanceArtifactName(rootPackage.version),
+        )
+      : `${signedXpiPath}.provenance.json`;
+  const sourcePath = envPath === undefined || envPath.length === 0 ? defaultPath : resolve(envPath);
+  await cp(sourcePath, resolve(packagePath, "extension", packagedSignedExtensionProvenanceFile));
 }

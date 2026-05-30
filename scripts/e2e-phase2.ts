@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createOkResponse, createRequest } from "@firefox-cli/protocol";
+import { z } from "zod";
 import {
   FIREFOX_CLI_EXTENSION_ID,
   NativeMessagingFrameReader,
@@ -11,6 +12,7 @@ import {
 } from "@firefox-cli/native-host";
 import { createTempDir } from "@firefox-cli/test-support";
 import { planPhase2E2e } from "./e2e-phase2-plan.js";
+import { parseJsonWithSchema } from "./manifest-validation.js";
 import { raceWithProcessFailure, runProcess, startManagedProcess } from "./process-runner.js";
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
@@ -103,7 +105,12 @@ try {
   );
 
   const { stdout } = await cli;
-  const parsed = JSON.parse(stdout) as { readonly tabs?: readonly unknown[] };
+  const parsed = parseJsonWithSchema(
+    stdout,
+    "phase2 tab output",
+    "phase2 firefox-cli tab stdout",
+    z.object({ tabs: z.array(z.unknown()).optional() }).passthrough(),
+  );
   if (!Array.isArray(parsed.tabs) || parsed.tabs.length !== 1) {
     throw new Error(`Unexpected tab output: ${stdout}`);
   }

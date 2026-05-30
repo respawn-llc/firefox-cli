@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runProcess } from "./process-runner.js";
 import rootPackage from "../package.json" with { type: "json" };
+import {
+  signedExtensionProvenanceArtifactName,
+  writeSignedExtensionProvenance,
+} from "./extension-artifact-provenance.js";
 
 const apiKey = process.env.WEB_EXT_API_KEY ?? process.env.AMO_JWT_ISSUER;
 const apiSecret = process.env.WEB_EXT_API_SECRET ?? process.env.AMO_JWT_SECRET;
@@ -43,6 +47,13 @@ if (signedArtifact === undefined) {
 
 const outputPath = resolve(artifactDir, `firefox-cli-${rootPackage.version}.xpi`);
 await cp(resolve(signingDir, signedArtifact), outputPath);
+await writeSignedExtensionProvenance({
+  outputPath: resolve(artifactDir, signedExtensionProvenanceArtifactName(rootPackage.version)),
+  packageVersion: rootPackage.version,
+  channel,
+  sourceDir,
+  xpiPath: outputPath,
+});
 
 console.log(`Signed extension XPI: ${outputPath}`);
 

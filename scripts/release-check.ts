@@ -1,23 +1,59 @@
 import { cp, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 import {
   FIREFOX_CLI_EXTENSION_ID,
   NATIVE_HOST_NAME,
   resolvePackagedBinary,
 } from "@firefox-cli/native-host";
+import { parseJsonWithSchema, runCliJson } from "./manifest-validation.js";
 import { verifyPackageLayout } from "./package-check.js";
 import { runProcess } from "./process-runner.js";
+import { resolveReleaseSignedXpiPolicy } from "./release-policy.js";
 import rootPackage from "../package.json" with { type: "json" };
 
 const packageRoot = resolve("dist/package");
 const errors: string[] = [];
-const phase0Mode = process.argv.includes("--phase0");
-const requireSignedXpi =
-  process.argv.includes("--require-signed-xpi") ||
-  process.env.FIREFOX_CLI_REQUIRE_SIGNED_XPI === "1";
+const releasePolicy = resolveReleaseSignedXpiPolicy(process.argv, process.env);
 
-await runCheck("package layout", () => verifyPackageLayout({ packageRoot }));
+const doctorOutputSchema = z
+  .object({
+    nativeHostManifest: z.unknown(),
+    extensionConnection: z.unknown(),
+  })
+  .passthrough();
+
+const nativeManifestOutputSchema = z
+  .object({
+    name: z.string().min(1),
+    path: z.string().min(1),
+    type: z.string().min(1),
+    allowed_extensions: z.array(z.string().min(1)),
+  })
+  .passthrough();
+
+const setupNativeHostOutputSchema = z
+  .object({
+    manifestPath: z.string().min(1),
+    manifest: nativeManifestOutputSchema,
+  })
+  .passthrough();
+
+const staleDoctorOutputSchema = z
+  .object({
+    nativeHostManifest: z
+      .object({
+        status: z.string().min(1),
+        installedPath: z.string().min(1).optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+await runCheck("package layout", () =>
+  verifyPackageLayout({ packageRoot, requireSignedXpi: releasePolicy.requireSignedXpi }),
+);
 await runCheck("temp install --version", async () => {
   const installRoot = await createTempInstall(packageRoot);
   const result = await runNodeLauncher(installRoot, ["--version"]);
@@ -28,14 +64,15 @@ await runCheck("temp install --version", async () => {
 await runCheck("temp install doctor", async () => {
   const installRoot = await createTempInstall(packageRoot);
   const env = await createTempUserEnv();
-  const result = await runNodeLauncher(installRoot, ["doctor", "--json"], {
-    env,
-    expectedExitCodes: [0, 1],
-  });
-  const parsed = JSON.parse(result.stdout) as {
-    readonly nativeHostManifest?: unknown;
-    readonly extensionConnection?: unknown;
-  };
+  const parsed = await runCliJson(
+    () =>
+      runNodeLauncher(installRoot, ["doctor", "--json"], {
+        env,
+        expectedExitCodes: [0, 1],
+      }),
+    "doctor --json output",
+    doctorOutputSchema,
+  );
   if (parsed.nativeHostManifest === undefined || parsed.extensionConnection === undefined) {
     throw new Error("doctor --json did not report setup state");
   }
@@ -43,7 +80,7 @@ await runCheck("temp install doctor", async () => {
 await runCheck("real executable resolution", async () => {
   await resolvePackagedBinary(packageRoot);
 });
-if (phase0Mode) {
+if (releasePolicy.phase0Mode) {
   console.log("Phase 0 release check: signed XPI and native manifest verification are deferred.");
 } else {
   await runCheck("native manifest temp-path verification", () =>
@@ -52,14 +89,8 @@ if (phase0Mode) {
   await runCheck("stale native manifest repair", () =>
     verifyStaleNativeManifestRepair({ packageRoot }),
   );
-  if (requireSignedXpi) {
-    await runCheck("signed extension XPI", () =>
-      verifyPackageLayout({ packageRoot, requireSignedXpi: true }),
-    );
-  } else {
-    console.log(
-      "Release check completed without signed XPI gate. Use --require-signed-xpi for release-candidate packages.",
-    );
+  if (releasePolicy.allowUnsignedLocal) {
+    console.log("Release check completed with explicit non-release local unsigned override.");
   }
 }
 
@@ -93,22 +124,24 @@ async function verifyStaleNativeManifestRepair(options: { readonly packageRoot: 
   const newInstallRoot = await createTempInstall(options.packageRoot);
   const env = await createTempUserEnv();
   const setup = await runNodeLauncher(oldInstallRoot, ["setup", "native-host", "--json"], { env });
-  const setupPayload = JSON.parse(setup.stdout) as {
-    readonly manifestPath: string;
-    readonly manifest: { readonly path: string };
-  };
+  const setupPayload = parseJsonWithSchema(
+    setup.stdout,
+    "setup native-host --json output",
+    "setup native-host stdout",
+    setupNativeHostOutputSchema,
+  );
   const oldBinaryPath = await realpath(setupPayload.manifest.path);
 
   const beforeFix = await runNodeLauncher(newInstallRoot, ["doctor", "--json"], {
     env,
     expectedExitCodes: [1],
   });
-  const beforePayload = JSON.parse(beforeFix.stdout) as {
-    readonly nativeHostManifest: {
-      readonly status: string;
-      readonly installedPath?: string;
-    };
-  };
+  const beforePayload = parseJsonWithSchema(
+    beforeFix.stdout,
+    "doctor --json output",
+    "stale doctor stdout",
+    staleDoctorOutputSchema,
+  );
   if (beforePayload.nativeHostManifest.status !== "stale") {
     throw new Error("doctor did not report stale native manifest before repair");
   }
@@ -120,9 +153,12 @@ async function verifyStaleNativeManifestRepair(options: { readonly packageRoot: 
     env,
     expectedExitCodes: [1],
   });
-  const repaired = JSON.parse(await readFile(setupPayload.manifestPath, "utf8")) as {
-    readonly path: string;
-  };
+  const repaired = parseJsonWithSchema(
+    await readFile(setupPayload.manifestPath, "utf8"),
+    "native manifest",
+    setupPayload.manifestPath,
+    nativeManifestOutputSchema,
+  );
   const newBinaryPath = await realpath(await resolvePackagedBinary(newInstallRoot));
   if ((await realpath(repaired.path)) !== newBinaryPath) {
     throw new Error("doctor --fix did not repair the native manifest executable path");
@@ -136,21 +172,23 @@ async function verifyNativeManifestTempPath(options: { readonly packageRoot: str
   const result = await runNodeLauncher(installRoot, ["setup", "native-host", "--json"], {
     env,
   });
-  const parsed = JSON.parse(result.stdout) as {
-    readonly manifestPath: string;
-    readonly manifest: {
-      readonly name: string;
-      readonly path: string;
-      readonly type: string;
-      readonly allowed_extensions: readonly string[];
-    };
-  };
+  const parsed = parseJsonWithSchema(
+    result.stdout,
+    "setup native-host --json output",
+    "setup native-host stdout",
+    setupNativeHostOutputSchema,
+  );
   const manifestPath = resolve(parsed.manifestPath);
   if (!manifestPath.startsWith(resolve(tempHome))) {
     throw new Error(`native manifest escaped temp home: ${manifestPath}`);
   }
 
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as typeof parsed.manifest;
+  const manifest = parseJsonWithSchema(
+    await readFile(manifestPath, "utf8"),
+    "native manifest",
+    manifestPath,
+    nativeManifestOutputSchema,
+  );
   const binaryPath = await resolvePackagedBinary(installRoot);
   const expectedBinaryPath = await realpath(binaryPath);
   const manifestBinaryPath = await realpath(manifest.path);

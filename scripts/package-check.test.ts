@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 import rootPackage from "../package.json" with { type: "json" };
 import { createTempDir } from "@firefox-cli/test-support";
 import { getBinaryName, getPlatformKey, type PlatformInput } from "@firefox-cli/native-host";
+import {
+  hashPayloadMap,
+  packagedSignedExtensionProvenanceFile,
+} from "./extension-artifact-provenance.js";
 import { verifyPackageLayout } from "./package-check.js";
 import { createZipFixture, type ZipFixtureEntryInput } from "./zip-test-utils.js";
 
@@ -41,6 +45,26 @@ describe("verifyPackageLayout", () => {
     });
 
     await verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true });
+  });
+
+  it("requires signed XPI provenance for release checks", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeMatchingXpi(packageRoot, { writeProvenance: false });
+
+    await expect(
+      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
+    ).rejects.toThrow("Expected signed extension provenance");
+  });
+
+  it("rejects signed XPI provenance that does not match the packaged XPI", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeMatchingXpi(packageRoot, {
+      provenanceOverrides: { xpiSha256: "0".repeat(64) },
+    });
+
+    await expect(
+      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
+    ).rejects.toThrow("provenance digest");
   });
 
   it("rejects renamed unsigned ZIPs for signed release checks", async () => {
@@ -347,6 +371,8 @@ async function writeMatchingXpi(
     readonly signed?: boolean;
     readonly signatureEntries?: Record<string, string | Buffer>;
     readonly useDataDescriptor?: boolean;
+    readonly writeProvenance?: boolean;
+    readonly provenanceOverrides?: Record<string, unknown>;
   } = {},
 ): Promise<void> {
   const payload = await readDevelopmentPayload(packageRoot);
@@ -383,6 +409,26 @@ async function writeMatchingXpi(
   );
 
   await writeFile(join(packageRoot, "extension/firefox-cli.xpi"), fixture.data);
+  if (options.signed !== false && options.writeProvenance !== false) {
+    await writeFile(
+      join(packageRoot, "extension", packagedSignedExtensionProvenanceFile),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          packageVersion: rootPackage.version,
+          channel: "unlisted",
+          sourceDir: join(packageRoot, "extension/development"),
+          sourceSha256: hashPayloadMap(payload),
+          xpiFile: "firefox-cli.xpi",
+          xpiSha256: createHash("sha256").update(fixture.data).digest("hex"),
+          createdAt: "2026-01-01T00:00:00.000Z",
+          ...options.provenanceOverrides,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
 }
 
 function createSignatureEntries(

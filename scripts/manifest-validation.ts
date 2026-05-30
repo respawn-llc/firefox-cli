@@ -43,7 +43,7 @@ export const extensionManifestSchema = z
   .passthrough();
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;
 
-export function parseJsonManifestContent<T>(
+export function parseJsonWithSchema<T>(
   content: string,
   label: string,
   location: string,
@@ -66,6 +66,24 @@ export function parseJsonManifestContent<T>(
   }
 
   return parsed.data;
+}
+
+export async function runCliJson<T>(
+  run: () => Promise<{ readonly stdout: string }>,
+  label: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const result = await run();
+  return parseJsonWithSchema(result.stdout, label, `${label} stdout`, schema);
+}
+
+export function parseJsonManifestContent<T>(
+  content: string,
+  label: string,
+  location: string,
+  schema: z.ZodType<T>,
+): T {
+  return parseJsonWithSchema(content, label, location, schema);
 }
 
 export async function readJsonManifestFile<T>(
