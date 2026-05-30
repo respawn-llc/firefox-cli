@@ -81,7 +81,7 @@ describe("process runner", () => {
     try {
       try {
         await runProcess(node, processTreeArgs(grandchildPidFile), {
-          timeoutMs: 150,
+          timeoutMs: 1000,
         });
       } catch (error) {
         failure = error;
