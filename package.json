@@ -33,6 +33,7 @@
     "build": "bun run build:packages && bun run build:binary && bun run extension:build",
     "package": "bun scripts/package.ts",
     "package:check": "bun run build && bun run package && bun scripts/package-check.ts",
+    "deps:check": "bun scripts/dependency-upgrade-check.ts",
     "release:check": "bun run build && bun run package && bun scripts/release-check.ts",
     "release:check:local": "bun run build && bun run package && bun scripts/release-check.ts --allow-unsigned-local",
     "release:check:signed": "bun run build && bun run package && bun scripts/release-check.ts --require-signed-xpi",
