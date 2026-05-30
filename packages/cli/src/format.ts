@@ -9,14 +9,9 @@ import type {
   TabSummary,
   WaitResult,
 } from "@firefox-cli/protocol";
-import { parsePayloadPositionalsAndOptions, parsePositionalsAndOptions } from "./parse.js";
 import { error, ok } from "./result.js";
 import { formatProtocolError } from "./transport.js";
-import type { CliResult } from "./types.js";
-import { parseSelectArguments } from "./commands/actions.js";
-import { batchWantsJsonOutput } from "./commands/batch.js";
-import { evalWantsJsonOutput } from "./commands/eval.js";
-import { screenshotWantsJsonOutput } from "./commands/screenshot.js";
+import type { CliResponseFormatterKind, CliResult } from "./types.js";
 
 type SuccessfulResponse<C extends CommandId> = Extract<ResponseEnvelope<C>, { readonly ok: true }>;
 
@@ -27,16 +22,15 @@ function responseResult<C extends CommandId>(
 }
 
 export function formatCliResponse<C extends CommandId>(
-  command: C,
+  formatter: CliResponseFormatterKind,
   response: ResponseEnvelope<C>,
-  argv: readonly string[],
+  json: boolean,
 ): CliResult {
-  const json = cliRouteWantsJsonOutput(command, argv);
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
-  switch (command) {
+  switch (formatter) {
     case "capabilities": {
       const result = responseResult(response as ResponseEnvelope<"capabilities">);
       return json
@@ -48,19 +42,14 @@ export function formatCliResponse<C extends CommandId>(
           );
     }
 
-    case "tabs.list": {
+    case "tab-list": {
       const result = responseResult(response as ResponseEnvelope<"tabs.list">);
       return json
         ? ok(`${JSON.stringify(result, null, 2)}\n`)
         : ok(result.tabs.map(renderTabSummary).join(""));
     }
 
-    case "tab.new":
-    case "tab.select":
-    case "open":
-    case "back":
-    case "forward":
-    case "reload": {
+    case "tab-target": {
       const result = responseResult(
         response as ResponseEnvelope<
           "tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"
@@ -71,14 +60,14 @@ export function formatCliResponse<C extends CommandId>(
         : ok(`${renderTargetSummary(result.target)}\n`);
     }
 
-    case "tab.close": {
+    case "tab-close": {
       const result = responseResult(response as ResponseEnvelope<"tab.close">);
       return json
         ? ok(`${JSON.stringify(result, null, 2)}\n`)
         : ok(`Closed tab ${result.closedTabId}\n`);
     }
 
-    case "windows.list": {
+    case "window-list": {
       const result = responseResult(response as ResponseEnvelope<"windows.list">);
       return json
         ? ok(`${JSON.stringify(result, null, 2)}\n`)
@@ -94,15 +83,14 @@ export function formatCliResponse<C extends CommandId>(
           );
     }
 
-    case "window.new":
-    case "window.select": {
+    case "window-target": {
       const result = responseResult(response as ResponseEnvelope<"window.new" | "window.select">);
       return json
         ? ok(`${JSON.stringify(result, null, 2)}\n`)
         : ok(`w${result.window.id} [${result.window.index}]\n`);
     }
 
-    case "window.close": {
+    case "window-close": {
       const result = responseResult(response as ResponseEnvelope<"window.close">);
       return json
         ? ok(`${JSON.stringify(result, null, 2)}\n`)
@@ -116,7 +104,7 @@ export function formatCliResponse<C extends CommandId>(
         : ok(result.text.endsWith("\n") ? result.text : `${result.text}\n`);
     }
 
-    case "ref.resolve": {
+    case "ref": {
       const result = responseResult(response as ResponseEnvelope<"ref.resolve">);
       if (json) {
         return ok(`${JSON.stringify(result, null, 2)}\n`);
@@ -194,10 +182,10 @@ export function formatCliResponse<C extends CommandId>(
       };
     }
 
-    default:
-      return isActionResponseCommand(command)
-        ? formatActionResponse(response as ResponseEnvelope<ActionResponseCommand>, json)
-        : formatJsonOrObject(response as ResponseEnvelope<CommandId>, json);
+    case "action":
+      return formatActionResponse(response as ResponseEnvelope<ActionResponseCommand>, json);
+    case "json-object":
+      return formatJsonOrObject(response as ResponseEnvelope<CommandId>, json);
   }
 }
 
@@ -222,94 +210,6 @@ type ActionResponseCommand =
   | "scroll"
   | "scrollintoview"
   | "swipe";
-
-function isActionResponseCommand(command: CommandId): command is ActionResponseCommand {
-  return (
-    command === "click" ||
-    command === "dblclick" ||
-    command === "focus" ||
-    command === "hover" ||
-    command === "drag" ||
-    command === "upload" ||
-    command === "mouse" ||
-    command === "keydown" ||
-    command === "keyup" ||
-    command === "fill" ||
-    command === "type" ||
-    command === "press" ||
-    command === "keyboard.type" ||
-    command === "keyboard.inserttext" ||
-    command === "check" ||
-    command === "uncheck" ||
-    command === "select" ||
-    command === "scroll" ||
-    command === "scrollintoview" ||
-    command === "swipe"
-  );
-}
-
-function cliRouteWantsJsonOutput(command: CommandId, argv: readonly string[]): boolean {
-  const args = argv.slice(1);
-  switch (command) {
-    case "eval":
-      return evalWantsJsonOutput(args);
-    case "screenshot":
-      return screenshotWantsJsonOutput(args);
-    case "batch":
-      return batchWantsJsonOutput(args);
-    case "find":
-      return parsePayloadPositionalsAndOptions(args, {
-        payloadStartPositionals: 1,
-        minPositionals: 2,
-      }).optionArgs.includes("--json");
-    case "clipboard":
-      return parsePayloadPositionalsAndOptions(args, {
-        payloadStartPositionals: 1,
-        minPositionals: 1,
-      }).optionArgs.includes("--json");
-    case "cookies":
-    case "storage":
-      return parsePayloadPositionalsAndOptions(args, {
-        payloadStartPositionals: 2,
-        minPositionals: 2,
-      }).optionArgs.includes("--json");
-    case "diff":
-      return parsePayloadPositionalsAndOptions(args, {
-        payloadStartPositionals: 1,
-        minPositionals: 2,
-      }).optionArgs.includes("--json");
-    case "fill":
-    case "type":
-    case "keyboard.type":
-    case "keyboard.inserttext":
-      return parsePayloadPositionalsAndOptions(args, {
-        payloadStartPositionals: 1,
-        minPositionals: 2,
-      }).optionArgs.includes("--json");
-    case "select":
-      return parseSelectArguments(args).optionArgs.includes("--json");
-    case "drag":
-    case "upload":
-    case "mouse":
-    case "keydown":
-    case "keyup":
-    case "click":
-    case "dblclick":
-    case "focus":
-    case "hover":
-    case "check":
-    case "uncheck":
-    case "press":
-    case "scroll":
-    case "scrollintoview":
-    case "swipe":
-      return parsePositionalsAndOptions(args, {
-        preserveUnknownOptions: command === "upload",
-      }).optionArgs.includes("--json");
-    default:
-      return args.includes("--json");
-  }
-}
 
 function renderTabSummary(tab: TabSummary): string {
   const activePrefix = tab.active ? "*" : " ";

@@ -1,7 +1,13 @@
 import { gatedCapabilities, type RequestEnvelope } from "@firefox-cli/protocol";
 import { doctor, setup } from "./commands/setup-doctor.js";
 import { formatCliResponse } from "./format.js";
-import { renderHelp, findCliRouteBindingForArgv } from "./route-registry.js";
+import {
+  cliRouteWantsJsonOutput,
+  findCliRouteBindingForArgv,
+  renderHelp,
+  unsupportedCliCommands,
+  validateCliRouteArgv,
+} from "./route-registry.js";
 import { error, ok } from "./result.js";
 import { formatProtocolError, sendOrUnavailable } from "./transport.js";
 import {
@@ -13,11 +19,6 @@ import {
 } from "./types.js";
 import { createUploadBudget } from "./upload.js";
 
-const gatedCliCommands = new Map(
-  gatedCapabilities.flatMap((capability) =>
-    (capability.cliCommands ?? []).map((command) => [command, capability] as const),
-  ),
-);
 const gatedCapabilitiesByCommand = new Map(
   gatedCapabilities.map((capability) => [capability.command, capability] as const),
 );
@@ -67,7 +68,7 @@ async function runCliOrThrow(
     return runCliRouteBinding(args, dependencies);
   }
 
-  const gated = args[0] === undefined ? undefined : gatedCliCommands.get(args[0]);
+  const gated = args[0] === undefined ? undefined : unsupportedCliCommands.get(args[0]);
   if (gated !== undefined) {
     return error(formatGatedCapability(gated.command));
   }
@@ -89,7 +90,11 @@ async function runCliRouteBinding(
   };
   const request = await buildRequestForArgv(argv, dependencies, context);
   const response = await sendOrUnavailable(dependencies, request);
-  return formatCliResponse(request.command, response, argv);
+  const binding = findCliRouteBindingForArgv(argv);
+  if (binding === undefined) {
+    throw new InvalidBatchArgvCommandError();
+  }
+  return formatCliResponse(binding.formatter, response, cliRouteWantsJsonOutput(binding, argv));
 }
 
 async function buildRequestForArgv(
@@ -106,6 +111,7 @@ async function buildRequestForArgv(
     throw new InvalidBatchArgvCommandError();
   }
 
+  validateCliRouteArgv(binding, argv);
   return binding.buildRequest(argv, dependencies, context);
 }
 

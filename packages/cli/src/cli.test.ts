@@ -18,6 +18,7 @@ import {
 } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { cliRouteBindings, renderHelp, runCli, type CliDependencies } from "./index.js";
+import { cliRouteWantsJsonOutput, findCliRouteBindingForArgv } from "./route-registry.js";
 
 describe("runCli", () => {
   it("binds every protocol CLI route exactly once", () => {
@@ -34,6 +35,8 @@ describe("runCli", () => {
       expect(matches, `Missing or duplicate CLI binding for ${route.id}`).toHaveLength(1);
       expect(matches[0]?.[0]).toBe(route.id);
       expect(matches[0]?.[1].help.length).toBeGreaterThan(0);
+      expect(matches[0]?.[1].parser).toBeDefined();
+      expect(matches[0]?.[1].formatter).toBeDefined();
     }
   });
 
@@ -45,6 +48,62 @@ describe("runCli", () => {
       expect(commandSchemas[binding.command].cliRoutes.some((route) => route.id === routeId)).toBe(
         true,
       );
+    }
+  });
+
+  it("classifies JSON output through route parser metadata", () => {
+    const cases: readonly { readonly argv: readonly string[]; readonly json: boolean }[] = [
+      { argv: ["tab", "--json"], json: true },
+      { argv: ["fill", "#token", "--json"], json: false },
+      { argv: ["fill", "#token", "value", "--json"], json: true },
+      { argv: ["keyboard", "type", "--json"], json: false },
+      { argv: ["keyboard", "type", "value", "--json"], json: true },
+      { argv: ["select", "#plan", "--json"], json: false },
+      { argv: ["select", "#plan", "pro", "--json"], json: true },
+      { argv: ["wait", "--download", "--json"], json: true },
+    ];
+
+    for (const testCase of cases) {
+      const binding = findCliRouteBindingForArgv(testCase.argv);
+      expect(binding, testCase.argv.join(" ")).toBeDefined();
+      expect(cliRouteWantsJsonOutput(binding as NonNullable<typeof binding>, testCase.argv)).toBe(
+        testCase.json,
+      );
+    }
+  });
+
+  it("rejects unsupported route options before sending requests", async () => {
+    const cases: readonly { readonly argv: readonly string[]; readonly stderr: string }[] = [
+      { argv: ["tab", "--bogus"], stderr: "Unsupported tab option: --bogus\n" },
+      { argv: ["open", "example.com", "--bogus"], stderr: "Unsupported open option: --bogus\n" },
+      { argv: ["snapshot", "--bogus"], stderr: "Unsupported snapshot option: --bogus\n" },
+      { argv: ["get", "title", "--bogus"], stderr: "Unsupported get option: --bogus\n" },
+      { argv: ["wait", "--bogus"], stderr: "Unsupported wait option: --bogus\n" },
+      { argv: ["eval", "--bogus", "1"], stderr: "Unsupported eval option: --bogus\n" },
+      { argv: ["screenshot", "--bogus"], stderr: "Unsupported screenshot option: --bogus\n" },
+      { argv: ["find", "text", "Ready", "--bogus"], stderr: "Unsupported find option: --bogus\n" },
+      { argv: ["upload", "--bogus"], stderr: "Unsupported upload option: --bogus\n" },
+      { argv: ["fill", "#email", "text", "--bogus"], stderr: "Unsupported fill option: --bogus\n" },
+      {
+        argv: ["keyboard", "type", "text", "--bogus"],
+        stderr: "Unsupported keyboard option: --bogus\n",
+      },
+      { argv: ["batch", "[]", "--bogus"], stderr: "Unsupported batch option: --bogus\n" },
+    ];
+
+    for (const testCase of cases) {
+      await expect(
+        runCli(testCase.argv, {
+          ...baseDependencies(),
+          sendRequest: async () => {
+            throw new Error(`Unexpected request for ${testCase.argv.join(" ")}`);
+          },
+        }),
+      ).resolves.toEqual({
+        exitCode: 1,
+        stdout: "",
+        stderr: testCase.stderr,
+      });
     }
   });
 
@@ -1649,6 +1708,71 @@ describe("runCli", () => {
     expect(JSON.parse(output.stdout)).toMatchObject({
       ok: false,
       firstFailedIndex: 1,
+    });
+  });
+
+  it("preserves option-like argv payloads in direct and batch commands", async () => {
+    const dialogOutput = await runCli(["dialog", "accept", "--proceed"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "dialog",
+          params: { action: "accept", promptText: "--proceed" },
+        });
+        return createOkResponse(request, { action: "accept", handled: true });
+      },
+    });
+    const clipboardOutput = await runCli(["clipboard", "write", "--token", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "clipboard",
+          params: { action: "write", text: "--token" },
+        });
+        return createOkResponse(request, { action: "write", ok: true });
+      },
+    });
+    const batchOutput = await runCli(
+      ["batch", JSON.stringify([["dialog", "accept", "--proceed"]])],
+      {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({
+            command: "batch",
+            params: {
+              steps: [{ command: "dialog", params: { action: "accept", promptText: "--proceed" } }],
+            },
+          });
+          return createOkResponse(request, {
+            ok: true,
+            steps: [
+              {
+                index: 0,
+                command: "dialog",
+                ok: true,
+                result: { action: "accept", handled: true },
+              },
+            ],
+            elapsedMs: 1,
+          });
+        },
+      },
+    );
+
+    expect(dialogOutput).toEqual({
+      exitCode: 0,
+      stdout: `${JSON.stringify({ action: "accept", handled: true })}\n`,
+      stderr: "",
+    });
+    expect(clipboardOutput).toEqual({
+      exitCode: 0,
+      stdout: `${JSON.stringify({ action: "write", ok: true }, null, 2)}\n`,
+      stderr: "",
+    });
+    expect(batchOutput).toEqual({
+      exitCode: 0,
+      stdout: "0 dialog ok\nbatch ok in 1ms\n",
+      stderr: "",
     });
   });
 

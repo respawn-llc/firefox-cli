@@ -13,6 +13,11 @@ export type CliRouteMetadata = {
   readonly batch: boolean;
 };
 
+export type CliRouteEntry<C extends string = string> = {
+  readonly command: C;
+  readonly route: CliRouteMetadata;
+};
+
 export type CommandBatchMetadata = {
   readonly allowed: boolean;
   readonly protocolDefaultTarget?: boolean;

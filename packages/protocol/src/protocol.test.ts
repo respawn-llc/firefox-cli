@@ -16,6 +16,7 @@ import {
   createRequestProtocolMismatchError,
   createRequest,
   gatedCapabilities,
+  getCliRouteEntries,
   getRequestProtocolCompatibility,
   getCliRoutes,
   getCommandCliRoutes,
@@ -263,8 +264,12 @@ describe("protocol negotiation", () => {
 describe("protocol command metadata", () => {
   it("uses unique CLI route ids and paths", () => {
     const routes = getCliRoutes();
+    const routeEntries = getCliRouteEntries();
     const expectedRoutes = commandIds().flatMap(
       (command) => expectedCliRoutesByCommand[command] ?? [],
+    );
+    const expectedRouteEntries = commandIds().flatMap((command) =>
+      (expectedCliRoutesByCommand[command] ?? []).map((route) => ({ command, route })),
     );
     const routeIds = routes.map((route) => route.id);
     const routePaths = routes.map((route) => route.path.join("\0"));
@@ -273,6 +278,7 @@ describe("protocol command metadata", () => {
       expect(getCommandCliRoutes(command)).toEqual(expectedCliRoutesByCommand[command] ?? []);
     }
     expect(routes).toEqual(expectedRoutes);
+    expect(routeEntries).toEqual(expectedRouteEntries);
     expect(new Set(routeIds).size).toBe(routeIds.length);
     expect(new Set(routePaths).size).toBe(routePaths.length);
     expect(routes.every((route) => route.path.length > 0)).toBe(true);

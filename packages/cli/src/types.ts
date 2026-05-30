@@ -76,9 +76,47 @@ export type CliRequestBuilder = (
   context: CliRequestBuildContext,
 ) => Promise<RequestEnvelope> | RequestEnvelope;
 
+export type CliPayloadParserSpec = {
+  readonly payloadStartPositionals: number;
+  readonly minPositionals: number;
+  readonly variadicAfterMin?: boolean;
+};
+
+export type CliRouteParserSpec = {
+  readonly label: string;
+  readonly flags: readonly string[];
+  readonly valueOptions: readonly string[];
+  readonly optionalValueOptions?: readonly string[];
+  readonly payload?: CliPayloadParserSpec;
+  readonly allowDashDashPayload?: boolean;
+};
+
+export type CliResponseFormatterKind =
+  | "capabilities"
+  | "tab-list"
+  | "tab-target"
+  | "tab-close"
+  | "window-list"
+  | "window-target"
+  | "window-close"
+  | "snapshot"
+  | "ref"
+  | "get"
+  | "is"
+  | "wait"
+  | "eval"
+  | "screenshot"
+  | "find"
+  | "frame"
+  | "batch"
+  | "action"
+  | "json-object";
+
 export type CliRouteBinding = {
   readonly route: CliRouteMetadata;
   readonly command: CommandId;
   readonly help: string;
+  readonly parser: CliRouteParserSpec;
+  readonly formatter: CliResponseFormatterKind;
   readonly buildRequest: CliRequestBuilder;
 };

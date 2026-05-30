@@ -2,7 +2,7 @@ import type { z } from "zod";
 
 import { createBatchSchemas } from "../batch.js";
 import { targetSelectorSchema } from "../target.js";
-import type { CliRouteMetadata, CommandBatchMetadata } from "../metadata.js";
+import type { CliRouteEntry, CliRouteMetadata, CommandBatchMetadata } from "../metadata.js";
 import { actionsCommandEntries } from "./actions.js";
 import { browsingCommandEntries } from "./browsing.js";
 import { contentCommandEntries } from "./content.js";
@@ -88,8 +88,15 @@ export function getCommandCliRoutes(command: CommandId): readonly CliRouteMetada
 }
 
 export function getCliRoutes(): readonly CliRouteMetadata[] {
-  return Object.values(commandSchemas).flatMap(
-    (schema): readonly CliRouteMetadata[] => schema.cliRoutes,
+  return getCliRouteEntries().map((entry) => entry.route);
+}
+
+export function getCliRouteEntries(): readonly CliRouteEntry<CommandId>[] {
+  return Object.entries(commandSchemas).flatMap(([command, schema]) =>
+    schema.cliRoutes.map((route) => ({
+      command: command as CommandId,
+      route,
+    })),
   );
 }
 
