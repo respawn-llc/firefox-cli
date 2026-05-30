@@ -121,6 +121,26 @@ describe("browser command handling", () => {
     }
   });
 
+  it("rejects page-scoped commands when host approval was revoked", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.hostAccess = false;
+
+    const response = await handleBrowserRequest(
+      createRequest("snapshot", {}, "snapshot-1"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "PERMISSION_DENIED",
+        message: expect.stringContaining("Approve host access"),
+      },
+    });
+  });
+
   it("lists tabs for the focused window using deterministic window ordering", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),

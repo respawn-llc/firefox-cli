@@ -851,6 +851,7 @@ function createTestBrowserAdapter(
   overrides: Partial<BackgroundBrowserAdapter> = {},
 ): BackgroundBrowserAdapter {
   return {
+    hasRequiredHostAccess: async () => true,
     listWindows: async () => windows,
     createTab: async () => {
       throw new Error("not implemented");

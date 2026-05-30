@@ -1,3 +1,4 @@
+import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import type { BackgroundBrowserAdapter } from "./background-controller.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import { createGlobMatcher } from "./glob.js";
@@ -9,7 +10,12 @@ export function createBackgroundBrowserAdapter(options: {
   readonly clipboard?: Pick<typeof navigator.clipboard, "readText" | "writeText">;
 }): BackgroundBrowserAdapter {
   const clipboard = options.clipboard ?? navigator.clipboard;
+  const requiredHostAccess = {
+    origins: getExtensionPermissionRequirements().popupApprovalOrigins,
+  };
   return {
+    hasRequiredHostAccess: async () =>
+      options.browser.permissions?.contains(requiredHostAccess) ?? true,
     listWindows: async () => {
       const windows = await options.browser.windows.getAll({ populate: true });
       return windows.filter(hasWindowId).map((window) => ({

@@ -11,6 +11,7 @@ import {
 } from "../extension-artifact-provenance.js";
 import { verifyPackageLayout } from "../package-check.js";
 import { createZipFixture, type ZipFixtureEntryInput } from "./zip-test-utils.js";
+import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 
 const platform: PlatformInput = {
   platform: "linux",
@@ -181,8 +182,17 @@ describe("verifyPackageLayout", () => {
       for (const manifestOverride of [
         { version: "9.9.9" },
         { browser_specific_settings: { gecko: { id: "wrong@example.invalid" } } },
+        { browser_specific_settings: { gecko: { id: "firefox-cli@example.invalid" } } },
         { permissions: ["nativeMessaging", "scripting"] },
         { host_permissions: [] },
+        {
+          browser_specific_settings: {
+            gecko: {
+              id: "firefox-cli@example.invalid",
+              data_collection_permissions: { required: ["technicalAndInteraction"] },
+            },
+          },
+        },
       ] as const) {
         const packageRoot = await createPackageRoot();
         await writeMatchingXpi(packageRoot, {
@@ -285,6 +295,7 @@ async function createPackageRoot(
 ): Promise<string> {
   const packageRoot = await createTempDir("firefox-cli-package-check");
   const platformKey = getPlatformKey(platform);
+  const extensionRequirements = getExtensionPermissionRequirements();
 
   await mkdir(join(packageRoot, "bin", platformKey), { recursive: true });
   await mkdir(join(packageRoot, "extension/development"), { recursive: true });
@@ -320,22 +331,13 @@ async function createPackageRoot(
         browser_specific_settings: {
           gecko: {
             id: "firefox-cli@example.invalid",
-            strict_min_version: "109.0",
+            strict_min_version: extensionRequirements.firefoxStrictMinVersion,
+            data_collection_permissions: extensionRequirements.dataCollection,
           },
         },
         background: { scripts: ["background.js"] },
-        permissions: [
-          "nativeMessaging",
-          "scripting",
-          "tabs",
-          "storage",
-          "downloads",
-          "cookies",
-          "clipboardRead",
-          "clipboardWrite",
-          "webRequest",
-        ],
-        host_permissions: ["<all_urls>"],
+        permissions: extensionRequirements.manifestPermissions,
+        host_permissions: extensionRequirements.hostPermissions,
         action: { default_popup: "popup.html", default_title: "firefox-cli" },
       },
       null,

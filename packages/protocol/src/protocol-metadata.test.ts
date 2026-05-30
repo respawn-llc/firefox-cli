@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getCommandFrameScopeMetadata } from "./index.js";
+import {
+  commandRequiresExtensionHostAccess,
+  getCommandFrameScopeMetadata,
+  getCommandSecurityMetadata,
+  getExtensionPermissionRequirements,
+} from "./index.js";
 
 describe("protocol command metadata", () => {
   it("documents frame-scope support in command metadata", () => {
@@ -28,6 +33,44 @@ describe("protocol command metadata", () => {
     expect(getCommandFrameScopeMetadata("tabs.list")).toEqual({
       scope: "not-applicable",
       reason: "This command does not execute inside a page frame.",
+    });
+  });
+
+  it("derives extension permission requirements from command metadata", () => {
+    const requirements = getExtensionPermissionRequirements();
+
+    expect(requirements.firefoxStrictMinVersion).toBe("150.0");
+    expect(requirements.manifestPermissions).toEqual([
+      "clipboardRead",
+      "clipboardWrite",
+      "cookies",
+      "downloads",
+      "nativeMessaging",
+      "scripting",
+      "storage",
+      "tabs",
+      "webRequest",
+    ]);
+    expect(requirements.hostPermissions).toEqual(["<all_urls>"]);
+    expect(requirements.popupApprovalOrigins).toEqual(["<all_urls>"]);
+    expect(requirements.webRequestListenerOrigins).toEqual(["<all_urls>"]);
+    expect(requirements.dataCollection).toEqual({
+      required: ["browsingActivity", "websiteActivity", "websiteContent"],
+      optional: [],
+    });
+
+    expect(getCommandSecurityMetadata("click")).toEqual({
+      level: "sensitive",
+      reasons: ["page-mutation"],
+    });
+    expect(commandRequiresExtensionHostAccess("click")).toBe(true);
+    expect(commandRequiresExtensionHostAccess("download")).toBe(false);
+    expect(
+      requirements.commands.find((requirement) => requirement.command === "network"),
+    ).toMatchObject({
+      securityReasons: ["network-observation"],
+      manifestPermissions: ["webRequest"],
+      networkObservation: true,
     });
   });
 });

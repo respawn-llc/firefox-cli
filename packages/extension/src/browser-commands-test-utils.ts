@@ -49,6 +49,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   evalResult: EvalExecutorResult | undefined;
   captureFailure: Error | undefined;
   selectFailure: Error | undefined;
+  hostAccess = true;
   captureDelayMs: number | undefined;
   screenshotDataUrl = ONE_BY_ONE_PNG_DATA_URL;
   #windows: BrowserWindowSnapshot[];
@@ -56,6 +57,10 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
 
   constructor(windows: readonly BrowserWindowSnapshot[]) {
     this.#windows = [...windows];
+  }
+
+  async hasRequiredHostAccess(): Promise<boolean> {
+    return this.hostAccess;
   }
 
   async listWindows(): Promise<readonly BrowserWindowSnapshot[]> {

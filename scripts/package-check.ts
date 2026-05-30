@@ -8,6 +8,11 @@ import {
   type PlatformInput,
 } from "@firefox-cli/native-host";
 import {
+  getExtensionPermissionRequirements,
+  type FirefoxDataCollectionPermission,
+  type FirefoxManifestPermission,
+} from "@firefox-cli/protocol";
+import {
   hashFile,
   hashPayloadMap,
   packagedSignedExtensionProvenanceFile,
@@ -365,6 +370,7 @@ function verifyDigestHeader(
 }
 
 function verifyExpectedExtensionManifest(manifest: ExtensionManifest): void {
+  const requirements = getExtensionPermissionRequirements();
   if (manifest.name !== "firefox-cli") {
     throw new Error(`Expected extension name firefox-cli, received ${manifest.name}`);
   }
@@ -380,6 +386,16 @@ function verifyExpectedExtensionManifest(manifest: ExtensionManifest): void {
       }`,
     );
   }
+  if (
+    manifest.browser_specific_settings?.gecko.strict_min_version !==
+    requirements.firefoxStrictMinVersion
+  ) {
+    throw new Error(
+      `Expected extension Firefox minimum version ${requirements.firefoxStrictMinVersion}, received ${
+        manifest.browser_specific_settings?.gecko.strict_min_version ?? "<missing>"
+      }`,
+    );
+  }
   if (manifest.background?.scripts?.join(",") !== "background.js") {
     throw new Error("Expected extension background script to be background.js");
   }
@@ -387,24 +403,42 @@ function verifyExpectedExtensionManifest(manifest: ExtensionManifest): void {
     throw new Error("Expected extension popup to be popup.html");
   }
 
-  for (const permission of [
-    "nativeMessaging",
-    "scripting",
-    "tabs",
-    "storage",
-    "downloads",
-    "cookies",
-    "clipboardRead",
-    "clipboardWrite",
-    "webRequest",
-  ]) {
-    if (!manifest.permissions.includes(permission)) {
-      throw new Error(`Expected extension to request ${permission} permission`);
-    }
-  }
+  assertExactSet(
+    manifest.permissions,
+    requirements.manifestPermissions,
+    "extension manifest permissions",
+  );
+  assertExactSet(
+    manifest.host_permissions ?? [],
+    requirements.hostPermissions,
+    "extension host permissions",
+  );
+  assertExactSet(
+    manifest.browser_specific_settings?.gecko.data_collection_permissions?.required ?? [],
+    requirements.dataCollection.required,
+    "extension required data collection permissions",
+  );
+  assertExactSet(
+    manifest.browser_specific_settings?.gecko.data_collection_permissions?.optional ?? [],
+    requirements.dataCollection.optional,
+    "extension optional data collection permissions",
+  );
+}
 
-  if (manifest.host_permissions?.includes("<all_urls>") !== true) {
-    throw new Error("Expected extension to request <all_urls> host permission");
+function assertExactSet<
+  T extends FirefoxManifestPermission | FirefoxDataCollectionPermission | string,
+>(actual: readonly T[], expected: readonly T[], label: string): void {
+  const actualSorted = [...actual].sort((left, right) => left.localeCompare(right));
+  const expectedSorted = [...expected].sort((left, right) => left.localeCompare(right));
+  if (
+    actualSorted.length !== expectedSorted.length ||
+    actualSorted.some((value, index) => value !== expectedSorted[index])
+  ) {
+    throw new Error(
+      `Expected ${label} ${expectedSorted.join(", ")}, received ${
+        actualSorted.length === 0 ? "<none>" : actualSorted.join(", ")
+      }`,
+    );
   }
 }
 

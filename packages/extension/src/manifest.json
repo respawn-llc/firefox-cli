@@ -6,7 +6,11 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "firefox-cli@example.invalid",
-      "strict_min_version": "109.0"
+      "strict_min_version": "150.0",
+      "data_collection_permissions": {
+        "required": ["browsingActivity", "websiteActivity", "websiteContent"],
+        "optional": []
+      }
     }
   },
   "permissions": [

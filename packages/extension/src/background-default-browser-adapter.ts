@@ -2,6 +2,7 @@ import type { BackgroundBrowserAdapter } from "./browser-commands.js";
 
 export function createUnconfiguredBrowserAdapter(): BackgroundBrowserAdapter {
   return {
+    hasRequiredHostAccess: async () => true,
     listWindows: async () => [],
     createTab: async () => {
       throw new Error("Browser adapter is not configured.");

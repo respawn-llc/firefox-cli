@@ -21,11 +21,12 @@ describe("background bootstrap", () => {
     const runtimeOnMessage = browser.runtime.onMessage as unknown as FakeEvent<{
       readonly type?: string;
     }>;
-    const onBeforeRequest = browser.webRequest?.onBeforeRequest as unknown as FakeEvent<{
+    const onBeforeRequest = browser.webRequest?.onBeforeRequest as unknown as FakeWebRequestEvent<{
       readonly requestId: string | number;
       readonly tabId?: number;
       readonly url: string;
     }>;
+    expect(onBeforeRequest.filters()).toEqual([{ urls: ["<all_urls>"] }]);
     expect(runtimeOnMessage.listenerCount()).toBe(1);
     expect(onBeforeRequest.listenerCount()).toBe(1);
     expect((browser.tabs.onRemoved as unknown as FakeEvent<number>).listenerCount()).toBe(1);
@@ -153,6 +154,10 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
       captureVisibleTab: async () => "data:image/png;base64,",
       onRemoved,
     },
+    permissions: {
+      contains: async () => true,
+      request: async () => true,
+    },
     scripting: {
       calls: scriptingCalls,
       executeScript: async (options: unknown) => {
@@ -184,6 +189,9 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
 }
 
 type FakeEvent<T, TResult = void> = ReturnType<typeof createEvent<T, TResult>>;
+type FakeWebRequestEvent<T> = FakeEvent<T> & {
+  filters(): readonly { readonly urls: readonly string[] }[];
+};
 
 function createEvent<T, TResult = void>() {
   const listeners: ((value: T) => TResult)[] = [];
@@ -207,10 +215,22 @@ function createEvent<T, TResult = void>() {
 }
 
 function createWebRequestEvent() {
-  return createEvent<{
+  const event = createEvent<{
     readonly requestId: string | number;
     readonly tabId?: number;
     readonly url: string;
     readonly statusCode?: number;
   }>();
+  const filters: { readonly urls: readonly string[] }[] = [];
+  return {
+    ...event,
+    addListener(
+      listener: Parameters<typeof event.addListener>[0],
+      filter: { readonly urls: readonly string[] },
+    ) {
+      filters.push(filter);
+      event.addListener(listener);
+    },
+    filters: () => filters,
+  };
 }

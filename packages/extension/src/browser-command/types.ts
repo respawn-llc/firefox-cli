@@ -20,6 +20,7 @@ export type BrowserWindowSnapshot = {
 };
 
 export type BackgroundBrowserAdapter = {
+  hasRequiredHostAccess(): Promise<boolean>;
   listWindows(): Promise<readonly BrowserWindowSnapshot[]>;
   createTab(options: { readonly url?: string; readonly windowId?: number }): Promise<TabSummary>;
   selectTab(tabId: number): Promise<TabSummary>;

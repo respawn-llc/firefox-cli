@@ -1,3 +1,5 @@
+import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
+
 type Status = {
   readonly connected: boolean;
   readonly approved: boolean;
@@ -84,7 +86,7 @@ async function requestHostAccess(): Promise<boolean> {
     throw new Error("Firefox permissions API is unavailable.");
   }
 
-  const required = { origins: ["<all_urls>"] };
+  const required = { origins: getExtensionPermissionRequirements().popupApprovalOrigins };
   const captureApiRequiresReload = typeof browser.tabs.captureVisibleTab !== "function";
   if (await permissions.contains(required)) {
     return captureApiRequiresReload;

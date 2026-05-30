@@ -34,6 +34,12 @@ export const extensionManifestSchema = z
           .object({
             id: z.string().min(1),
             strict_min_version: z.string().min(1).optional(),
+            data_collection_permissions: z
+              .object({
+                required: z.array(z.string().min(1)),
+                optional: z.array(z.string().min(1)).optional(),
+              })
+              .optional(),
           })
           .passthrough(),
       })

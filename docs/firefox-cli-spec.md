@@ -146,9 +146,10 @@ Use broad host access for the MVP full-control model after explicit first-use ap
 
 Expected manifest shape:
 
-- `permissions`: `nativeMessaging`, `scripting`, `tabs`, `storage`.
+- `permissions`: native messaging, content scripting, tab access, local extension storage, downloads, cookies, clipboard, and web request observation.
 - `host_permissions`: broad web access for normal web pages.
-- Add `webNavigation`, `webRequest`, `cookies`, `downloads`, or clipboard permissions only when the matching command group is implemented.
+- `browser_specific_settings.gecko.strict_min_version`: Firefox `150.0`.
+- `browser_specific_settings.gecko.data_collection_permissions`: browsing activity, website activity, and website content because command results can leave the extension through the local native host and CLI.
 
 Command behavior:
 

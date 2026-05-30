@@ -1,5 +1,6 @@
 import {
   createErrorResponse,
+  commandRequiresExtensionHostAccess,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
@@ -14,6 +15,15 @@ export async function handleBrowserRequest(
   adapter: BackgroundBrowserAdapter,
 ): Promise<ResponseEnvelope> {
   try {
+    if (
+      commandRequiresExtensionHostAccess(request.command) &&
+      !(await adapter.hasRequiredHostAccess())
+    ) {
+      throw new BrowserCommandError(
+        "PERMISSION_DENIED",
+        "Approve host access for all websites in the firefox-cli extension popup.",
+      );
+    }
     return await dispatchBrowserRequest(request, adapter);
   } catch (error) {
     return createErrorResponse(

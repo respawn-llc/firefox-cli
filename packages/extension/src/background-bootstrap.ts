@@ -1,3 +1,4 @@
+import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import {
   FirefoxCliBackgroundController,
   type BackgroundStorageAdapter,
@@ -131,6 +132,8 @@ function addWebRequestListener(
   if (event === undefined) {
     return;
   }
-  event.addListener(listener, { urls: ["<all_urls>"] });
+  event.addListener(listener, {
+    urls: getExtensionPermissionRequirements().webRequestListenerOrigins,
+  });
   registrations.push({ event, listener });
 }
