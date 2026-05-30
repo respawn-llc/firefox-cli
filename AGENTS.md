@@ -76,9 +76,6 @@ When adding a CLI command, update the CLI parser, shared protocol schema, extens
 
 When adding browser capability, start at the extension permission/API boundary, expose the smallest protocol operation needed by the CLI, then design the CLI flags around user intent.
 
-When changing packaging, verify that a clean install can access the CLI executable and the extension artifact or registration command from the same package.
-
-Use `docs/firefox-cli-spec.md` as the product and architecture source of truth and `docs/implementation-plan.md` as the implementation readiness, phase, QA, and review plan until implementation-specific docs replace them.
 
 ## Known Pitfalls / Footguns
 
