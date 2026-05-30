@@ -1,6 +1,7 @@
 import {
   gatedCapabilities,
   getCliRouteEntries,
+  type CommandId,
   type CliRouteMetadata,
 } from "@firefox-cli/protocol";
 import {
@@ -41,11 +42,13 @@ import {
 } from "./commands/navigation.js";
 import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
+import { cliResponseFormatters } from "./format.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
 import { getPositionals } from "./parse.js";
 import type {
   CliRequestBuilder,
+  CliResponseFormatter,
   CliResponseFormatterKind,
   CliRouteBinding,
   CliRouteParserSpec,
@@ -189,63 +192,95 @@ const routeParserSpecs: Readonly<Record<string, CliRouteParserSpec>> = {
   swipe: parser("swipe", { valueOptions: ["--generation"] }),
 };
 
-const routeFormatterKinds: Readonly<Record<string, CliResponseFormatterKind>> = {
-  capabilities: "capabilities",
-  "tab.list": "tab-list",
-  "tab.new": "tab-target",
-  "tab.select": "tab-target",
-  "tab.close": "tab-close",
-  "window.list": "window-list",
-  "window.new": "window-target",
-  "window.select": "window-target",
-  "window.close": "window-close",
-  open: "tab-target",
-  back: "tab-target",
-  forward: "tab-target",
-  reload: "tab-target",
-  snapshot: "snapshot",
-  ref: "ref",
-  get: "get",
-  is: "is",
-  wait: "wait",
-  eval: "eval",
-  screenshot: "screenshot",
-  drag: "action",
-  upload: "action",
-  mouse: "action",
-  keydown: "action",
-  keyup: "action",
-  find: "find",
-  frame: "frame",
-  download: "json-object",
-  dialog: "json-object",
-  clipboard: "json-object",
-  cookies: "json-object",
-  storage: "json-object",
-  network: "json-object",
-  console: "json-object",
-  errors: "json-object",
-  highlight: "json-object",
-  pdf: "json-object",
-  "set.viewport": "json-object",
-  diff: "json-object",
-  batch: "batch",
-  click: "action",
-  dblclick: "action",
-  focus: "action",
-  hover: "action",
-  fill: "action",
-  type: "action",
-  press: "action",
-  "keyboard.type": "action",
-  "keyboard.inserttext": "action",
-  check: "action",
-  uncheck: "action",
-  select: "action",
-  scroll: "action",
-  scrollintoview: "action",
-  swipe: "action",
+type CliRouteFormatterSpec<C extends CommandId> = {
+  readonly command: C;
+  readonly kind: CliResponseFormatterKind;
+  readonly formatter: CliResponseFormatter<C>;
 };
+
+const routeFormatterSpecs = {
+  capabilities: routeFormatter("capabilities", "capabilities", cliResponseFormatters.capabilities),
+  "tab.list": routeFormatter("tabs.list", "tab-list", cliResponseFormatters["tab-list"]),
+  "tab.new": routeFormatter("tab.new", "tab-target", cliResponseFormatters["tab-target"]),
+  "tab.select": routeFormatter("tab.select", "tab-target", cliResponseFormatters["tab-target"]),
+  "tab.close": routeFormatter("tab.close", "tab-close", cliResponseFormatters["tab-close"]),
+  "window.list": routeFormatter(
+    "windows.list",
+    "window-list",
+    cliResponseFormatters["window-list"],
+  ),
+  "window.new": routeFormatter(
+    "window.new",
+    "window-target",
+    cliResponseFormatters["window-target"],
+  ),
+  "window.select": routeFormatter(
+    "window.select",
+    "window-target",
+    cliResponseFormatters["window-target"],
+  ),
+  "window.close": routeFormatter(
+    "window.close",
+    "window-close",
+    cliResponseFormatters["window-close"],
+  ),
+  open: routeFormatter("open", "tab-target", cliResponseFormatters["tab-target"]),
+  back: routeFormatter("back", "tab-target", cliResponseFormatters["tab-target"]),
+  forward: routeFormatter("forward", "tab-target", cliResponseFormatters["tab-target"]),
+  reload: routeFormatter("reload", "tab-target", cliResponseFormatters["tab-target"]),
+  snapshot: routeFormatter("snapshot", "snapshot", cliResponseFormatters.snapshot),
+  ref: routeFormatter("ref.resolve", "ref", cliResponseFormatters.ref),
+  get: routeFormatter("get", "get", cliResponseFormatters.get),
+  is: routeFormatter("is", "is", cliResponseFormatters.is),
+  wait: routeFormatter("wait", "wait", cliResponseFormatters.wait),
+  eval: routeFormatter("eval", "eval", cliResponseFormatters.eval),
+  screenshot: routeFormatter("screenshot", "screenshot", cliResponseFormatters.screenshot),
+  drag: routeFormatter("drag", "action", cliResponseFormatters.action),
+  upload: routeFormatter("upload", "action", cliResponseFormatters.action),
+  mouse: routeFormatter("mouse", "action", cliResponseFormatters.action),
+  keydown: routeFormatter("keydown", "action", cliResponseFormatters.action),
+  keyup: routeFormatter("keyup", "action", cliResponseFormatters.action),
+  find: routeFormatter("find", "find", cliResponseFormatters.find),
+  frame: routeFormatter("frame", "frame", cliResponseFormatters.frame),
+  download: routeFormatter("download", "json-object", cliResponseFormatters["json-object"]),
+  dialog: routeFormatter("dialog", "json-object", cliResponseFormatters["json-object"]),
+  clipboard: routeFormatter("clipboard", "json-object", cliResponseFormatters["json-object"]),
+  cookies: routeFormatter("cookies", "json-object", cliResponseFormatters["json-object"]),
+  storage: routeFormatter("storage", "json-object", cliResponseFormatters["json-object"]),
+  network: routeFormatter("network", "json-object", cliResponseFormatters["json-object"]),
+  console: routeFormatter("console", "json-object", cliResponseFormatters["json-object"]),
+  errors: routeFormatter("errors", "json-object", cliResponseFormatters["json-object"]),
+  highlight: routeFormatter("highlight", "json-object", cliResponseFormatters["json-object"]),
+  pdf: routeFormatter("pdf", "json-object", cliResponseFormatters["json-object"]),
+  "set.viewport": routeFormatter(
+    "set.viewport",
+    "json-object",
+    cliResponseFormatters["json-object"],
+  ),
+  diff: routeFormatter("diff", "json-object", cliResponseFormatters["json-object"]),
+  batch: routeFormatter("batch", "batch", cliResponseFormatters.batch),
+  click: routeFormatter("click", "action", cliResponseFormatters.action),
+  dblclick: routeFormatter("dblclick", "action", cliResponseFormatters.action),
+  focus: routeFormatter("focus", "action", cliResponseFormatters.action),
+  hover: routeFormatter("hover", "action", cliResponseFormatters.action),
+  fill: routeFormatter("fill", "action", cliResponseFormatters.action),
+  type: routeFormatter("type", "action", cliResponseFormatters.action),
+  press: routeFormatter("press", "action", cliResponseFormatters.action),
+  "keyboard.type": routeFormatter("keyboard.type", "action", cliResponseFormatters.action),
+  "keyboard.inserttext": routeFormatter(
+    "keyboard.inserttext",
+    "action",
+    cliResponseFormatters.action,
+  ),
+  check: routeFormatter("check", "action", cliResponseFormatters.action),
+  uncheck: routeFormatter("uncheck", "action", cliResponseFormatters.action),
+  select: routeFormatter("select", "action", cliResponseFormatters.action),
+  scroll: routeFormatter("scroll", "action", cliResponseFormatters.action),
+  scrollintoview: routeFormatter("scrollintoview", "action", cliResponseFormatters.action),
+  swipe: routeFormatter("swipe", "action", cliResponseFormatters.action),
+} as const;
+
+type RouteFormatterSpecById = typeof routeFormatterSpecs;
 
 function parser(
   label: string,
@@ -271,27 +306,41 @@ function parser(
   };
 }
 
-function bindCliRoute(
-  routeId: string,
+function routeFormatter<C extends CommandId>(
+  command: C,
+  kind: CliResponseFormatterKind,
+  formatter: CliResponseFormatter<C>,
+): CliRouteFormatterSpec<C> {
+  return { command, kind, formatter };
+}
+
+function bindCliRoute<RouteId extends keyof RouteFormatterSpecById>(
+  routeId: RouteId,
   help: string,
   buildRequest: CliRequestBuilder,
-): CliRouteBinding {
+): CliRouteBinding<RouteFormatterSpecById[RouteId]["command"]> {
   const routeEntry = protocolCliRouteEntriesById.get(routeId);
   if (routeEntry === undefined) {
     throw new Error(`CLI binding references unknown protocol route: ${routeId}`);
   }
   const parser = routeParserSpecs[routeId];
-  const formatter = routeFormatterKinds[routeId];
-  if (parser === undefined || formatter === undefined) {
+  const formatter = routeFormatterSpecs[routeId];
+  if (parser === undefined) {
     throw new Error(`CLI binding is missing parser or formatter metadata: ${routeId}`);
+  }
+  if (routeEntry.command !== formatter.command) {
+    throw new Error(
+      `CLI binding formatter command mismatch for ${routeId}: expected ${routeEntry.command}, received ${formatter.command}`,
+    );
   }
 
   return {
     route: routeEntry.route,
-    command: routeEntry.command,
+    command: formatter.command,
     help,
     parser,
-    formatter,
+    formatterKind: formatter.kind,
+    formatter: formatter.formatter,
     buildRequest,
   };
 }

@@ -1,6 +1,10 @@
 import {
   createErrorResponse,
+  createErrorResponseForRequest,
+  dispatchCommandHandler,
   isActionCommand,
+  isRequestCommand,
+  mergeDisjointHandlerMaps,
   type ActionKind,
   type CommandId,
   type RequestEnvelope,
@@ -13,18 +17,19 @@ import { navigationHandlers } from "./browser-handlers/navigation.js";
 import { phase8BrowserHandlers } from "./browser-handlers/phase8-browser.js";
 import { screenshotHandlers } from "./browser-handlers/screenshots.js";
 import { tabsWindowsHandlers } from "./browser-handlers/tabs-windows.js";
-import type { BrowserCommandHandler, BrowserHandlerMap } from "./browser-handlers/types.js";
 import { BrowserCommandError } from "./browser-command/errors.js";
 import type { BackgroundBrowserAdapter } from "./browser-command/types.js";
 
-const staticHandlers: BrowserHandlerMap = {
-  ...tabsWindowsHandlers,
-  ...navigationHandlers,
-  ...contentRoutedHandlers,
-  ...evalWaitHandlers,
-  ...screenshotHandlers,
-  ...phase8BrowserHandlers,
-};
+const staticHandlers = mergeDisjointHandlerMaps(
+  tabsWindowsHandlers,
+  navigationHandlers,
+  contentRoutedHandlers,
+  evalWaitHandlers,
+  screenshotHandlers,
+  phase8BrowserHandlers,
+);
+
+type StaticBrowserCommand = keyof typeof staticHandlers & CommandId;
 
 const batchHandler = createBatchHandler();
 
@@ -49,55 +54,34 @@ export async function dispatchBrowserRequest(
       );
     }
   };
-  if (request.command === "batch") {
-    return (await batchHandler(asCommandRequest(request, "batch"), adapter, {
+  if (isRequestCommand(request, "batch")) {
+    return await batchHandler(request, adapter, {
       executeStep,
-    })) as ResponseEnvelope;
+    });
   }
 
-  if (isActionCommand(request.command)) {
-    return (await handleActionCommand(
-      asActionRequest(request, request.command),
-      adapter,
-    )) as ResponseEnvelope;
+  if (isActionRequest(request)) {
+    return await handleActionCommand(request, adapter);
   }
 
-  const handler = staticHandlers[request.command as CommandId] as
-    | BrowserCommandHandler<CommandId>
-    | undefined;
-
-  if (handler === undefined) {
-    return createErrorResponse(
-      request.id,
-      {
-        code: "UNSUPPORTED_CAPABILITY",
-        message: `Unsupported browser command: ${request.command}`,
-      },
-      request.protocolVersion,
-    );
+  if (isStaticBrowserRequest(request)) {
+    return await dispatchCommandHandler(staticHandlers, request, adapter, {
+      executeStep,
+    });
   }
 
-  return (await handler(request, adapter, {
-    executeStep,
-  })) as ResponseEnvelope;
+  return createErrorResponseForRequest(request, {
+    code: "UNSUPPORTED_CAPABILITY",
+    message: `Unsupported browser command: ${request.command}`,
+  });
 }
 
-function asCommandRequest<C extends CommandId>(
-  request: RequestEnvelope,
-  command: C,
-): RequestEnvelope<C> {
-  if (request.command !== command) {
-    throw new BrowserCommandError(
-      "UNSUPPORTED_CAPABILITY",
-      `Unsupported browser command: ${request.command}`,
-    );
-  }
-  return request as RequestEnvelope<C>;
+function isActionRequest(request: RequestEnvelope): request is RequestEnvelope<ActionKind> {
+  return isActionCommand(request.command);
 }
 
-function asActionRequest<C extends ActionKind>(
+function isStaticBrowserRequest(
   request: RequestEnvelope,
-  command: C,
-): RequestEnvelope<C> {
-  return asCommandRequest(request, command);
+): request is RequestEnvelope<StaticBrowserCommand> {
+  return Object.hasOwn(staticHandlers, request.command);
 }

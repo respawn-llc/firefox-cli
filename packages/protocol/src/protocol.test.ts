@@ -10,6 +10,7 @@ import {
   commandAcceptsExtensionBatchDefaultTarget,
   commandAcceptsProtocolBatchDefaultTarget,
   commandSchemas,
+  createErrorResponseForRequest,
   createOkResponse,
   createProtocolSession,
   createLocalComponentIdentity,
@@ -26,8 +27,11 @@ import {
   kernelCapabilities,
   localProtocolVersionRange,
   negotiateProtocolVersion,
+  mergeDisjointHandlerMaps,
   parseBoundaryRequest,
   parseBoundaryResponse,
+  parseBatchStepAs,
+  parseBatchStepResultAs,
   type Boundary,
   type CliRouteMetadata,
   type CommandId,
@@ -236,6 +240,32 @@ describe("protocol negotiation", () => {
     expect(session.withRequestVersion(createRequest("noop", {}, "session-noop", 2))).toEqual(
       createRequest("noop", {}, "session-noop", 1),
     );
+
+    const error = {
+      code: "TIMEOUT" as const,
+      message: "Timed out.",
+    };
+    expect(session.createErrorResponseForRequest(request, error)).toEqual(
+      createErrorResponseForRequest(request, error, 1),
+    );
+    expect(
+      session.parseResponseForRequest(
+        "cli-to-host",
+        request,
+        createOkResponse(request, {
+          accepted: true,
+          negotiatedProtocolVersion: 1,
+          peer: {
+            ...createLocalComponentIdentity("native-host", "0.0.0"),
+            protocolMin: 1,
+            protocolMax: 1,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: true, value: { id: request.id, ok: true } });
+    expect(
+      session.withResponseVersion(request, createErrorResponseForRequest(request, error)),
+    ).toEqual(createErrorResponseForRequest(request, error, 1));
 
     expect(
       parseBoundaryResponse(
@@ -1941,6 +1971,81 @@ describe("parseBoundaryResponse", () => {
         },
       });
     }
+  });
+
+  it("parses command-correlated batch steps and results", () => {
+    expect(
+      parseBatchStepAs("tab.close", {
+        command: "tab.close",
+        params: {},
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        command: "tab.close",
+        params: {
+          target: {
+            window: { kind: "active" },
+            tab: { kind: "active" },
+          },
+        },
+      },
+    });
+
+    expect(
+      parseBatchStepResultAs("screenshot", {
+        index: 0,
+        command: "screenshot",
+        ok: true,
+        result: {
+          path: "/tmp/page.png",
+          format: "png",
+          bytes: 68,
+          activation: {
+            tabActivated: false,
+            windowFocused: false,
+          },
+          imageBase64: "iVBORw0KGgo=",
+        },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        command: "screenshot",
+        ok: true,
+        result: {
+          path: "/tmp/page.png",
+          format: "png",
+        },
+      },
+    });
+
+    expect(
+      parseBatchStepAs("screenshot", {
+        command: "snapshot",
+        params: {},
+      }),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_ENVELOPE" } });
+    expect(
+      parseBatchStepResultAs("screenshot", {
+        index: 0,
+        command: "snapshot",
+        ok: true,
+        result: {
+          generationId: "g1",
+          text: "",
+          refs: 0,
+          truncated: false,
+          frames: [],
+        },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_RESPONSE" } });
+  });
+
+  it("rejects duplicate merged command handler maps", () => {
+    expect(() => mergeDisjointHandlerMaps({ noop: "first" }, { noop: "second" })).toThrow(
+      "Duplicate command handler: noop",
+    );
   });
 
   it("validates interaction responses and rejects malformed action contracts", () => {

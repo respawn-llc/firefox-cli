@@ -1,6 +1,7 @@
 import { LocalIpcError } from "@firefox-cli/native-host";
 import {
   createRequest,
+  createErrorResponseForRequest,
   type CommandId,
   type ProtocolError,
   type RequestEnvelope,
@@ -21,15 +22,10 @@ export async function sendOrUnavailable<C extends CommandId>(
     return (await dependencies.sendRequest(validatedRequest)) as ResponseEnvelope<C>;
   } catch (error) {
     if (error instanceof LocalIpcError) {
-      return {
-        protocolVersion: validatedRequest.protocolVersion,
-        id: validatedRequest.id,
-        ok: false,
-        error: {
-          code: "NATIVE_HOST_UNAVAILABLE",
-          message: "firefox-cli native host is not running.",
-        },
-      };
+      return createErrorResponseForRequest(validatedRequest, {
+        code: "NATIVE_HOST_UNAVAILABLE",
+        message: "firefox-cli native host is not running.",
+      });
     }
     throw error;
   }

@@ -333,6 +333,61 @@ describe("NativeHostBroker", () => {
     );
   });
 
+  it("rejects batch screenshot results that do not match the request step", async () => {
+    const request = createRequest(
+      "batch",
+      {
+        steps: [{ command: "snapshot", params: {} }],
+      },
+      "batch-mismatched-screenshot",
+    );
+    const writes: unknown[] = [];
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+      writeFile: async (...args) => {
+        writes.push(args);
+      },
+    });
+    broker.connectExtension({
+      approved: true,
+      token: "test-token",
+      send: async (forwarded) =>
+        createOkResponse(forwarded as typeof request, {
+          ok: true,
+          steps: [
+            {
+              index: 0,
+              command: "screenshot",
+              ok: true,
+              result: {
+                path: "/extension/attempted-retarget.png",
+                format: "png",
+                bytes: 3,
+                activation: {
+                  tabActivated: false,
+                  windowFocused: false,
+                },
+                imageBase64: Buffer.from([1, 2, 3]).toString("base64"),
+              },
+            },
+          ],
+          elapsedMs: 4,
+        }),
+    });
+
+    await expect(broker.handleCliRequest(request)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_RESPONSE",
+        message: "Batch screenshot result did not match the request step.",
+      },
+    });
+    expect(writes).toEqual([]);
+  });
+
   it("rejects CLI requests before extension approval", async () => {
     const request = createRequest("noop", {}, "request-1");
     const broker = new NativeHostBroker({

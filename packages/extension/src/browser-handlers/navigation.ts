@@ -8,35 +8,33 @@ import {
 } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
-export const navigationHandlers: BrowserHandlerMap = {
+type NavigationCommand = "open" | "back" | "forward" | "reload";
+
+export const navigationHandlers: BrowserHandlerMap<NavigationCommand> = {
   open: async (request, adapter) => {
-    const command = request as RequestEnvelope<"open">;
-    if (command.params.newTab) {
+    if (request.params.newTab) {
       const windows = await getOrderedWindows(adapter);
-      const window = resolveWindow(windows, command.params.target?.window);
+      const window = resolveWindow(windows, request.params.target?.window);
       assertMutableWindow(window);
-      const tab = await adapter.createTab({ url: command.params.url, windowId: window.id });
-      return createOkResponse(command, {
+      const tab = await adapter.createTab({ url: request.params.url, windowId: window.id });
+      return createOkResponse(request, {
         target: await resolveFreshTarget(adapter, { tab: { kind: "id", id: tab.id } }),
-        url: tab.url ?? command.params.url,
+        url: tab.url ?? request.params.url,
         loadState: "unknown",
       });
     }
 
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const tab = await adapter.navigateTab(resolved.tab.id, command.params.url);
-    return createOkResponse(command, {
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const tab = await adapter.navigateTab(resolved.tab.id, request.params.url);
+    return createOkResponse(request, {
       target: await resolveFreshTarget(adapter, { tab: { kind: "id", id: tab.id } }),
-      url: tab.url ?? command.params.url,
+      url: tab.url ?? request.params.url,
       loadState: "unknown",
     });
   },
-  back: async (request, adapter) =>
-    handleHistoryCommand(request as RequestEnvelope<"back">, adapter),
-  forward: async (request, adapter) =>
-    handleHistoryCommand(request as RequestEnvelope<"forward">, adapter),
-  reload: async (request, adapter) =>
-    handleHistoryCommand(request as RequestEnvelope<"reload">, adapter),
+  back: async (request, adapter) => handleHistoryCommand(request, adapter),
+  forward: async (request, adapter) => handleHistoryCommand(request, adapter),
+  reload: async (request, adapter) => handleHistoryCommand(request, adapter),
 };
 
 async function handleHistoryCommand(

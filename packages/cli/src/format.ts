@@ -1,4 +1,5 @@
 import type {
+  ActionKind,
   ActionResult,
   BatchResult,
   CommandId,
@@ -11,205 +12,265 @@ import type {
 } from "@firefox-cli/protocol";
 import { error, ok } from "./result.js";
 import { formatProtocolError } from "./transport.js";
-import type { CliResponseFormatterKind, CliResult } from "./types.js";
-
-type SuccessfulResponse<C extends CommandId> = Extract<ResponseEnvelope<C>, { readonly ok: true }>;
-
-function responseResult<C extends CommandId>(
-  response: ResponseEnvelope<C>,
-): SuccessfulResponse<C>["result"] {
-  return (response as SuccessfulResponse<C>).result;
-}
+import type { CliResponseFormatter, CliResponseFormatterKind, CliResult } from "./types.js";
 
 export function formatCliResponse<C extends CommandId>(
-  formatter: CliResponseFormatterKind,
+  formatter: CliResponseFormatter<C>,
   response: ResponseEnvelope<C>,
   json: boolean,
 ): CliResult {
+  return formatter(response, json);
+}
+
+const formatCapabilities: CliResponseFormatter<"capabilities"> = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
-  switch (formatter) {
-    case "capabilities": {
-      const result = responseResult(response as ResponseEnvelope<"capabilities">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(
-            `${result.capabilities
-              .map((capability) => `${capability.command}\t${capability.status}`)
-              .join("\n")}\n`,
-          );
-    }
-
-    case "tab-list": {
-      const result = responseResult(response as ResponseEnvelope<"tabs.list">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(result.tabs.map(renderTabSummary).join(""));
-    }
-
-    case "tab-target": {
-      const result = responseResult(
-        response as ResponseEnvelope<
-          "tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"
-        >,
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        `${response.result.capabilities
+          .map((capability) => `${capability.command}\t${capability.status}`)
+          .join("\n")}\n`,
       );
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`${renderTargetSummary(result.target)}\n`);
-    }
+};
 
-    case "tab-close": {
-      const result = responseResult(response as ResponseEnvelope<"tab.close">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`Closed tab ${result.closedTabId}\n`);
-    }
-
-    case "window-list": {
-      const result = responseResult(response as ResponseEnvelope<"windows.list">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(
-            result.windows
-              .map(
-                (window) =>
-                  `${window.focused ? "*" : " "} w${window.id} [${window.index}] tabs=${
-                    window.tabCount
-                  }${window.activeTabId === undefined ? "" : ` active=t${window.activeTabId}`}\n`,
-              )
-              .join(""),
-          );
-    }
-
-    case "window-target": {
-      const result = responseResult(response as ResponseEnvelope<"window.new" | "window.select">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`w${result.window.id} [${result.window.index}]\n`);
-    }
-
-    case "window-close": {
-      const result = responseResult(response as ResponseEnvelope<"window.close">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`Closed window ${result.closedWindowId}\n`);
-    }
-
-    case "snapshot": {
-      const result = responseResult(response as ResponseEnvelope<"snapshot">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(result.text.endsWith("\n") ? result.text : `${result.text}\n`);
-    }
-
-    case "ref": {
-      const result = responseResult(response as ResponseEnvelope<"ref.resolve">);
-      if (json) {
-        return ok(`${JSON.stringify(result, null, 2)}\n`);
-      }
-      const element = result.element;
-      return ok(
-        `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
-      );
-    }
-
-    case "get": {
-      const result = responseResult(response as ResponseEnvelope<"get">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`${formatGetValue(result.value)}\n`);
-    }
-
-    case "is": {
-      const result = responseResult(response as ResponseEnvelope<"is">);
-      return json ? ok(`${JSON.stringify(result, null, 2)}\n`) : ok(`${result.value}\n`);
-    }
-
-    case "wait": {
-      const result = responseResult(response as ResponseEnvelope<"wait">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`${formatWaitResult(result)}\n`);
-    }
-
-    case "eval": {
-      const result = responseResult(response as ResponseEnvelope<"eval">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`${formatEvalResult(result)}\n`);
-    }
-
-    case "screenshot": {
-      const result = responseResult(response as ResponseEnvelope<"screenshot">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(`${formatScreenshotResult(result)}\n`);
-    }
-
-    case "find": {
-      const result = responseResult(response as ResponseEnvelope<"find">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(
-            result.elements
-              .map(
-                (element) =>
-                  `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
-              )
-              .join(""),
-          );
-    }
-
-    case "frame": {
-      const result = responseResult(response as ResponseEnvelope<"frame">);
-      return json
-        ? ok(`${JSON.stringify(result, null, 2)}\n`)
-        : ok(
-            result.frames
-              .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
-              .join(""),
-          );
-    }
-
-    case "batch": {
-      const result = responseResult(response as ResponseEnvelope<"batch">);
-      return {
-        exitCode: result.ok ? 0 : 1,
-        stdout: json ? `${JSON.stringify(result, null, 2)}\n` : `${formatBatchResult(result)}\n`,
-        stderr: "",
-      };
-    }
-
-    case "action":
-      return formatActionResponse(response as ResponseEnvelope<ActionResponseCommand>, json);
-    case "json-object":
-      return formatJsonOrObject(response as ResponseEnvelope<CommandId>, json);
+const formatTabList: CliResponseFormatter<"tabs.list"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
   }
-}
 
-type ActionResponseCommand =
-  | "click"
-  | "dblclick"
-  | "focus"
-  | "hover"
-  | "drag"
-  | "upload"
-  | "mouse"
-  | "keydown"
-  | "keyup"
-  | "fill"
-  | "type"
-  | "press"
-  | "keyboard.type"
-  | "keyboard.inserttext"
-  | "check"
-  | "uncheck"
-  | "select"
-  | "scroll"
-  | "scrollintoview"
-  | "swipe";
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(response.result.tabs.map(renderTabSummary).join(""));
+};
+
+const formatTabTarget: CliResponseFormatter<
+  "tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"
+> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${renderTargetSummary(response.result.target)}\n`);
+};
+
+const formatTabClose: CliResponseFormatter<"tab.close"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`Closed tab ${response.result.closedTabId}\n`);
+};
+
+const formatWindowList: CliResponseFormatter<"windows.list"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        response.result.windows
+          .map(
+            (window) =>
+              `${window.focused ? "*" : " "} w${window.id} [${window.index}] tabs=${
+                window.tabCount
+              }${window.activeTabId === undefined ? "" : ` active=t${window.activeTabId}`}\n`,
+          )
+          .join(""),
+      );
+};
+
+const formatWindowTarget: CliResponseFormatter<"window.new" | "window.select"> = (
+  response,
+  json,
+) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`w${response.result.window.id} [${response.result.window.index}]\n`);
+};
+
+const formatWindowClose: CliResponseFormatter<"window.close"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`Closed window ${response.result.closedWindowId}\n`);
+};
+
+const formatSnapshot: CliResponseFormatter<"snapshot"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(response.result.text.endsWith("\n") ? response.result.text : `${response.result.text}\n`);
+};
+
+const formatRef: CliResponseFormatter<"ref.resolve"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  if (json) {
+    return ok(`${JSON.stringify(response.result, null, 2)}\n`);
+  }
+
+  const element = response.result.element;
+  return ok(
+    `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
+  );
+};
+
+const formatGet: CliResponseFormatter<"get"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatGetValue(response.result.value)}\n`);
+};
+
+const formatIs: CliResponseFormatter<"is"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${response.result.value}\n`);
+};
+
+const formatWait: CliResponseFormatter<"wait"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatWaitResult(response.result)}\n`);
+};
+
+const formatEval: CliResponseFormatter<"eval"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatEvalResult(response.result)}\n`);
+};
+
+const formatScreenshot: CliResponseFormatter<"screenshot"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatScreenshotResult(response.result)}\n`);
+};
+
+const formatFind: CliResponseFormatter<"find"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        response.result.elements
+          .map(
+            (element) =>
+              `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
+          )
+          .join(""),
+      );
+};
+
+const formatFrame: CliResponseFormatter<"frame"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        response.result.frames
+          .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
+          .join(""),
+      );
+};
+
+const formatBatch: CliResponseFormatter<"batch"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return {
+    exitCode: response.result.ok ? 0 : 1,
+    stdout: json
+      ? `${JSON.stringify(response.result, null, 2)}\n`
+      : `${formatBatchResult(response.result)}\n`,
+    stderr: "",
+  };
+};
+
+const formatActionResponse: CliResponseFormatter<ActionKind> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${formatActionResult(response.result)}\n`);
+};
+
+const formatJsonOrObject: CliResponseFormatter<CommandId> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(`${JSON.stringify(response.result)}\n`);
+};
+
+export const cliResponseFormatters = {
+  capabilities: formatCapabilities,
+  "tab-list": formatTabList,
+  "tab-target": formatTabTarget,
+  "tab-close": formatTabClose,
+  "window-list": formatWindowList,
+  "window-target": formatWindowTarget,
+  "window-close": formatWindowClose,
+  snapshot: formatSnapshot,
+  ref: formatRef,
+  get: formatGet,
+  is: formatIs,
+  wait: formatWait,
+  eval: formatEval,
+  screenshot: formatScreenshot,
+  find: formatFind,
+  frame: formatFrame,
+  batch: formatBatch,
+  action: formatActionResponse,
+  "json-object": formatJsonOrObject,
+} satisfies Readonly<Record<CliResponseFormatterKind, CliResponseFormatter>>;
 
 function renderTabSummary(tab: TabSummary): string {
   const activePrefix = tab.active ? "*" : " ";
@@ -302,30 +363,4 @@ function formatActionResult(result: ActionResult): string {
     parts.push(`scroll=${result.scroll.x},${result.scroll.y}`);
   }
   return parts.join(" ");
-}
-
-function formatActionResponse(
-  response: ResponseEnvelope<ActionResponseCommand>,
-  json: boolean,
-): CliResult {
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatActionResult(response.result)}\n`);
-}
-
-function formatJsonOrObject<C extends CommandId>(
-  response: ResponseEnvelope<C>,
-  json: boolean,
-): CliResult {
-  if (!response.ok) {
-    return error(formatProtocolError(response.error));
-  }
-
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${JSON.stringify(response.result)}\n`);
 }

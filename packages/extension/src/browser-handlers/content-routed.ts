@@ -1,6 +1,6 @@
 import {
   LOG_RESULT_METADATA_PROTOCOL_VERSION,
-  createErrorResponse,
+  createErrorResponseForRequest,
   createOkResponse,
   type ActionKind,
   type ActionResult,
@@ -23,141 +23,143 @@ import { getOrderedWindows, resolveTarget } from "../browser-command/targets.js"
 import type { BackgroundBrowserAdapter } from "../browser-command/types.js";
 import type { BrowserHandlerMap } from "./types.js";
 
-export const contentRoutedHandlers: BrowserHandlerMap = {
+type ContentRoutedCommand =
+  | "snapshot"
+  | "ref.resolve"
+  | "get"
+  | "is"
+  | "find"
+  | "frame"
+  | "dialog"
+  | "storage"
+  | "console"
+  | "errors"
+  | "highlight"
+  | "diff";
+
+export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
   snapshot: async (request, adapter) => {
-    const command = request as RequestEnvelope<"snapshot">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const snapshotResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const snapshotResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!snapshotResponse.ok) {
-      return createErrorResponse(command.id, snapshotResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, snapshotResponse.error);
     }
 
     const result: SnapshotResult = {
       ...snapshotResponse.result,
       target: resolved.target,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   "ref.resolve": async (request, adapter) => {
-    const command = request as RequestEnvelope<"ref.resolve">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const refResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const refResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!refResponse.ok) {
-      return createErrorResponse(command.id, refResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, refResponse.error);
     }
 
     const result: RefResolveResult = {
       ...refResponse.result,
       target: resolved.target,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   get: async (request, adapter) => {
-    const command = request as RequestEnvelope<"get">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    if (command.params.kind === "title" || command.params.kind === "url") {
-      return createOkResponse(command, {
-        kind: command.params.kind,
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    if (request.params.kind === "title" || request.params.kind === "url") {
+      return createOkResponse(request, {
+        kind: request.params.kind,
         value:
-          command.params.kind === "title" ? (resolved.tab.title ?? "") : (resolved.tab.url ?? ""),
+          request.params.kind === "title" ? (resolved.tab.title ?? "") : (resolved.tab.url ?? ""),
         target: resolved.target,
       });
     }
 
-    const getResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const getResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!getResponse.ok) {
-      return createErrorResponse(command.id, getResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, getResponse.error);
     }
 
     const result: GetResult = {
       ...getResponse.result,
       target: resolved.target,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   is: async (request, adapter) => {
-    const command = request as RequestEnvelope<"is">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const isResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const isResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!isResponse.ok) {
-      return createErrorResponse(command.id, isResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, isResponse.error);
     }
 
     const result: IsResult = {
       ...isResponse.result,
       target: resolved.target,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   find: async (request, adapter) => {
-    const command = request as RequestEnvelope<"find">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const findResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const findResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!findResponse.ok) {
-      return createErrorResponse(command.id, findResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, findResponse.error);
     }
     const result: FindResult = { ...findResponse.result, target: resolved.target };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   frame: async (request, adapter) => {
-    const command = request as RequestEnvelope<"frame">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const frameResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const frameResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!frameResponse.ok) {
-      return createErrorResponse(command.id, frameResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, frameResponse.error);
     }
     const result: FrameResult = { ...frameResponse.result, target: resolved.target };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   dialog: async (request, adapter) => {
-    const command = request as RequestEnvelope<"dialog">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const dialogResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const dialogResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!dialogResponse.ok) {
-      return createErrorResponse(command.id, dialogResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, dialogResponse.error);
     }
-    return createOkResponse(command, dialogResponse.result);
+    return createOkResponse(request, dialogResponse.result);
   },
   storage: async (request, adapter) => {
-    const command = request as RequestEnvelope<"storage">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const storageResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const storageResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!storageResponse.ok) {
-      return createErrorResponse(command.id, storageResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, storageResponse.error);
     }
     const result: StorageResult = storageResponse.result;
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
-  console: async (request, adapter) =>
-    handleLogCommand(request as RequestEnvelope<"console">, adapter),
-  errors: async (request, adapter) =>
-    handleLogCommand(request as RequestEnvelope<"errors">, adapter),
+  console: async (request, adapter) => handleLogCommand(request, adapter),
+  errors: async (request, adapter) => handleLogCommand(request, adapter),
   highlight: async (request, adapter) => {
-    const command = request as RequestEnvelope<"highlight">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
-    const highlightResponse = await sendContentCommand(adapter, resolved.tab.id, command);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const highlightResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!highlightResponse.ok) {
-      return createErrorResponse(command.id, highlightResponse.error, command.protocolVersion);
+      return createErrorResponseForRequest(request, highlightResponse.error);
     }
     const result: HighlightResult = { ...highlightResponse.result, target: resolved.target };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
   diff: async (request, adapter) => {
-    const command = request as RequestEnvelope<"diff">;
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
     const actual =
-      command.params.kind === "url"
+      request.params.kind === "url"
         ? (resolved.tab.url ?? "")
-        : command.params.kind === "title"
+        : request.params.kind === "title"
           ? (resolved.tab.title ?? "")
-          : await snapshotTextForDiff(adapter, resolved.tab.id, command);
+          : await snapshotTextForDiff(adapter, resolved.tab.id, request);
     const result: DiffResult = {
-      kind: command.params.kind,
-      expected: command.params.expected,
+      kind: request.params.kind,
+      expected: request.params.expected,
       actual,
-      matches: actual === command.params.expected,
+      matches: actual === request.params.expected,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
 };
 
@@ -168,7 +170,7 @@ export async function handleActionCommand(
   const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
   const actionResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!actionResponse.ok) {
-    return createErrorResponse(command.id, actionResponse.error, command.protocolVersion);
+    return createErrorResponseForRequest(command, actionResponse.error);
   }
 
   const result: ActionResult = {
@@ -185,7 +187,7 @@ async function handleLogCommand(
   const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
   const logResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!logResponse.ok) {
-    return createErrorResponse(command.id, logResponse.error, command.protocolVersion);
+    return createErrorResponseForRequest(command, logResponse.error);
   }
   return createOkResponse(
     command,

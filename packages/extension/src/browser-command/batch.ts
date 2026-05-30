@@ -3,9 +3,12 @@ import {
   MAX_SCREENSHOT_BYTES,
   commandAcceptsBatchTimeout,
   commandAcceptsExtensionBatchDefaultTarget,
+  createRequest,
+  isCommandId,
+  parseBatchStepResultAs,
+  parseCommandParamsAs,
   type BatchResult,
   type BatchStepResult,
-  type CommandId,
   type RequestEnvelope,
   type ResponseEnvelope,
   type ScreenshotResult,
@@ -50,17 +53,22 @@ export async function executeBatch(
       throw new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms.`);
     }
 
-    const stepRequest: RequestEnvelope = {
-      protocolVersion: command.protocolVersion,
-      id: `${command.id}:${index}`,
-      command: step.command as CommandId,
-      params: applyBatchStepDefaults(
-        step.command,
-        step.params,
-        defaultSelector,
-        remainingMs,
-      ) as RequestEnvelope["params"],
-    };
+    if (!isCommandId(step.command)) {
+      throw new BrowserCommandError("INVALID_TARGET", `Unknown batch command: ${step.command}`);
+    }
+    const params = parseCommandParamsAs(
+      step.command,
+      applyBatchStepDefaults(step.command, step.params, defaultSelector, remainingMs),
+    );
+    if (!params.ok) {
+      throw new BrowserCommandError("INVALID_TARGET", params.error.message);
+    }
+    const stepRequest = createRequest(
+      step.command,
+      params.value,
+      `${command.id}:${index}`,
+      command.protocolVersion,
+    );
     const response = await executeStep(stepRequest, adapter);
     const stepResult: BatchStepResult = response.ok
       ? {
@@ -78,7 +86,7 @@ export async function executeBatch(
     steps.push(stepResult);
 
     if (stepResult.ok && stepResult.command === "screenshot") {
-      totalScreenshotBytes += (stepResult.result as ScreenshotResult).bytes;
+      totalScreenshotBytes += parseScreenshotStepResult(stepResult).bytes;
       if (totalScreenshotBytes > MAX_SCREENSHOT_BYTES) {
         throw new BrowserCommandError(
           "OUTPUT_TOO_LARGE",
@@ -170,11 +178,19 @@ function publicBatchResult(result: BatchResult): BatchResult {
       step.ok && step.command === "screenshot"
         ? {
             ...step,
-            result: stripScreenshotImageBytes(step.result as ScreenshotResult),
+            result: stripScreenshotImageBytes(parseScreenshotStepResult(step)),
           }
         : step,
     ),
   };
+}
+
+function parseScreenshotStepResult(step: BatchStepResult): ScreenshotResult {
+  const parsed = parseBatchStepResultAs("screenshot", step);
+  if (!parsed.ok || !parsed.value.ok) {
+    throw new BrowserCommandError("INVALID_TARGET", "Batch screenshot result is invalid.");
+  }
+  return parsed.value.result;
 }
 
 function stripScreenshotImageBytes(

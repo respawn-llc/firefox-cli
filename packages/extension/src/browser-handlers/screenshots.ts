@@ -1,8 +1,7 @@
 import {
   MAX_SCREENSHOT_BYTES,
-  createErrorResponse,
+  createErrorResponseForRequest,
   createOkResponse,
-  type RequestEnvelope,
   type ScreenshotResult,
 } from "@firefox-cli/protocol";
 import { withTimeout } from "../browser-command/async.js";
@@ -16,17 +15,16 @@ import {
 } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
-export const screenshotHandlers: BrowserHandlerMap = {
+export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
   screenshot: async (request, adapter) => {
-    const command = request as RequestEnvelope<"screenshot">;
-    if (command.params.fullPage === true) {
-      return createErrorResponse(command.id, {
+    if (request.params.fullPage === true) {
+      return createErrorResponseForRequest(request, {
         code: "UNSUPPORTED_CAPABILITY",
         message:
           "Full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
       });
     }
-    const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
     const tabActivated = !resolved.tab.active;
     const windowFocused = !resolved.window.focused;
     try {
@@ -49,10 +47,10 @@ export const screenshotHandlers: BrowserHandlerMap = {
     try {
       dataUrl = await withTimeout(
         adapter.captureVisibleTab(target.windowId, {
-          format: command.params.format,
-          ...(command.params.quality === undefined ? {} : { quality: command.params.quality }),
+          format: request.params.format,
+          ...(request.params.quality === undefined ? {} : { quality: request.params.quality }),
         }),
-        command.params.timeoutMs ?? DEFAULT_SCREENSHOT_TIMEOUT_MS,
+        request.params.timeoutMs ?? DEFAULT_SCREENSHOT_TIMEOUT_MS,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -64,12 +62,12 @@ export const screenshotHandlers: BrowserHandlerMap = {
 
     const image = parseImageDataUrl(
       dataUrl,
-      command.params.format,
-      command.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES,
+      request.params.format,
+      request.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES,
     );
     const result: ScreenshotResult = {
-      path: command.params.path,
-      format: command.params.format,
+      path: request.params.path,
+      format: request.params.format,
       bytes: image.bytes,
       ...(image.width === undefined ? {} : { width: image.width }),
       ...(image.height === undefined ? {} : { height: image.height }),
@@ -77,6 +75,6 @@ export const screenshotHandlers: BrowserHandlerMap = {
       imageBase64: image.base64,
       target,
     };
-    return createOkResponse(command, result);
+    return createOkResponse(request, result);
   },
 };

@@ -1,4 +1,9 @@
-import { gatedCapabilities, type RequestEnvelope } from "@firefox-cli/protocol";
+import {
+  gatedCapabilities,
+  isRequestCommand,
+  type CommandId,
+  type RequestEnvelope,
+} from "@firefox-cli/protocol";
 import { doctor, setup } from "./commands/setup-doctor.js";
 import { formatCliResponse } from "./format.js";
 import {
@@ -16,6 +21,7 @@ import {
   type CliDependencies,
   type CliRequestBuildContext,
   type CliResult,
+  type CliRouteBinding,
 } from "./types.js";
 import { createUploadBudget } from "./upload.js";
 
@@ -65,7 +71,7 @@ async function runCliOrThrow(
 
   const routeBinding = findCliRouteBindingForArgv(args);
   if (routeBinding !== undefined) {
-    return runCliRouteBinding(args, dependencies);
+    return runCliRouteBinding(routeBinding, args, dependencies);
   }
 
   const gated = args[0] === undefined ? undefined : unsupportedCliCommands.get(args[0]);
@@ -80,7 +86,8 @@ async function runCliOrThrow(
   };
 }
 
-async function runCliRouteBinding(
+async function runCliRouteBinding<C extends CommandId>(
+  binding: CliRouteBinding<C>,
   argv: readonly string[],
   dependencies: CliDependencies,
 ): Promise<CliResult> {
@@ -88,13 +95,25 @@ async function runCliRouteBinding(
     uploadBudget: createUploadBudget(),
     buildRequestForArgv,
   };
-  const request = await buildRequestForArgv(argv, dependencies, context);
+  const request = await buildRequestForBinding(binding, argv, dependencies, context);
   const response = await sendOrUnavailable(dependencies, request);
-  const binding = findCliRouteBindingForArgv(argv);
-  if (binding === undefined) {
-    throw new InvalidBatchArgvCommandError();
-  }
   return formatCliResponse(binding.formatter, response, cliRouteWantsJsonOutput(binding, argv));
+}
+
+async function buildRequestForBinding<C extends CommandId>(
+  binding: CliRouteBinding<C>,
+  argv: readonly string[],
+  dependencies: CliDependencies,
+  context: CliRequestBuildContext,
+): Promise<RequestEnvelope<C>> {
+  validateCliRouteArgv(binding, argv);
+  const request = await binding.buildRequest(argv, dependencies, context);
+  if (!isRequestCommand(request, binding.command)) {
+    throw new CliUsageError(
+      `CLI route ${binding.route.id} built ${request.command} instead of ${binding.command}.`,
+    );
+  }
+  return request;
 }
 
 async function buildRequestForArgv(
@@ -112,7 +131,7 @@ async function buildRequestForArgv(
   }
 
   validateCliRouteArgv(binding, argv);
-  return binding.buildRequest(argv, dependencies, context);
+  return buildRequestForBinding(binding, argv, dependencies, context);
 }
 
 function formatGatedCapability(command: string): string {

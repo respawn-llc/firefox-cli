@@ -112,11 +112,17 @@ export type CliResponseFormatterKind =
   | "action"
   | "json-object";
 
-export type CliRouteBinding = {
+export type CliResponseFormatter<C extends CommandId = CommandId> = (
+  response: ResponseEnvelope<C>,
+  json: boolean,
+) => CliResult;
+
+export type CliRouteBinding<C extends CommandId = CommandId> = {
   readonly route: CliRouteMetadata;
-  readonly command: CommandId;
+  readonly command: C;
   readonly help: string;
   readonly parser: CliRouteParserSpec;
-  readonly formatter: CliResponseFormatterKind;
+  readonly formatterKind: CliResponseFormatterKind;
+  readonly formatter: CliResponseFormatter<C>;
   readonly buildRequest: CliRequestBuilder;
 };

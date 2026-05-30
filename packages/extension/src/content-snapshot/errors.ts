@@ -1,4 +1,11 @@
-import { createErrorResponse, type ErrorCode, type ResponseEnvelope } from "@firefox-cli/protocol";
+import {
+  createErrorResponse,
+  createErrorResponseForRequest,
+  type CommandId,
+  type ErrorCode,
+  type RequestEnvelope,
+  type ResponseEnvelope,
+} from "@firefox-cli/protocol";
 import { ElementRefRegistryError } from "../element-ref-registry.js";
 
 export class ContentSnapshotError extends Error {
@@ -28,10 +35,23 @@ export class ContentSnapshotError extends Error {
 
 export function createContentErrorResponse(id: string, error: unknown): ResponseEnvelope {
   return createErrorResponse(id, {
+    ...contentError(error),
+  });
+}
+
+export function createContentErrorResponseForRequest<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  error: unknown,
+): ResponseEnvelope<C> {
+  return createErrorResponseForRequest(request, contentError(error));
+}
+
+function contentError(error: unknown) {
+  return {
     code:
       error instanceof ContentSnapshotError || error instanceof ElementRefRegistryError
         ? error.code
         : "SCRIPT_INJECTION_FAILED",
     message: error instanceof Error ? error.message : String(error),
-  });
+  };
 }

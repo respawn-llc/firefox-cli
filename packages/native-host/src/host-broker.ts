@@ -6,15 +6,18 @@ import {
   createRequestProtocolMismatchError,
   createProtocolSession,
   getRequestProtocolCompatibility,
+  isRequestCommand,
   localProtocolVersionRange,
   parseBoundaryRequest,
+  parseBatchStepAs,
+  parseBatchStepResultAs,
   type BatchResult,
+  type CommandId,
   type ProtocolError,
   type ProtocolSession,
   type ProtocolVersionRange,
   type RequestEnvelope,
   type ResponseEnvelope,
-  type ScreenshotParams,
   type ScreenshotResult,
 } from "@firefox-cli/protocol";
 import type { HostIdentity, PairTokenVerification } from "./pair-state.js";
@@ -41,6 +44,14 @@ export type NativeHostBrokerOptions = {
     token: string | undefined,
   ): Promise<PairTokenVerification> | PairTokenVerification;
 };
+
+function rebaseResponseProtocolVersion<C extends CommandId>(
+  protocolSession: ProtocolSession,
+  request: RequestEnvelope<C>,
+  response: ResponseEnvelope<C>,
+): ResponseEnvelope<C> {
+  return protocolSession.withResponseVersion(request, response);
+}
 
 export class NativeHostBroker {
   readonly #hostIdentity: HostIdentity;
@@ -93,8 +104,8 @@ export class NativeHostBroker {
 
     const request = parsed.value;
     const cliSession = options.protocolSession ?? createProtocolSession(request.protocolVersion);
-    if (request.command === "hello") {
-      return cliSession.createOkResponse(request as RequestEnvelope<"hello">, {
+    if (isRequestCommand(request, "hello")) {
+      return cliSession.createOkResponse(request, {
         accepted: true,
         negotiatedProtocolVersion: cliSession.protocolVersion,
         peer: {
@@ -106,7 +117,7 @@ export class NativeHostBroker {
     }
 
     if (this.#extensionConnection === null) {
-      return cliSession.createErrorResponse(request.id, {
+      return cliSession.createErrorResponseForRequest(request, {
         code: "EXTENSION_NOT_CONNECTED",
         message: "Firefox extension is not connected to the native host.",
       });
@@ -114,13 +125,13 @@ export class NativeHostBroker {
 
     const extensionSession = getNegotiatedExtensionSession(this.#extensionConnection);
     if (!extensionSession.ok) {
-      return cliSession.createErrorResponse(request.id, extensionSession.error);
+      return cliSession.createErrorResponseForRequest(request, extensionSession.error);
     }
 
     if (!this.#extensionConnection.approved) {
       const pairingError = this.#extensionConnection.pairingError;
       if (pairingError !== undefined && !pairingError.ok) {
-        return cliSession.createErrorResponse(request.id, {
+        return cliSession.createErrorResponseForRequest(request, {
           code:
             pairingError.code === "NOT_APPROVED" || pairingError.code === "TOKEN_REQUIRED"
               ? "NOT_APPROVED"
@@ -128,7 +139,7 @@ export class NativeHostBroker {
           message: pairingError.message,
         });
       }
-      return cliSession.createErrorResponse(request.id, {
+      return cliSession.createErrorResponseForRequest(request, {
         code: "NOT_APPROVED",
         message: "Approve firefox-cli in the extension popup before running CLI commands.",
       });
@@ -136,7 +147,7 @@ export class NativeHostBroker {
 
     const pairVerification = await this.#verifyPairToken?.(this.#extensionConnection.token);
     if (pairVerification !== undefined && !pairVerification.ok) {
-      return cliSession.createErrorResponse(request.id, {
+      return cliSession.createErrorResponseForRequest(request, {
         code:
           pairVerification.code === "NOT_APPROVED" || pairVerification.code === "TOKEN_REQUIRED"
             ? "NOT_APPROVED"
@@ -150,52 +161,53 @@ export class NativeHostBroker {
       extensionSession.value.protocolVersion,
     );
     if (!extensionCompatibility.compatible) {
-      return cliSession.createErrorResponse(
-        request.id,
+      return cliSession.createErrorResponseForRequest(
+        request,
         createRequestProtocolMismatchError(request, extensionSession.value.protocolVersion),
       );
     }
 
-    const extensionRequest = extensionSession.value.withRequestVersion(request);
-    const extensionResponse = await this.#extensionConnection.send(extensionRequest);
-    const response = extensionSession.value.parseResponse(
+    if (isRequestCommand(request, "screenshot")) {
+      const response = await this.#forwardToExtension(request, extensionSession.value, cliSession);
+      return response.ok
+        ? this.#writeScreenshotResponse(request, response.result, cliSession)
+        : response;
+    }
+
+    if (isRequestCommand(request, "batch")) {
+      const response = await this.#forwardToExtension(request, extensionSession.value, cliSession);
+      return response.ok
+        ? this.#writeBatchScreenshotResponses(request, response.result, cliSession)
+        : response;
+    }
+
+    return this.#forwardToExtension(request, extensionSession.value, cliSession);
+  }
+
+  async #forwardToExtension<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    extensionSession: ProtocolSession,
+    cliSession: ProtocolSession,
+  ): Promise<ResponseEnvelope<C>> {
+    const extensionConnection = this.#extensionConnection;
+    if (extensionConnection === null) {
+      return cliSession.createErrorResponseForRequest(request, {
+        code: "EXTENSION_NOT_CONNECTED",
+        message: "Firefox extension is not connected to the native host.",
+      });
+    }
+
+    const extensionRequest = extensionSession.withRequestVersion(request);
+    const extensionResponse = await extensionConnection.send(extensionRequest);
+    const response = extensionSession.parseResponseForRequest(
       "host-to-extension",
-      request.command,
+      request,
       extensionResponse,
     );
     if (!response.ok) {
-      return cliSession.createErrorResponse(request.id, response.error);
+      return cliSession.createErrorResponseForRequest(request, response.error);
     }
-
-    if (request.command === "screenshot" && response.value.ok) {
-      return this.#writeScreenshotResponse(
-        request as RequestEnvelope<"screenshot">,
-        response.value.result as ScreenshotResult,
-        cliSession,
-      );
-    }
-
-    if (request.command === "batch" && response.value.ok) {
-      return this.#writeBatchScreenshotResponses(
-        request as RequestEnvelope<"batch">,
-        response.value.result as BatchResult,
-        cliSession,
-      );
-    }
-
-    return {
-      protocolVersion: cliSession.protocolVersion,
-      id: request.id,
-      ...(response.value.ok
-        ? {
-            ok: true,
-            result: response.value.result,
-          }
-        : {
-            ok: false,
-            error: response.value.error,
-          }),
-    };
+    return rebaseResponseProtocolVersion(cliSession, request, response.value);
   }
 
   async #writeScreenshotResponse(
@@ -204,13 +216,13 @@ export class NativeHostBroker {
     protocolSession: ProtocolSession,
   ): Promise<ResponseEnvelope<"screenshot">> {
     const writeResult = await this.#writeScreenshotResult(
-      request.id,
+      request,
       request.params,
       result,
       protocolSession,
     );
     if (!writeResult.ok) {
-      return writeResult.response as ResponseEnvelope<"screenshot">;
+      return writeResult.response;
     }
 
     return protocolSession.createOkResponse(request, writeResult.result);
@@ -228,22 +240,23 @@ export class NativeHostBroker {
         continue;
       }
 
-      const requestStep = request.params.steps[step.index];
-      if (requestStep?.command !== "screenshot") {
-        return protocolSession.createErrorResponse(request.id, {
+      const requestStep = parseBatchStepAs("screenshot", request.params.steps[step.index]);
+      const responseStep = parseBatchStepResultAs("screenshot", step);
+      if (!requestStep.ok || !responseStep.ok || !responseStep.value.ok) {
+        return protocolSession.createErrorResponseForRequest(request, {
           code: "INVALID_RESPONSE",
           message: "Batch screenshot result did not match the request step.",
-        }) as ResponseEnvelope<"batch">;
+        });
       }
 
       const writeResult = await this.#writeScreenshotResult(
-        request.id,
-        requestStep.params as ScreenshotParams,
-        step.result as ScreenshotResult,
+        request,
+        requestStep.value.params,
+        responseStep.value.result,
         protocolSession,
       );
       if (!writeResult.ok) {
-        return writeResult.response as ResponseEnvelope<"batch">;
+        return writeResult.response;
       }
 
       steps.push({
@@ -258,19 +271,19 @@ export class NativeHostBroker {
     });
   }
 
-  async #writeScreenshotResult(
-    id: string,
-    params: ScreenshotParams,
+  async #writeScreenshotResult<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    params: RequestEnvelope<"screenshot">["params"],
     result: ScreenshotResult,
     protocolSession: ProtocolSession,
   ): Promise<
     | { readonly ok: true; readonly result: Omit<ScreenshotResult, "imageBase64"> }
-    | { readonly ok: false; readonly response: ResponseEnvelope }
+    | { readonly ok: false; readonly response: ResponseEnvelope<C> }
   > {
     if (result.imageBase64 === undefined) {
       return {
         ok: false,
-        response: protocolSession.createErrorResponse(id, {
+        response: protocolSession.createErrorResponseForRequest(request, {
           code: "INVALID_RESPONSE",
           message: "Screenshot response did not include image bytes.",
         }),
@@ -281,7 +294,7 @@ export class NativeHostBroker {
     if (bytes.byteLength !== result.bytes) {
       return {
         ok: false,
-        response: protocolSession.createErrorResponse(id, {
+        response: protocolSession.createErrorResponseForRequest(request, {
           code: "INVALID_RESPONSE",
           message: "Screenshot byte count did not match image data.",
           details: {
@@ -296,7 +309,7 @@ export class NativeHostBroker {
     if (bytes.byteLength > maxImageBytes) {
       return {
         ok: false,
-        response: protocolSession.createErrorResponse(id, {
+        response: protocolSession.createErrorResponseForRequest(request, {
           code: "OUTPUT_TOO_LARGE",
           message: `Screenshot is ${bytes.byteLength} bytes, exceeding the ${maxImageBytes} byte limit.`,
         }),
@@ -313,7 +326,7 @@ export class NativeHostBroker {
     } catch (error) {
       return {
         ok: false,
-        response: protocolSession.createErrorResponse(id, {
+        response: protocolSession.createErrorResponseForRequest(request, {
           code: "FILE_WRITE_FAILED",
           message: `Failed to write screenshot: ${error instanceof Error ? error.message : String(error)}`,
         }),

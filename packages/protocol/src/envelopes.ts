@@ -17,26 +17,54 @@ import {
 } from "./core.js";
 import { commandSchemas, isCommandId, type CommandId } from "./registry/index.js";
 
-export type RequestEnvelope<C extends CommandId = CommandId> = {
+export type CommandParams<C extends CommandId> = z.infer<(typeof commandSchemas)[C]["params"]>;
+export type CommandResult<C extends CommandId> = z.infer<(typeof commandSchemas)[C]["result"]>;
+
+export type RequestEnvelope<C extends CommandId = CommandId> = C extends CommandId
+  ? {
+      readonly protocolVersion: number;
+      readonly id: string;
+      readonly command: C;
+      readonly params: CommandParams<C>;
+    }
+  : never;
+
+export type ResponseEnvelope<C extends CommandId = CommandId> = C extends CommandId
+  ?
+      | {
+          readonly protocolVersion: number;
+          readonly id: string;
+          readonly ok: true;
+          readonly result: CommandResult<C>;
+        }
+      | {
+          readonly protocolVersion: number;
+          readonly id: string;
+          readonly ok: false;
+          readonly error: ProtocolError;
+        }
+  : never;
+
+type RequestEnvelopeFor<C extends CommandId> = {
   readonly protocolVersion: number;
   readonly id: string;
   readonly command: C;
-  readonly params: z.infer<(typeof commandSchemas)[C]["params"]>;
+  readonly params: CommandParams<C>;
 };
 
-export type ResponseEnvelope<C extends CommandId = CommandId> =
-  | {
-      readonly protocolVersion: number;
-      readonly id: string;
-      readonly ok: true;
-      readonly result: z.infer<(typeof commandSchemas)[C]["result"]>;
-    }
-  | {
-      readonly protocolVersion: number;
-      readonly id: string;
-      readonly ok: false;
-      readonly error: ProtocolError;
-    };
+type OkResponseEnvelopeFor<C extends CommandId> = {
+  readonly protocolVersion: number;
+  readonly id: string;
+  readonly ok: true;
+  readonly result: CommandResult<C>;
+};
+
+type ErrorResponseEnvelope = {
+  readonly protocolVersion: number;
+  readonly id: string;
+  readonly ok: false;
+  readonly error: ProtocolError;
+};
 
 export type HelloRequestNegotiationOptions = {
   readonly local: ProtocolVersionRange;
@@ -61,16 +89,29 @@ export type ParseBoundaryResponseOptions = {
 export type ProtocolSession = {
   readonly protocolVersion: number;
   parseRequest(boundary: Boundary, raw: unknown): ParseResult<RequestEnvelope>;
-  parseResponse(
+  parseResponse<C extends CommandId>(
     boundary: Boundary,
-    command: CommandId,
+    command: C,
     raw: unknown,
-  ): ParseResult<ResponseEnvelope>;
+  ): ParseResult<ResponseEnvelope<C>>;
+  parseResponseForRequest<C extends CommandId>(
+    boundary: Boundary,
+    request: RequestEnvelope<C>,
+    raw: unknown,
+  ): ParseResult<ResponseEnvelope<C>>;
   createOkResponse<C extends CommandId>(
     request: RequestEnvelope<C>,
-    result: z.infer<(typeof commandSchemas)[C]["result"]>,
+    result: CommandResult<C>,
   ): ResponseEnvelope<C>;
   createErrorResponse(id: string, error: ProtocolError): ResponseEnvelope;
+  createErrorResponseForRequest<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    error: ProtocolError,
+  ): ResponseEnvelope<C>;
+  withResponseVersion<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    response: ResponseEnvelope<C>,
+  ): ResponseEnvelope<C>;
   withRequestVersion<C extends CommandId>(request: RequestEnvelope<C>): RequestEnvelope<C>;
 };
 
@@ -184,15 +225,27 @@ export function parseBoundaryRequest(
 
   return {
     ok: true,
-    value: {
-      protocolVersion: expectedProtocolVersion,
-      id: envelope.data.id,
-      command: envelope.data.command,
-      params: params.data,
-    },
+    value: createValidatedRequestEnvelope(
+      envelope.data.command,
+      params.data,
+      envelope.data.id,
+      expectedProtocolVersion,
+    ),
   };
 }
 
+export function parseBoundaryResponse<C extends CommandId>(
+  boundary: Boundary,
+  command: C,
+  raw: unknown,
+  options?: ParseBoundaryResponseOptions,
+): ParseResult<ResponseEnvelope<C>>;
+export function parseBoundaryResponse(
+  boundary: Boundary,
+  command: CommandId,
+  raw: unknown,
+  options?: ParseBoundaryResponseOptions,
+): ParseResult<ResponseEnvelope>;
 export function parseBoundaryResponse(
   boundary: Boundary,
   command: CommandId,
@@ -239,12 +292,12 @@ export function parseBoundaryResponse(
 
     return {
       ok: true,
-      value: {
-        protocolVersion: expectedProtocolVersion,
-        id: envelope.data.id,
-        ok: true,
-        result: result.data,
-      },
+      value: createValidatedOkResponseEnvelope(
+        command,
+        result.data,
+        envelope.data.id,
+        expectedProtocolVersion,
+      ),
     };
   }
 
@@ -257,40 +310,44 @@ export function parseBoundaryResponse(
 
   return {
     ok: true,
-    value: {
-      protocolVersion: expectedProtocolVersion,
-      id: envelope.data.id,
-      ok: false,
-      error: error.data,
-    },
+    value: createValidatedErrorResponseEnvelope(
+      envelope.data.id,
+      error.data,
+      expectedProtocolVersion,
+    ),
   };
+}
+
+export function parseBoundaryResponseForRequest<C extends CommandId>(
+  boundary: Boundary,
+  request: RequestEnvelope<C>,
+  raw: unknown,
+  options?: ParseBoundaryResponseOptions,
+): ParseResult<ResponseEnvelope<C>> {
+  return parseBoundaryResponse(boundary, request.command as C, raw, options);
 }
 
 export function createRequest<C extends CommandId>(
   command: C,
-  params: z.infer<(typeof commandSchemas)[C]["params"]>,
+  params: CommandParams<C>,
   id: string = crypto.randomUUID(),
   protocolVersion: number = PROTOCOL_VERSION,
 ): RequestEnvelope<C> {
-  return {
-    protocolVersion,
-    id,
-    command,
-    params,
-  };
+  return createValidatedRequestEnvelope(command, params, id, protocolVersion);
 }
 
 export function createOkResponse<C extends CommandId>(
   request: RequestEnvelope<C>,
-  result: z.infer<(typeof commandSchemas)[C]["result"]>,
+  result: CommandResult<C>,
   protocolVersion: number = request.protocolVersion,
 ): ResponseEnvelope<C> {
-  return {
+  const envelope: OkResponseEnvelopeFor<C> = {
     protocolVersion,
     id: request.id,
     ok: true,
     result,
   };
+  return envelope as ResponseEnvelope<C>;
 }
 
 export function createErrorResponse(
@@ -298,12 +355,15 @@ export function createErrorResponse(
   error: ProtocolError,
   protocolVersion: number = PROTOCOL_VERSION,
 ): ResponseEnvelope {
-  return {
-    protocolVersion,
-    id,
-    ok: false,
-    error,
-  };
+  return createValidatedErrorResponseEnvelope(id, error, protocolVersion);
+}
+
+export function createErrorResponseForRequest<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  error: ProtocolError,
+  protocolVersion: number = request.protocolVersion,
+): ResponseEnvelope<C> {
+  return createValidatedErrorResponseEnvelope(request.id, error, protocolVersion);
 }
 
 export function withRequestProtocolVersion<C extends CommandId>(
@@ -316,14 +376,30 @@ export function withRequestProtocolVersion<C extends CommandId>(
   };
 }
 
+export function withResponseProtocolVersion<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  response: ResponseEnvelope<C>,
+  protocolVersion: number,
+): ResponseEnvelope<C> {
+  return response.ok
+    ? createOkResponse(request, response.result as CommandResult<C>, protocolVersion)
+    : createValidatedErrorResponseEnvelope<C>(request.id, response.error, protocolVersion);
+}
+
 export function createProtocolSession(protocolVersion: number): ProtocolSession {
   return {
     protocolVersion,
     parseRequest: (boundary, raw) => parseBoundaryRequest(boundary, raw, { protocolVersion }),
     parseResponse: (boundary, command, raw) =>
       parseBoundaryResponse(boundary, command, raw, { protocolVersion }),
+    parseResponseForRequest: (boundary, request, raw) =>
+      parseBoundaryResponseForRequest(boundary, request, raw, { protocolVersion }),
     createOkResponse: (request, result) => createOkResponse(request, result, protocolVersion),
     createErrorResponse: (id, error) => createErrorResponse(id, error, protocolVersion),
+    createErrorResponseForRequest: (request, error) =>
+      createErrorResponseForRequest(request, error, protocolVersion),
+    withResponseVersion: (request, response) =>
+      withResponseProtocolVersion(request, response, protocolVersion),
     withRequestVersion: (request) => withRequestProtocolVersion(request, protocolVersion),
   };
 }
@@ -430,6 +506,51 @@ function decodeRaw(raw: unknown): ParseResult<unknown> {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function createValidatedRequestEnvelope<C extends CommandId>(
+  command: C,
+  params: CommandParams<C>,
+  id: string,
+  protocolVersion: number,
+): RequestEnvelope<C> {
+  const envelope: RequestEnvelopeFor<C> = {
+    protocolVersion,
+    id,
+    command,
+    params,
+  };
+  return envelope as RequestEnvelope<C>;
+}
+
+function createValidatedOkResponseEnvelope<C extends CommandId>(
+  command: C,
+  result: CommandResult<C>,
+  id: string,
+  protocolVersion: number,
+): ResponseEnvelope<C> {
+  void command;
+  const envelope: OkResponseEnvelopeFor<C> = {
+    protocolVersion,
+    id,
+    ok: true,
+    result,
+  };
+  return envelope as ResponseEnvelope<C>;
+}
+
+function createValidatedErrorResponseEnvelope<C extends CommandId = CommandId>(
+  id: string,
+  error: ProtocolError,
+  protocolVersion: number,
+): ResponseEnvelope<C> {
+  const envelope: ErrorResponseEnvelope = {
+    protocolVersion,
+    id,
+    ok: false,
+    error,
+  };
+  return envelope as ResponseEnvelope<C>;
 }
 
 function failure(
