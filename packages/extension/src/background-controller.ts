@@ -6,21 +6,25 @@ import {
   createErrorResponse,
   createProtocolSession,
   createRequest,
-  kernelCapabilities,
   localProtocolVersionRange,
   parseBoundaryRequest,
   parseBoundaryResponse,
   type CommandId,
-  type ProtocolError,
-  type ProtocolSession,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
+import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
+import { createUnconfiguredBrowserAdapter } from "./background-default-browser-adapter.js";
 import {
-  handleBrowserRequest,
-  type BackgroundBrowserAdapter,
-  type BrowserWindowSnapshot,
-} from "./browser-commands.js";
+  createProtocolStateErrorResponse,
+  getMessageId,
+  getMessageProtocolVersion,
+  getNegotiatedNativeSession,
+  isRequestCommand,
+  isResponseLike,
+  type NativeProtocolState,
+} from "./background-native-protocol-state.js";
+import { handleRequest } from "./background-request-handler.js";
 
 export type { BackgroundBrowserAdapter, BrowserWindowSnapshot };
 
@@ -82,75 +86,7 @@ export class FirefoxCliBackgroundController {
     this.#runtime = {
       connectNative: options.connectNative,
     };
-    this.#browserAdapter = options.browserAdapter ?? {
-      listWindows: async () => [],
-      createTab: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      selectTab: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      closeTab: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      createWindow: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      focusWindow: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      closeWindow: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      navigateTab: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      goBack: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      goForward: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      reload: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      sendContentRequest: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      executeEval: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      captureVisibleTab: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      download: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      waitForDownload: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      readClipboard: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      writeClipboard: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      listCookies: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      setCookie: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      removeCookie: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-      listNetworkRequests: async () => [],
-      clearNetworkRequests: async () => undefined,
-      waitForNetworkIdle: async () => undefined,
-      resizeWindow: async () => {
-        throw new Error("Browser adapter is not configured.");
-      },
-    };
+    this.#browserAdapter = options.browserAdapter ?? createUnconfiguredBrowserAdapter();
     this.#storageAdapter = options.storageAdapter ?? {
       getPairToken: async () => null,
       setPairToken: async () => undefined,
@@ -564,127 +500,4 @@ export class FirefoxCliBackgroundController {
       ),
     );
   }
-}
-
-function handleRequest(
-  request: RequestEnvelope,
-  productVersion: string,
-  approved: boolean,
-  browserAdapter: BackgroundBrowserAdapter,
-  protocolSession: ProtocolSession,
-): Promise<ResponseEnvelope> | ResponseEnvelope {
-  if (request.command === "hello") {
-    return protocolSession.createOkResponse(request as RequestEnvelope<"hello">, {
-      accepted: true,
-      negotiatedProtocolVersion: protocolSession.protocolVersion,
-      peer: {
-        ...createLocalComponentIdentity("extension", productVersion),
-        protocolMin: localProtocolVersionRange.protocolMin,
-        protocolMax: localProtocolVersionRange.protocolMax,
-      },
-    });
-  }
-
-  if (request.command === "pair.approve" || request.command === "pair.reset") {
-    return protocolSession.createErrorResponse(request.id, {
-      code: "UNSUPPORTED_CAPABILITY",
-      message: "Pairing commands are handled by the native host.",
-    });
-  }
-
-  if (!approved) {
-    return protocolSession.createErrorResponse(request.id, {
-      code: "NOT_APPROVED",
-      message: "Approve firefox-cli in the extension popup before running CLI commands.",
-    });
-  }
-
-  if (request.command === "capabilities") {
-    return protocolSession.createOkResponse(request, { capabilities: [...kernelCapabilities] });
-  }
-
-  if (request.command === "noop") {
-    return protocolSession.createOkResponse(request, { ok: true });
-  }
-
-  return handleBrowserRequest(request, browserAdapter);
-}
-
-function isResponseLike(message: unknown): message is { readonly id: string } {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "id" in message &&
-    "ok" in message &&
-    typeof message.id === "string"
-  );
-}
-
-type NativeProtocolState =
-  | { readonly state: "disconnected" }
-  | { readonly state: "negotiating" }
-  | { readonly state: "negotiated"; readonly session: ProtocolSession }
-  | { readonly state: "incompatible"; readonly error: ProtocolError };
-
-function getNegotiatedNativeSession(
-  state: NativeProtocolState,
-):
-  | { readonly ok: true; readonly value: ProtocolSession }
-  | { readonly ok: false; readonly error: ProtocolError } {
-  if (state.state === "negotiated") {
-    return { ok: true, value: state.session };
-  }
-
-  if (state.state === "incompatible") {
-    return { ok: false, error: state.error };
-  }
-
-  return {
-    ok: false,
-    error: {
-      code: "NATIVE_HOST_UNAVAILABLE",
-      message: "Native host protocol negotiation has not completed.",
-    },
-  };
-}
-
-function getNativeProtocolSession(state: NativeProtocolState): ProtocolSession {
-  return state.state === "negotiated"
-    ? state.session
-    : createProtocolSession(localProtocolVersionRange.protocolMax);
-}
-
-function createProtocolStateErrorResponse(
-  state: NativeProtocolState,
-  id: string,
-  error: ProtocolError,
-): ResponseEnvelope {
-  return getNativeProtocolSession(state).createErrorResponse(id, error);
-}
-
-function getMessageId(message: unknown): string {
-  return typeof message === "object" &&
-    message !== null &&
-    "id" in message &&
-    typeof message.id === "string"
-    ? message.id
-    : "invalid-request";
-}
-
-function getMessageProtocolVersion(message: unknown): number {
-  return typeof message === "object" &&
-    message !== null &&
-    "protocolVersion" in message &&
-    typeof message.protocolVersion === "number"
-    ? message.protocolVersion
-    : localProtocolVersionRange.protocolMax;
-}
-
-function isRequestCommand(message: unknown, command: string): boolean {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "command" in message &&
-    message.command === command
-  );
 }
