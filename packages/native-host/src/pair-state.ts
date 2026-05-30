@@ -1,12 +1,13 @@
-import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { createHash, randomBytes as nodeRandomBytes, randomUUID } from "node:crypto";
-import { dirname, join, posix, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { z } from "zod";
 import {
   type PersistedJsonFileError,
   isPersistedJsonFileError,
   parsePersistedJson,
 } from "./persisted-json.js";
+import { withFileLock, writeFileAtomically } from "./reliability.js";
 
 export type PairState = {
   readonly schemaVersion: 1;
@@ -108,22 +109,24 @@ export async function getOrCreateHostIdentity(
   store: HostIdentityStore,
   options: HostIdentityOptions,
 ): Promise<HostIdentity> {
-  let stored: HostIdentity | null;
-  try {
-    stored = await store.read();
-  } catch (error) {
-    if (!isPersistedJsonFileError(error)) {
-      throw error;
+  return withFileLock(`${store.filePath}.lock`, async () => {
+    let stored: HostIdentity | null;
+    try {
+      stored = await store.read();
+    } catch (error) {
+      if (!isPersistedJsonFileError(error)) {
+        throw error;
+      }
+      stored = null;
     }
-    stored = null;
-  }
-  if (stored !== null && stored.extensionId === options.extensionId) {
-    return stored;
-  }
+    if (stored !== null && stored.extensionId === options.extensionId) {
+      return stored;
+    }
 
-  const identity = createHostIdentity(options);
-  await store.write(identity);
-  return identity;
+    const identity = createHostIdentity(options);
+    await store.write(identity);
+    return identity;
+  });
 }
 
 export function approvePairing(
@@ -273,11 +276,9 @@ export class FilePairStateStore implements PairStateStore {
   }
 
   async write(state: PairState): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-    if (process.platform !== "win32") {
-      await chmod(this.filePath, 0o600);
-    }
+    await writeFileAtomically(this.filePath, `${JSON.stringify(state, null, 2)}\n`, {
+      mode: 0o600,
+    });
   }
 
   async clear(): Promise<void> {
@@ -334,11 +335,9 @@ export class FileHostIdentityStore implements HostIdentityStore {
   }
 
   async write(identity: HostIdentity): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, `${JSON.stringify(identity, null, 2)}\n`, { mode: 0o600 });
-    if (process.platform !== "win32") {
-      await chmod(this.filePath, 0o600);
-    }
+    await writeFileAtomically(this.filePath, `${JSON.stringify(identity, null, 2)}\n`, {
+      mode: 0o600,
+    });
   }
 }
 

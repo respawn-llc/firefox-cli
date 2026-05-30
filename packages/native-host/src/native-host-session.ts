@@ -5,6 +5,7 @@ import { NativeHostBroker } from "./host-broker.js";
 import {
   FileLocalIpcAuthTokenStore,
   LocalIpcServer,
+  createLocalIpcEndpointScope,
   getOrCreateLocalIpcAuthToken,
   planLocalIpcEndpoint,
   type LocalIpcEndpoint,
@@ -46,13 +47,14 @@ export type NativeHostSession = {
 export async function startNativeHostSession(
   options: NativeHostSessionOptions,
 ): Promise<NativeHostSession> {
-  const endpoint = planLocalIpcEndpoint({
-    platform: options.platform,
-    rootDir: options.stateRoot,
-  });
   const ipcAuthTokenStore =
     options.ipcAuthTokenStore ?? new FileLocalIpcAuthTokenStore({ stateRoot: options.stateRoot });
   const ipcAuthToken = await getOrCreateLocalIpcAuthToken(ipcAuthTokenStore);
+  const endpoint = planLocalIpcEndpoint({
+    platform: options.platform,
+    rootDir: options.stateRoot,
+    endpointScope: createLocalIpcEndpointScope(ipcAuthToken),
+  });
   const hostIdentityStore =
     options.hostIdentityStore ??
     (options.homeDir === undefined

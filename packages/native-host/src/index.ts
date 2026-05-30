@@ -69,6 +69,7 @@ export {
   FileLocalIpcAuthTokenStore,
   LocalIpcError,
   LocalIpcServer,
+  createLocalIpcEndpointScope,
   getOrCreateLocalIpcAuthToken,
   planLocalIpcEndpoint,
   sendLocalIpcRequest,

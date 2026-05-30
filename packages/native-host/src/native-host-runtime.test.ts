@@ -237,6 +237,44 @@ describe("native host runtime", () => {
     });
   });
 
+  it("isolates complete invalid JSON native-messaging frames without disconnecting", async () => {
+    const extensionInput = new PassThrough();
+    const extensionOutput = new PassThrough();
+    const broker = new NativeHostBroker({
+      hostIdentity: {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+      },
+    });
+    await attachNativeMessagingConnection({
+      broker,
+      input: extensionInput,
+      output: extensionOutput,
+      approved: false,
+      productVersion: "0.0.0",
+    });
+    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
+    const invalidResponse = extensionReader.read();
+
+    extensionInput.write(invalidJsonNativeMessageFrame("{"));
+
+    await expect(invalidResponse).resolves.toMatchObject({
+      id: "invalid-request",
+      ok: false,
+      error: { code: "INVALID_ENVELOPE" },
+    });
+
+    const helloResponse = sendExtensionHello(extensionInput, extensionReader);
+
+    await expect(helloResponse).resolves.toMatchObject({
+      id: "hello-negotiate",
+      ok: true,
+      result: {
+        accepted: true,
+      },
+    });
+  });
+
   it("rejects broker forwarding until extension protocol negotiation completes", async () => {
     const extensionInput = new PassThrough();
     const extensionOutput = new PassThrough();
@@ -495,4 +533,11 @@ async function sendExtensionHello(
   const response = extensionReader.read();
   extensionInput.write(encodeNativeMessageFrame(hello));
   return response;
+}
+
+function invalidJsonNativeMessageFrame(payload: string): Buffer {
+  const body = Buffer.from(payload, "utf8");
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(body.byteLength, 0);
+  return Buffer.concat([header, body]);
 }

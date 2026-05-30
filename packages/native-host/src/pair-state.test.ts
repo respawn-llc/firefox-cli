@@ -231,6 +231,34 @@ describe("pair state", () => {
     }
   });
 
+  it("serializes concurrent first-start host identity creation", async () => {
+    const rootDir = await createTempDir("firefox-cli-host-identity-race");
+    const store = new FileHostIdentityStore({
+      filePath: join(rootDir, "host-identity.json"),
+    });
+    let nextId = 0;
+
+    const [first, second] = await Promise.all([
+      getOrCreateHostIdentity(store, {
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => {
+          nextId += 1;
+          return `host-${nextId}`;
+        },
+      }),
+      getOrCreateHostIdentity(store, {
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => {
+          nextId += 1;
+          return `host-${nextId}`;
+        },
+      }),
+    ]);
+
+    expect(first).toEqual(second);
+    await expect(store.read()).resolves.toEqual(first);
+  });
+
   it("regenerates malformed host identity files without clearing pair state", async () => {
     const rootDir = await createTempDir("firefox-cli-host-identity");
     const store = new FileHostIdentityStore({

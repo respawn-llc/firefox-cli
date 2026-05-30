@@ -3,6 +3,7 @@ import { getDefaultStateRoot } from "@firefox-cli/cli";
 import {
   planLocalIpcEndpoint,
   planNativeMessagingManifest,
+  createLocalIpcEndpointScope,
   type LocalIpcEndpoint,
   type NativeMessagingManifestPlan,
 } from "@firefox-cli/native-host";
@@ -31,7 +32,11 @@ export function planPhase2E2e(options: {
   return {
     env,
     stateRoot,
-    endpoint: planLocalIpcEndpoint({ platform: options.platform, rootDir: stateRoot }),
+    endpoint: planLocalIpcEndpoint({
+      platform: options.platform,
+      rootDir: stateRoot,
+      endpointScope: createLocalIpcEndpointScope("phase2-e2e-planning-token"),
+    }),
     manifestPlan: planNativeMessagingManifest({
       binaryPath: options.binaryPath,
       platform: options.platform,

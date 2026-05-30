@@ -1,9 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, posix, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { z } from "zod";
 import { resolvePackagedBinary, type PlatformInput } from "./platform-binary.js";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
 import { parsePersistedJson } from "./persisted-json.js";
+import { writeFileAtomically } from "./reliability.js";
 
 export type NativeMessagingManifest = {
   readonly name: string;
@@ -102,8 +102,7 @@ export function planNativeMessagingManifest(
 export async function writeNativeMessagingManifest(
   plan: NativeMessagingManifestPlan,
 ): Promise<void> {
-  await mkdir(dirname(plan.manifestPath), { recursive: true });
-  await writeFile(plan.manifestPath, `${JSON.stringify(plan.manifest, null, 2)}\n`);
+  await writeFileAtomically(plan.manifestPath, `${JSON.stringify(plan.manifest, null, 2)}\n`);
 }
 
 export function parseNativeMessagingManifestJson(

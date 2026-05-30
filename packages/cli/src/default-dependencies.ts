@@ -2,6 +2,8 @@ import { dirname, resolve } from "node:path";
 import {
   FileLocalIpcAuthTokenStore,
   FilePairStateStore,
+  LocalIpcError,
+  createLocalIpcEndpointScope,
   planLocalIpcEndpoint,
   sendNegotiatedLocalIpcRequest,
 } from "@firefox-cli/native-host";
@@ -23,11 +25,18 @@ export function createDefaultDependencies(version: string): CliDependencies {
     cwd: process.cwd(),
     sendRequest: async (request) => {
       const stateRoot = getUserStateRoot(process.platform, homeDir, process.env.APPDATA);
+      const authToken = await new FileLocalIpcAuthTokenStore({ stateRoot }).read();
+      if (process.platform === "win32" && authToken === null) {
+        throw new LocalIpcError(
+          "CONNECTION_FAILED",
+          "Local IPC authentication token is missing; firefox-cli native host is not connected.",
+        );
+      }
       const endpoint = planLocalIpcEndpoint({
         platform: process.platform,
         rootDir: stateRoot,
+        endpointScope: createLocalIpcEndpointScope(authToken ?? "unix-local-ipc"),
       });
-      const authToken = await new FileLocalIpcAuthTokenStore({ stateRoot }).read();
       return sendNegotiatedLocalIpcRequest(endpoint, request, {
         authToken,
         productVersion: version,

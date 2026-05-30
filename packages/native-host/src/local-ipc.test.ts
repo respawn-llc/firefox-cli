@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer, Socket, type Server } from "node:net";
 import { createTempDir } from "@firefox-cli/test-support";
 import {
@@ -15,11 +15,13 @@ import {
   FileLocalIpcAuthTokenStore,
   LocalIpcServer,
   MAX_LOCAL_IPC_MESSAGE_BYTES,
+  createLocalIpcEndpointScope,
   getOrCreateLocalIpcAuthToken,
   planLocalIpcEndpoint,
   sendNegotiatedLocalIpcRequest,
   sendLocalIpcRequest,
   type LocalIpcEndpoint,
+  type LocalIpcEndpointOptions,
 } from "./local-ipc.js";
 import { createHostIdentity } from "./pair-state.js";
 
@@ -46,6 +48,7 @@ afterEach(async () => {
 
 describe("local IPC", () => {
   it("plans a current-user endpoint under the provided state root", () => {
+    const endpointScope = createLocalIpcEndpointScope("ipc-token");
     expect(planLocalIpcEndpoint({ platform: "darwin", rootDir: "/tmp/firefox-cli" })).toEqual({
       kind: "unix-socket",
       path: join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
@@ -54,15 +57,18 @@ describe("local IPC", () => {
       kind: "unix-socket",
       path: join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
     });
-    expect(planLocalIpcEndpoint({ platform: "win32", rootDir: "ignored" })).toEqual({
+    expect(planLocalIpcEndpoint({ platform: "win32", rootDir: "ignored", endpointScope })).toEqual({
       kind: "windows-named-pipe",
-      path: "\\\\.\\pipe\\firefox-cli-firefox_cli",
+      path: `\\\\.\\pipe\\firefox-cli-firefox_cli-${endpointScope}`,
     });
+    expect(() =>
+      planLocalIpcEndpoint({ platform: "win32", rootDir: "ignored" } as LocalIpcEndpointOptions),
+    ).toThrow(/require an auth-token-derived scope/);
   });
 
   it("sends a CLI request to a running host broker and validates the response", async () => {
     const rootDir = await createTempDir("firefox-cli-ipc");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
         extensionId: FIREFOX_CLI_EXTENSION_ID,
@@ -93,7 +99,7 @@ describe("local IPC", () => {
 
   it("returns host protocol errors over IPC", async () => {
     const rootDir = await createTempDir("firefox-cli-ipc");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
         extensionId: FIREFOX_CLI_EXTENSION_ID,
@@ -122,7 +128,7 @@ describe("local IPC", () => {
 
   it("requires a user-local auth token before accepting IPC requests", async () => {
     const rootDir = await createTempDir("firefox-cli-ipc");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const token = "ipc-token";
     const request = createRequest("noop", {}, "request-1");
     const server = new LocalIpcServer({
@@ -159,10 +165,7 @@ describe("local IPC", () => {
   });
 
   it("returns OUTPUT_TOO_LARGE before connecting when the outbound request exceeds the IPC budget", async () => {
-    const endpoint = planLocalIpcEndpoint({
-      platform: process.platform,
-      rootDir: await createTempDir("fc-ipc-out"),
-    });
+    const endpoint = planTestLocalIpcEndpoint(await createTempDir("fc-ipc-out"));
     const request = createRequest(
       "eval",
       { script: "x".repeat(MAX_LOCAL_IPC_MESSAGE_BYTES), source: "argv" },
@@ -181,7 +184,7 @@ describe("local IPC", () => {
 
   it("returns OUTPUT_TOO_LARGE without invoking the handler when inbound requests exceed the IPC budget", async () => {
     const rootDir = await createTempDir("fc-ipc-in");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let handled = false;
     const server = new LocalIpcServer({
       endpoint,
@@ -210,7 +213,7 @@ describe("local IPC", () => {
 
   it("returns OUTPUT_TOO_LARGE with the request ID when handler responses exceed the IPC budget", async () => {
     const rootDir = await createTempDir("fc-ipc-big-res");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const request = createRequest("noop", {}, "oversized-response");
     const server = new LocalIpcServer({
       endpoint,
@@ -236,7 +239,7 @@ describe("local IPC", () => {
 
   it("returns OUTPUT_TOO_LARGE and closes the socket when raw peers send oversized responses", async () => {
     const rootDir = await createTempDir("fc-ipc-peer-res");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let peerClosed: Promise<void> | undefined;
     await startRawLocalIpcServer(endpoint, (socket) => {
       peerClosed = new Promise((resolve) => socket.once("close", () => resolve()));
@@ -267,7 +270,7 @@ describe("local IPC", () => {
 
   it("returns INVALID_ENVELOPE with a recovered ID when requests are missing the newline delimiter", async () => {
     const rootDir = await createTempDir("fc-ipc-no-nl");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let handled = false;
     const request = createRequest("noop", {}, "missing-newline");
     const server = new LocalIpcServer({
@@ -297,7 +300,7 @@ describe("local IPC", () => {
 
   it("returns INVALID_ENVELOPE with invalid-request for malformed missing-newline requests", async () => {
     const rootDir = await createTempDir("fc-ipc-bad-nl");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let handled = false;
     const server = new LocalIpcServer({
       endpoint,
@@ -324,7 +327,7 @@ describe("local IPC", () => {
 
   it("returns INVALID_ENVELOPE when raw peer responses are missing the newline delimiter", async () => {
     const rootDir = await createTempDir("fc-ipc-no-nl-res");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     await startRawLocalIpcServer(endpoint, (socket) => {
       socket.once("data", () => {
         socket.end(
@@ -352,7 +355,7 @@ describe("local IPC", () => {
 
   it("falls back to invalid-request when a recovered ID makes the structured error too large", async () => {
     const rootDir = await createTempDir("fc-ipc-huge-id");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const baseRequest = {
       protocolVersion: PROTOCOL_VERSION,
       id: "",
@@ -403,9 +406,139 @@ describe("local IPC", () => {
     }
   });
 
+  it("serializes concurrent first-start IPC auth token creation", async () => {
+    const rootDir = await createTempDir("firefox-cli-ipc-token-race");
+    const store = new FileLocalIpcAuthTokenStore({ stateRoot: rootDir });
+
+    const [first, second] = await Promise.all([
+      getOrCreateLocalIpcAuthToken(store),
+      getOrCreateLocalIpcAuthToken(store),
+    ]);
+
+    expect(first).toBe(second);
+    await expect(readFile(join(rootDir, "ipc", "auth-token"), "utf8")).resolves.toBe(`${first}\n`);
+  });
+
+  it("rejects non-socket Unix endpoint paths without deleting them", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const rootDir = await createTempDir("fc-ipc-non-socket");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    if (endpoint.kind !== "unix-socket") {
+      return;
+    }
+    await mkdir(dirname(endpoint.path), { recursive: true });
+    await writeFile(endpoint.path, "not a socket");
+    const server = new LocalIpcServer({
+      endpoint,
+      handleMessage: () => createOkResponse(createRequest("noop", {}, "unused"), { ok: true }),
+    });
+
+    await expect(server.start()).rejects.toMatchObject({ code: "SOCKET_FAILED" });
+    await expect(readFile(endpoint.path, "utf8")).resolves.toBe("not a socket");
+  });
+
+  it("rejects symlinked Unix IPC parent directories before chmod or bind", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const rootDir = await createTempDir("fc-ipc-parent-symlink");
+    const realDir = await createTempDir("fc-ipc-parent-real");
+    await symlink(realDir, join(rootDir, "ipc"), "dir");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    const server = new LocalIpcServer({
+      endpoint,
+      handleMessage: () => createOkResponse(createRequest("noop", {}, "unused"), { ok: true }),
+    });
+
+    await expect(server.start()).rejects.toMatchObject({ code: "SOCKET_FAILED" });
+  });
+
+  it("does not unlink active Unix sockets during startup", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const rootDir = await createTempDir("fc-ipc-active-socket");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    await startRawLocalIpcServer(endpoint, (socket) => {
+      socket.end(`${JSON.stringify({ ok: true })}\n`);
+    });
+    const server = new LocalIpcServer({
+      endpoint,
+      handleMessage: () => createOkResponse(createRequest("noop", {}, "unused"), { ok: true }),
+    });
+
+    await expect(server.start()).rejects.toMatchObject({ code: "SOCKET_FAILED" });
+    await expectRawSocketConnects(endpoint);
+  });
+
+  it("replaces stale Unix socket paths only after probe refusal", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const rootDir = await createTempDir("fc-ipc-stale-socket");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    await startRawLocalIpcServer(endpoint, (socket) => {
+      socket.end();
+    });
+    await Promise.all(
+      rawServers.splice(0).map(
+        (server) =>
+          new Promise<void>((resolve, reject) => {
+            server.close((error) => (error === undefined ? resolve() : reject(error)));
+          }),
+      ),
+    );
+    const request = createRequest("noop", {}, "after-stale");
+    const server = new LocalIpcServer({
+      endpoint,
+      handleMessage: () => createOkResponse(request, { ok: true }),
+    });
+    servers.push(server);
+
+    await server.start();
+
+    await expect(sendLocalIpcRequest(endpoint, request)).resolves.toEqual(
+      createOkResponse(request, { ok: true }),
+    );
+  });
+
+  it("returns TIMEOUT when a local IPC peer accepts but never responds", async () => {
+    const rootDir = await createTempDir("fc-ipc-timeout");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    await startRawLocalIpcServer(endpoint, (socket) => {
+      setTimeout(() => socket.destroy(), 50).unref?.();
+    });
+    const request = createRequest("noop", {}, "timeout-local-ipc");
+
+    await expect(sendLocalIpcRequest(endpoint, request, { timeoutMs: 10 })).resolves.toMatchObject({
+      id: request.id,
+      ok: false,
+      error: { code: "TIMEOUT" },
+    });
+  });
+
+  it("returns TIMEOUT for the original request when negotiated hello hangs", async () => {
+    const rootDir = await createTempDir("fc-ipc-hello-timeout");
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
+    await startRawLocalIpcServer(endpoint, (socket) => {
+      setTimeout(() => socket.destroy(), 50).unref?.();
+    });
+    const request = createRequest("noop", {}, "timeout-negotiated");
+
+    await expect(
+      sendNegotiatedLocalIpcRequest(endpoint, request, { timeoutMs: 10 }),
+    ).resolves.toMatchObject({
+      id: request.id,
+      ok: false,
+      error: { code: "TIMEOUT" },
+    });
+  });
+
   it("negotiates CLI-to-host protocol and sends the command on the same socket", async () => {
     const rootDir = await createTempDir("fc-ipc-negotiated");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let forwardedRequest: unknown;
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
@@ -450,7 +583,7 @@ describe("local IPC", () => {
 
   it("rejects scoped-network commands locally when negotiation falls back to protocol v1", async () => {
     const rootDir = await createTempDir("fc-ipc-scoped-network-v1");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     let forwardedRequest: unknown;
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
@@ -497,7 +630,7 @@ describe("local IPC", () => {
 
   it("returns VERSION_MISMATCH when negotiated CLI-to-host ranges do not overlap", async () => {
     const rootDir = await createTempDir("fc-ipc-no-overlap");
-    const endpoint = planLocalIpcEndpoint({ platform: process.platform, rootDir });
+    const endpoint = planTestLocalIpcEndpoint(rootDir);
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
         extensionId: FIREFOX_CLI_EXTENSION_ID,
@@ -546,6 +679,43 @@ async function startRawLocalIpcServer(
       server.off("error", reject);
       resolve();
     });
+  });
+}
+
+function planTestLocalIpcEndpoint(rootDir: string): LocalIpcEndpoint {
+  return planLocalIpcEndpoint({
+    platform: process.platform,
+    rootDir,
+    endpointScope: createLocalIpcEndpointScope("test-ipc-token"),
+  });
+}
+
+async function expectRawSocketConnects(endpoint: LocalIpcEndpoint): Promise<void> {
+  const socket = new Socket();
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      socket.destroy();
+      reject(new Error("Timed out connecting to raw IPC socket."));
+    }, 1000);
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      socket.off("connect", onConnect);
+      socket.off("error", onError);
+    };
+    const onConnect = (): void => {
+      cleanup();
+      socket.destroy();
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    socket.once("connect", onConnect);
+    socket.once("error", onError);
+    socket.connect(endpoint.path);
   });
 }
 

@@ -14,7 +14,11 @@ import {
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
 import type { NativeHostBroker } from "./host-broker.js";
-import { NativeMessagingFrameReader, writeNativeMessage } from "./native-messaging-frame.js";
+import {
+  NativeMessagingFrameError,
+  NativeMessagingFrameReader,
+  writeNativeMessage,
+} from "./native-messaging-frame.js";
 import type {
   HostIdentity,
   PairStateStatus,
@@ -180,7 +184,24 @@ async function runReadLoop(options: {
   };
 }): Promise<void> {
   while (true) {
-    const message = await options.reader.read();
+    let message: unknown | null;
+    try {
+      message = await options.reader.read();
+    } catch (error) {
+      if (error instanceof NativeMessagingFrameError && error.recoverable) {
+        const protocolSession = getExtensionProtocolSession(options.connectionState.protocolState);
+        await writeNativeMessage(
+          options.output,
+          protocolSession.createErrorResponse("invalid-request", {
+            code: "INVALID_ENVELOPE",
+            message: error.message,
+            details: error.details,
+          }),
+        );
+        continue;
+      }
+      throw error;
+    }
     if (message === null) {
       return;
     }

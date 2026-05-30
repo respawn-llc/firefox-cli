@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NATIVE_HOST_NAME } from "@firefox-cli/native-host";
+import { NATIVE_HOST_NAME, createLocalIpcEndpointScope } from "@firefox-cli/native-host";
 import { planPhase2E2e } from "./e2e-phase2-plan.js";
 
 describe("phase 2 E2E planning", () => {
@@ -56,7 +56,7 @@ describe("phase 2 E2E planning", () => {
     expect(plan.stateRoot).toBe("C:\\\\Users\\\\e2e/AppData/Roaming");
     expect(plan.endpoint).toEqual({
       kind: "windows-named-pipe",
-      path: `\\\\.\\pipe\\firefox-cli-${NATIVE_HOST_NAME}`,
+      path: `\\\\.\\pipe\\firefox-cli-${NATIVE_HOST_NAME}-${createLocalIpcEndpointScope("phase2-e2e-planning-token")}`,
     });
     expect(plan.manifestPlan.registration).toMatchObject({
       kind: "windows-registry",

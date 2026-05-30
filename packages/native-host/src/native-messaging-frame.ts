@@ -13,16 +13,19 @@ export type NativeMessagingFrameErrorCode =
 export class NativeMessagingFrameError extends Error {
   readonly code: NativeMessagingFrameErrorCode;
   readonly details: Record<string, unknown>;
+  readonly recoverable: boolean;
 
   constructor(
     code: NativeMessagingFrameErrorCode,
     message: string,
     details: Record<string, unknown> = {},
+    options: { readonly recoverable?: boolean } = {},
   ) {
     super(message);
     this.name = "NativeMessagingFrameError";
     this.code = code;
     this.details = details;
+    this.recoverable = options.recoverable ?? false;
   }
 }
 
@@ -94,6 +97,7 @@ export class NativeMessagingFrameReader {
         {
           error: error instanceof Error ? error.message : String(error),
         },
+        { recoverable: true },
       );
     }
   }
