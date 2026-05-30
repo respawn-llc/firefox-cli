@@ -1,10 +1,12 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { readProcessStdin } from "../default-dependencies.js";
+import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import {
+  getOptionValue,
+  hasOption,
   optionalTarget,
   parsePositiveIntegerValue,
   parseTargetOptions,
-  readFlagValue,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
@@ -43,81 +45,27 @@ export function evalWantsJsonOutput(args: readonly string[]): boolean {
 }
 
 function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
-  const optionArgs: string[] = [];
-  const scriptParts: string[] = [];
-  const sourceFlags: ("stdin" | "base64")[] = [];
-  const parsed: {
-    source?: "stdin" | "base64";
-    base64?: string;
-    timeout?: string;
-    maxResultBytes?: string;
-    json: boolean;
-  } = { json: false };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined) {
-      continue;
-    }
-
-    if (arg === "--") {
-      scriptParts.push(...args.slice(index + 1));
-      break;
-    }
-
-    switch (arg) {
-      case "--json":
-        parsed.json = true;
-        optionArgs.push(arg);
-        break;
-      case "--stdin":
-        parsed.source = "stdin";
-        sourceFlags.push("stdin");
-        break;
-      case "-b":
-      case "--base64":
-        parsed.source = "base64";
-        sourceFlags.push("base64");
-        parsed.base64 = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--timeout":
-        parsed.timeout = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--max-output":
-        parsed.maxResultBytes = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--window":
-      case "--tab": {
-        const value = readFlagValue(args, index, arg);
-        optionArgs.push(arg, value);
-        index += 1;
-        break;
-      }
-      default:
-        if (arg.startsWith("-")) {
-          throw new CliUsageError(`Unsupported eval option: ${arg}`);
-        }
-        scriptParts.push(arg);
-        break;
-    }
-  }
-
-  const script = scriptParts.length === 0 ? undefined : scriptParts.join(" ");
-  const sourceCount = (script === undefined ? 0 : 1) + sourceFlags.length;
+  const parsed = parseCliRouteArgsForRoute("eval", args);
+  const base64 = getOptionValue(parsed.optionArgs, ["-b", "--base64"]);
+  const timeout = getOptionValue(parsed.optionArgs, ["--timeout"]);
+  const maxResultBytes = getOptionValue(parsed.optionArgs, ["--max-output"]);
+  const script = parsed.positionals.length === 0 ? undefined : parsed.positionals.join(" ");
+  const sourceCount =
+    (script === undefined ? 0 : 1) +
+    (hasOption(parsed.optionArgs, "--stdin") ? 1 : 0) +
+    (base64 === undefined ? 0 : 1);
   if (sourceCount !== 1) {
     throw new CliUsageError("Specify exactly one eval source.");
   }
 
   return {
-    optionArgs,
-    source: parsed.source ?? "argv",
+    optionArgs: parsed.optionArgs,
+    source:
+      base64 !== undefined ? "base64" : hasOption(parsed.optionArgs, "--stdin") ? "stdin" : "argv",
     ...(script === undefined ? {} : { script }),
-    ...(parsed.base64 === undefined ? {} : { base64: parsed.base64 }),
-    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
-    ...(parsed.maxResultBytes === undefined ? {} : { maxResultBytes: parsed.maxResultBytes }),
+    ...(base64 === undefined ? {} : { base64 }),
+    ...(timeout === undefined ? {} : { timeout }),
+    ...(maxResultBytes === undefined ? {} : { maxResultBytes }),
     json: parsed.json,
   };
 }

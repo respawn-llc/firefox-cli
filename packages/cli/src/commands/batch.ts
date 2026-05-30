@@ -8,15 +8,15 @@ import {
   type CommandId,
   type RequestEnvelope,
 } from "@firefox-cli/protocol";
+import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import { readProcessStdin } from "../default-dependencies.js";
 import {
-  getPositionals,
+  getOptionValue,
   hasOption,
   isRecord,
   optionalTarget,
   parsePositiveIntegerValue,
   parseTargetOptions,
-  readFlagValue,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import {
@@ -68,75 +68,24 @@ export function batchWantsJsonOutput(args: readonly string[]): boolean {
 }
 
 function parseBatchArguments(args: readonly string[]): ParsedBatchArguments {
-  const optionArgs: string[] = [];
-  const parsed: {
-    inputSource?: "argv" | "stdin";
-    input?: string;
-    bail: boolean;
-    timeout?: string;
-    maxResultBytes?: string;
-    json: boolean;
-  } = { bail: false, json: false };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined) {
-      continue;
-    }
-
-    switch (arg) {
-      case "--json":
-        parsed.json = true;
-        optionArgs.push(arg);
-        break;
-      case "--bail":
-        parsed.bail = true;
-        break;
-      case "--stdin":
-        if (parsed.inputSource !== undefined) {
-          throw new CliUsageError("Specify exactly one batch input source.");
-        }
-        parsed.inputSource = "stdin";
-        break;
-      case "--timeout":
-        parsed.timeout = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--max-output":
-        parsed.maxResultBytes = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--window":
-      case "--tab": {
-        const value = readFlagValue(args, index, arg);
-        optionArgs.push(arg, value);
-        index += 1;
-        break;
-      }
-      default:
-        if (arg.startsWith("-")) {
-          throw new CliUsageError(`Unsupported batch option: ${arg}`);
-        }
-        if (parsed.inputSource !== undefined) {
-          throw new CliUsageError("Specify exactly one batch input source.");
-        }
-        parsed.inputSource = "argv";
-        parsed.input = arg;
-        break;
-    }
+  const parsed = parseCliRouteArgsForRoute("batch", args);
+  const readsStdin = hasOption(parsed.optionArgs, "--stdin");
+  if ((readsStdin && parsed.positionals.length > 0) || parsed.positionals.length > 1) {
+    throw new CliUsageError("Specify exactly one batch input source.");
   }
-
-  if (parsed.inputSource === undefined) {
+  if (!readsStdin && parsed.positionals.length === 0) {
     throw new CliUsageError("Missing batch JSON.");
   }
+  const timeout = getOptionValue(parsed.optionArgs, ["--timeout"]);
+  const maxResultBytes = getOptionValue(parsed.optionArgs, ["--max-output"]);
 
   return {
-    optionArgs,
-    inputSource: parsed.inputSource,
-    ...(parsed.input === undefined ? {} : { input: parsed.input }),
-    bail: parsed.bail,
-    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
-    ...(parsed.maxResultBytes === undefined ? {} : { maxResultBytes: parsed.maxResultBytes }),
+    optionArgs: parsed.optionArgs,
+    inputSource: readsStdin ? "stdin" : "argv",
+    ...(parsed.positionals[0] === undefined ? {} : { input: parsed.positionals[0] }),
+    bail: hasOption(parsed.optionArgs, "--bail"),
+    ...(timeout === undefined ? {} : { timeout }),
+    ...(maxResultBytes === undefined ? {} : { maxResultBytes }),
     json: parsed.json,
   };
 }
@@ -317,12 +266,13 @@ function isImplicitBatchDefaultTargetCommand(command: CommandId): boolean {
 }
 
 function hasExplicitTargetInBatchArgv(command: CommandId, argv: readonly string[]): boolean {
-  const positionals = getPositionals(argv.slice(1));
   if (command === "tab.select" || command === "tab.close") {
+    const positionals = parseCliRouteArgsForRoute(command, argv.slice(1)).positionals;
     return positionals[1] !== undefined || hasOption(argv, "--tab") || hasOption(argv, "--window");
   }
 
   if (command === "window.select" || command === "window.close") {
+    const positionals = parseCliRouteArgsForRoute(command, argv.slice(1)).positionals;
     return positionals[1] !== undefined || hasOption(argv, "--window");
   }
 

@@ -1,4 +1,5 @@
 import type { TargetSelector } from "@firefox-cli/protocol";
+import { cliArgumentOptionInventory } from "./argv-contracts.js";
 import { CliUsageError } from "./types.js";
 
 export function getPositionals(
@@ -104,43 +105,11 @@ export function parsePayloadPositionalsAndOptions(
 }
 
 function isBooleanPositionalOption(arg: string): boolean {
-  return (
-    arg === "--json" ||
-    arg === "--new-tab" ||
-    arg === "-i" ||
-    arg === "--interactive" ||
-    arg === "-c" ||
-    arg === "--compact" ||
-    arg === "--verbose" ||
-    arg === "--first" ||
-    arg === "--last"
-  );
+  return cliArgumentOptionInventory.flags.has(arg);
 }
 
 function isValuePositionalOption(arg: string): boolean {
-  return (
-    arg === "--window" ||
-    arg === "--tab" ||
-    arg === "-d" ||
-    arg === "--depth" ||
-    arg === "-s" ||
-    arg === "--selector" ||
-    arg === "--max-output" ||
-    arg === "--generation" ||
-    arg === "--state" ||
-    arg === "--text" ||
-    arg === "--url" ||
-    arg === "--x" ||
-    arg === "--y" ||
-    arg === "--button" ||
-    arg === "--delta-x" ||
-    arg === "--delta-y" ||
-    arg === "--duration" ||
-    arg === "--fn" ||
-    arg === "--load" ||
-    arg === "--timeout" ||
-    arg === "--interval"
-  );
+  return cliArgumentOptionInventory.valueOptions.has(arg);
 }
 
 function shouldPreserveOptionLiteral(

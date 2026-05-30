@@ -10,12 +10,14 @@ describe("CLI argument parsing helpers", () => {
         "--tab",
         "2",
         "--json",
+        "--screenshot-format",
+        "jpeg",
         "selector",
         "--unknown",
       ]),
     ).toEqual({
       positionals: ["selector"],
-      optionArgs: ["--window", "1", "--tab", "2", "--json"],
+      optionArgs: ["--window", "1", "--tab", "2", "--json", "--screenshot-format", "jpeg"],
     });
   });
 

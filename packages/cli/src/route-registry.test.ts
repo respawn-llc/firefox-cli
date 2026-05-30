@@ -1,5 +1,6 @@
 import { commandSchemas, getCliRoutes } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
+import { routeParserSpecs, type CliRouteParserRouteId } from "./argv-contracts.js";
 import { cliRouteBindings, renderHelp } from "./index.js";
 import { cliRouteWantsJsonOutput, findCliRouteBindingForArgv } from "./route-registry.js";
 
@@ -18,7 +19,7 @@ describe("CLI route registry", () => {
       expect(matches, `Missing or duplicate CLI binding for ${route.id}`).toHaveLength(1);
       expect(matches[0]?.[0]).toBe(route.id);
       expect(matches[0]?.[1].help.length).toBeGreaterThan(0);
-      expect(matches[0]?.[1].parser).toBeDefined();
+      expect(matches[0]?.[1].parser).toBe(routeParserSpecs[route.id as CliRouteParserRouteId]);
       expect(matches[0]?.[1].formatter).toBeDefined();
     }
   });

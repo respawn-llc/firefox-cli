@@ -45,15 +45,17 @@ import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { cliResponseFormatters } from "./format.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
+import {
+  parseCliRouteArgv as parseArgvWithRouteContract,
+  routeParserSpecs,
+} from "./argv-contracts.js";
 import { getPositionals } from "./parse.js";
 import type {
   CliRequestBuilder,
   CliResponseFormatter,
   CliResponseFormatterKind,
   CliRouteBinding,
-  CliRouteParserSpec,
 } from "./types.js";
-import { CliUsageError } from "./types.js";
 
 const protocolCliRouteEntries = getCliRouteEntries();
 const protocolCliRouteEntriesById = new Map(
@@ -65,132 +67,6 @@ export const unsupportedCliCommands = new Map(
     (capability.cliCommands ?? []).map((command) => [command, capability] as const),
   ),
 );
-
-const targetValueOptions = ["--window", "--tab"] as const;
-const jsonFlags = ["--json"] as const;
-
-const routeParserSpecs: Readonly<Record<string, CliRouteParserSpec>> = {
-  capabilities: parser("capabilities"),
-  "tab.list": parser("tab"),
-  "tab.new": parser("tab"),
-  "tab.select": parser("tab"),
-  "tab.close": parser("tab"),
-  "window.list": parser("window"),
-  "window.new": parser("window"),
-  "window.select": parser("window"),
-  "window.close": parser("window"),
-  open: parser("open", { flags: ["--new-tab"] }),
-  back: parser("back"),
-  forward: parser("forward"),
-  reload: parser("reload"),
-  snapshot: parser("snapshot", {
-    flags: ["-i", "--interactive", "-c", "--compact", "--verbose"],
-    valueOptions: ["-d", "--depth", "-s", "--selector", "--max-output"],
-  }),
-  ref: parser("ref", { valueOptions: ["--generation"] }),
-  get: parser("get", { valueOptions: ["--generation", "--max-output"] }),
-  is: parser("is", { valueOptions: ["--generation"] }),
-  wait: parser("wait", {
-    valueOptions: [
-      "--text",
-      "--url",
-      "--fn",
-      "--load",
-      "--state",
-      "--generation",
-      "--timeout",
-      "--interval",
-    ],
-    optionalValueOptions: ["--download"],
-  }),
-  eval: parser("eval", {
-    flags: ["--stdin"],
-    valueOptions: ["-b", "--base64", "--timeout", "--max-output"],
-    allowDashDashPayload: true,
-  }),
-  screenshot: parser("screenshot", {
-    flags: ["--full"],
-    valueOptions: [
-      "--timeout",
-      "--max-output",
-      "--format",
-      "--screenshot-format",
-      "--screenshot-quality",
-    ],
-  }),
-  drag: parser("drag"),
-  upload: parser("upload", {
-    valueOptions: ["--generation"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2, variadicAfterMin: true },
-  }),
-  mouse: parser("mouse", {
-    valueOptions: ["--x", "--y", "--button", "--delta-x", "--delta-y", "--generation"],
-  }),
-  keydown: parser("keydown", { valueOptions: ["--generation"] }),
-  keyup: parser("keyup", { valueOptions: ["--generation"] }),
-  find: parser("find", {
-    flags: ["--first", "--last"],
-    valueOptions: ["--nth"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  frame: parser("frame"),
-  download: parser("download", { flags: ["--save-as"] }),
-  dialog: parser("dialog", {
-    payload: { payloadStartPositionals: 1, minPositionals: 1, variadicAfterMin: true },
-  }),
-  clipboard: parser("clipboard", {
-    valueOptions: ["--generation"],
-    payload: { payloadStartPositionals: 1, minPositionals: 1, variadicAfterMin: true },
-  }),
-  cookies: parser("cookies", {
-    payload: { payloadStartPositionals: 2, minPositionals: 2, variadicAfterMin: true },
-  }),
-  storage: parser("storage", {
-    payload: { payloadStartPositionals: 2, minPositionals: 2, variadicAfterMin: true },
-  }),
-  network: parser("network", { valueOptions: ["--url"] }),
-  console: parser("console"),
-  errors: parser("errors"),
-  highlight: parser("highlight", { valueOptions: ["--generation", "--duration"] }),
-  pdf: parser("pdf"),
-  "set.viewport": parser("set"),
-  diff: parser("diff", {
-    valueOptions: ["--selector"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  batch: parser("batch", {
-    flags: ["--bail", "--stdin"],
-    valueOptions: ["--timeout", "--max-output"],
-  }),
-  click: parser("click", { valueOptions: ["--generation"] }),
-  dblclick: parser("dblclick", { valueOptions: ["--generation"] }),
-  focus: parser("focus", { valueOptions: ["--generation"] }),
-  hover: parser("hover", { valueOptions: ["--generation"] }),
-  fill: parser("fill", {
-    valueOptions: ["--generation"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  type: parser("type", {
-    valueOptions: ["--generation"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  press: parser("press"),
-  "keyboard.type": parser("keyboard", {
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  "keyboard.inserttext": parser("keyboard", {
-    payload: { payloadStartPositionals: 1, minPositionals: 2 },
-  }),
-  check: parser("check", { valueOptions: ["--generation"] }),
-  uncheck: parser("uncheck", { valueOptions: ["--generation"] }),
-  select: parser("select", {
-    valueOptions: ["--generation"],
-    payload: { payloadStartPositionals: 1, minPositionals: 2, variadicAfterMin: true },
-  }),
-  scroll: parser("scroll", { valueOptions: ["--generation"] }),
-  scrollintoview: parser("scrollintoview", { valueOptions: ["--generation"] }),
-  swipe: parser("swipe", { valueOptions: ["--generation"] }),
-};
 
 type CliRouteFormatterSpec<C extends CommandId> = {
   readonly command: C;
@@ -281,30 +157,6 @@ const routeFormatterSpecs = {
 } as const;
 
 type RouteFormatterSpecById = typeof routeFormatterSpecs;
-
-function parser(
-  label: string,
-  options: {
-    readonly flags?: readonly string[];
-    readonly valueOptions?: readonly string[];
-    readonly optionalValueOptions?: readonly string[];
-    readonly payload?: CliRouteParserSpec["payload"];
-    readonly allowDashDashPayload?: boolean;
-  } = {},
-): CliRouteParserSpec {
-  return {
-    label,
-    flags: [...jsonFlags, ...(options.flags ?? [])],
-    valueOptions: [...targetValueOptions, ...(options.valueOptions ?? [])],
-    ...(options.optionalValueOptions === undefined
-      ? {}
-      : { optionalValueOptions: options.optionalValueOptions }),
-    ...(options.payload === undefined ? {} : { payload: options.payload }),
-    ...(options.allowDashDashPayload === undefined
-      ? {}
-      : { allowDashDashPayload: options.allowDashDashPayload }),
-  };
-}
 
 function routeFormatter<C extends CommandId>(
   command: C,
@@ -584,100 +436,7 @@ function parseCliRouteArgv(
   binding: CliRouteBinding,
   argv: readonly string[],
 ): { readonly json: boolean } {
-  const args = argv.slice(1);
-  const positionals: string[] = [];
-  let json = false;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined) {
-      continue;
-    }
-
-    if (arg === "--" && binding.parser.allowDashDashPayload === true) {
-      break;
-    }
-
-    if (binding.parser.flags.includes(arg)) {
-      if (shouldTreatKnownOptionAsPayload(binding.parser, args, index, 1, positionals.length)) {
-        positionals.push(arg);
-      } else if (arg === "--json") {
-        json = true;
-      }
-      continue;
-    }
-
-    if (binding.parser.valueOptions.includes(arg)) {
-      const value = args[index + 1];
-      if (
-        binding.route.id === "select" &&
-        arg === "--generation" &&
-        value === undefined &&
-        canTreatUnknownOptionAsPayload(binding.parser, positionals.length)
-      ) {
-        positionals.push(arg);
-        continue;
-      }
-
-      if (shouldTreatKnownOptionAsPayload(binding.parser, args, index, 2, positionals.length)) {
-        positionals.push(arg);
-        continue;
-      }
-
-      if (value === undefined || value.startsWith("-")) {
-        throw new CliUsageError(`Missing value for ${arg}.`);
-      }
-      index += 1;
-      continue;
-    }
-
-    if (binding.parser.optionalValueOptions?.includes(arg) === true) {
-      const value = args[index + 1];
-      if (value !== undefined && !value.startsWith("-")) {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      if (canTreatUnknownOptionAsPayload(binding.parser, positionals.length)) {
-        positionals.push(arg);
-        continue;
-      }
-      throw new CliUsageError(`Unsupported ${binding.parser.label} option: ${arg}`);
-    }
-
-    positionals.push(arg);
-  }
-
-  return { json };
-}
-
-function shouldTreatKnownOptionAsPayload(
-  parser: CliRouteParserSpec,
-  args: readonly string[],
-  index: number,
-  width: number,
-  currentPositionals: number,
-): boolean {
-  const payload = parser.payload;
-  if (payload === undefined || currentPositionals < payload.payloadStartPositionals) {
-    return false;
-  }
-
-  return currentPositionals + Math.max(0, args.length - index - width) < payload.minPositionals;
-}
-
-function canTreatUnknownOptionAsPayload(
-  parser: CliRouteParserSpec,
-  currentPositionals: number,
-): boolean {
-  const payload = parser.payload;
-  return (
-    payload !== undefined &&
-    currentPositionals >= payload.payloadStartPositionals &&
-    (currentPositionals < payload.minPositionals || payload.variadicAfterMin === true)
-  );
+  return parseArgvWithRouteContract(binding.parser, binding.route.id, argv);
 }
 
 function routePathMatchesPositionals(

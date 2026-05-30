@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
 import type { RequestEnvelope } from "@firefox-cli/protocol";
+import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import {
+  getOptionValue,
+  hasOption,
   optionalTarget,
   parsePositiveIntegerValue,
   parseTargetOptions,
-  readFlagValue,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
@@ -52,80 +54,31 @@ export function screenshotWantsJsonOutput(args: readonly string[]): boolean {
 }
 
 function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArguments {
-  const optionArgs: string[] = [];
-  const parsed: {
-    outputPath?: string;
-    format: "png" | "jpeg";
-    fullPage: boolean;
-    quality?: string;
-    timeout?: string;
-    maxImageBytes?: string;
-    json: boolean;
-  } = { format: "png", fullPage: false, json: false };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined) {
-      continue;
-    }
-
-    switch (arg) {
-      case "--json":
-        parsed.json = true;
-        optionArgs.push(arg);
-        break;
-      case "--timeout":
-        parsed.timeout = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--max-output":
-        parsed.maxImageBytes = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--full":
-        parsed.fullPage = true;
-        break;
-      case "--format":
-      case "--screenshot-format": {
-        const format = readFlagValue(args, index, arg).toLowerCase();
-        if (!isScreenshotFormat(format)) {
-          throw new CliUsageError("Only PNG and JPEG screenshots are supported.");
-        }
-        parsed.format = format;
-        index += 1;
-        break;
-      }
-      case "--screenshot-quality":
-        parsed.quality = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--window":
-      case "--tab": {
-        const value = readFlagValue(args, index, arg);
-        optionArgs.push(arg, value);
-        index += 1;
-        break;
-      }
-      default:
-        if (arg.startsWith("-")) {
-          throw new CliUsageError(`Unsupported screenshot option: ${arg}`);
-        }
-        if (parsed.outputPath !== undefined) {
-          throw new CliUsageError("Specify at most one screenshot path.");
-        }
-        parsed.outputPath = arg;
-        break;
-    }
+  const parsed = parseCliRouteArgsForRoute("screenshot", args);
+  const [outputPath, extraPath] = parsed.positionals;
+  if (extraPath !== undefined) {
+    throw new CliUsageError("Specify at most one screenshot path.");
   }
 
+  const formatValue = getOptionValue(parsed.optionArgs, [
+    "--format",
+    "--screenshot-format",
+  ])?.toLowerCase();
+  if (formatValue !== undefined && !isScreenshotFormat(formatValue)) {
+    throw new CliUsageError("Only PNG and JPEG screenshots are supported.");
+  }
+  const quality = getOptionValue(parsed.optionArgs, ["--screenshot-quality"]);
+  const timeout = getOptionValue(parsed.optionArgs, ["--timeout"]);
+  const maxImageBytes = getOptionValue(parsed.optionArgs, ["--max-output"]);
+
   return {
-    optionArgs,
-    ...(parsed.outputPath === undefined ? {} : { outputPath: parsed.outputPath }),
-    format: parsed.format,
-    fullPage: parsed.fullPage,
-    ...(parsed.quality === undefined ? {} : { quality: parsed.quality }),
-    ...(parsed.timeout === undefined ? {} : { timeout: parsed.timeout }),
-    ...(parsed.maxImageBytes === undefined ? {} : { maxImageBytes: parsed.maxImageBytes }),
+    optionArgs: parsed.optionArgs,
+    ...(outputPath === undefined ? {} : { outputPath }),
+    format: formatValue ?? "png",
+    fullPage: hasOption(parsed.optionArgs, "--full"),
+    ...(quality === undefined ? {} : { quality }),
+    ...(timeout === undefined ? {} : { timeout }),
+    ...(maxImageBytes === undefined ? {} : { maxImageBytes }),
     json: parsed.json,
   };
 }

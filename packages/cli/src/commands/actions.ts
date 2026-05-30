@@ -1,4 +1,5 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
+import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import {
   optionalNumberOption,
   optionalStringOption,
@@ -7,7 +8,6 @@ import {
   parsePayloadPositionalsAndOptions,
   parsePositionalsAndOptions,
   parseTargetOptions,
-  readFlagValue,
   sourceDragTarget,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
@@ -172,39 +172,7 @@ export function parseSelectArguments(args: readonly string[]): {
   readonly positionals: readonly string[];
   readonly optionArgs: readonly string[];
 } {
-  const positionals: string[] = [];
-  const optionArgs: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined) {
-      continue;
-    }
-
-    if (arg === "--json") {
-      optionArgs.push(arg);
-      continue;
-    }
-
-    if (arg === "--tab" || arg === "--window") {
-      const value = readFlagValue(args, index, arg);
-      optionArgs.push(arg, value);
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--generation") {
-      const value = args[index + 1];
-      if (value !== undefined) {
-        optionArgs.push(arg, value);
-        index += 1;
-        continue;
-      }
-    }
-
-    positionals.push(arg);
-  }
-
-  return { positionals, optionArgs };
+  return parseCliRouteArgsForRoute("select", args);
 }
 
 export function buildScrollRequest(argv: readonly string[]): RequestEnvelope {

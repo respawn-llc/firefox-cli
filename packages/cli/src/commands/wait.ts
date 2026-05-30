@@ -1,10 +1,12 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
+import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import {
+  getOptionValue,
+  hasOption,
   optionalTarget,
   parseElementTarget,
   parsePositiveIntegerValue,
   parseTargetOptions,
-  readFlagValue,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError } from "../types.js";
@@ -148,83 +150,26 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
 }
 
 function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {
-  const parsed: {
-    positionals: string[];
-    text?: string;
-    urlGlob?: string;
-    expression?: string;
-    loadState?: string;
-    download?: string;
-    state?: string;
-    generationId?: string;
-    timeout?: string;
-    interval?: string;
-  } = { positionals: [] };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === undefined || arg === "--json") {
-      continue;
-    }
-
-    if (arg === "--window" || arg === "--tab") {
-      readFlagValue(args, index, arg);
-      index += 1;
-      continue;
-    }
-
-    switch (arg) {
-      case "--text":
-        parsed.text = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--url":
-        parsed.urlGlob = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--fn":
-        parsed.expression = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--load":
-        parsed.loadState = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--download":
-        {
-          const downloadTarget = args[index + 1];
-          if (downloadTarget !== undefined && !downloadTarget.startsWith("-")) {
-            parsed.download = downloadTarget;
-            index += 1;
-          } else {
-            parsed.download = "";
-          }
-        }
-        break;
-      case "--state":
-        parsed.state = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--generation":
-        parsed.generationId = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--timeout":
-        parsed.timeout = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      case "--interval":
-        parsed.interval = readFlagValue(args, index, arg);
-        index += 1;
-        break;
-      default:
-        if (arg.startsWith("-")) {
-          throw new CliUsageError(`Unsupported wait option: ${arg}`);
-        }
-        parsed.positionals.push(arg);
-        break;
-    }
-  }
-
-  return parsed;
+  const parsed = parseCliRouteArgsForRoute("wait", args);
+  const text = getOptionValue(parsed.optionArgs, ["--text"]);
+  const urlGlob = getOptionValue(parsed.optionArgs, ["--url"]);
+  const expression = getOptionValue(parsed.optionArgs, ["--fn"]);
+  const loadState = getOptionValue(parsed.optionArgs, ["--load"]);
+  const download = getOptionValue(parsed.optionArgs, ["--download"]);
+  const state = getOptionValue(parsed.optionArgs, ["--state"]);
+  const generationId = getOptionValue(parsed.optionArgs, ["--generation"]);
+  const timeout = getOptionValue(parsed.optionArgs, ["--timeout"]);
+  const interval = getOptionValue(parsed.optionArgs, ["--interval"]);
+  return {
+    positionals: parsed.positionals,
+    ...(text === undefined ? {} : { text }),
+    ...(urlGlob === undefined ? {} : { urlGlob }),
+    ...(expression === undefined ? {} : { expression }),
+    ...(loadState === undefined ? {} : { loadState }),
+    ...(hasOption(parsed.optionArgs, "--download") ? { download: download ?? "" } : {}),
+    ...(state === undefined ? {} : { state }),
+    ...(generationId === undefined ? {} : { generationId }),
+    ...(timeout === undefined ? {} : { timeout }),
+    ...(interval === undefined ? {} : { interval }),
+  };
 }
