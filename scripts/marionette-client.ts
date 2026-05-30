@@ -2,6 +2,7 @@ import { createConnection, type Socket } from "node:net";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FIREFOX_CLI_EXTENSION_ID } from "@firefox-cli/native-host";
+import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
 export type MarionetteApprovalResult = {
   readonly captureVisibleTabAvailableBeforeApproval: boolean;
@@ -133,7 +134,10 @@ class MarionetteClient {
       this.#pending.set(id, { resolve, reject });
     });
     this.#socket.write(`${Buffer.byteLength(payload)}:${payload}`);
-    return withTimeout(response, 10_000, `Marionette command timed out: ${command}`);
+    return withTimeout(response, {
+      timeoutMs: 10_000,
+      timeoutMessage: () => `Marionette command timed out: ${command}`,
+    });
   }
 
   close(): void {
@@ -186,44 +190,4 @@ class MarionetteClient {
       }
     }
   }
-}
-
-async function pollUntil<T>(
-  check: () => Promise<T | false>,
-  options: {
-    readonly timeoutMs: number;
-    readonly intervalMs: number;
-    readonly timeoutMessage: () => string;
-  },
-): Promise<T> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const value = await check();
-    if (value !== false) {
-      return value;
-    }
-    await sleep(options.intervalMs);
-  }
-
-  throw new Error(options.timeoutMessage());
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), ms);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }

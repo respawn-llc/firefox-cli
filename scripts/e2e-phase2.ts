@@ -14,6 +14,7 @@ import { createTempDir } from "@firefox-cli/test-support";
 import { planPhase2E2e } from "./e2e-phase2-plan.js";
 import { parseJsonWithSchema } from "./manifest-validation.js";
 import { raceWithProcessFailure, runProcess, startManagedProcess } from "./process-runner.js";
+import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
 await access(binaryPath);
@@ -47,11 +48,10 @@ try {
   );
   const approve = createRequest("pair.approve", {}, "approve-1");
   nativeHost.child.stdin.write(encodeNativeMessageFrame(approve));
-  const approval = (await withTimeout(
-    reader.read(),
-    5000,
-    "Native host did not answer pair approval.",
-  )) as ReturnType<typeof createOkResponse<"pair.approve">>;
+  const approval = (await withTimeout(reader.read(), {
+    timeoutMs: 5000,
+    timeoutMessage: () => "Native host did not answer pair approval.",
+  })) as ReturnType<typeof createOkResponse<"pair.approve">>;
   if (!approval.ok) {
     throw new Error(`Pair approval failed: ${JSON.stringify(approval)}`);
   }
@@ -70,18 +70,20 @@ try {
     "hello-1",
   );
   nativeHost.child.stdin.write(encodeNativeMessageFrame(hello));
-  await withTimeout(reader.read(), 5000, "Native host did not answer paired hello.");
+  await withTimeout(reader.read(), {
+    timeoutMs: 5000,
+    timeoutMessage: () => "Native host did not answer paired hello.",
+  });
 
   const cli = runProcess(binaryPath, ["tab", "--json"], {
     env: e2ePlan.env,
     timeoutMs: 5000,
     label: "phase2 firefox-cli tab",
   });
-  const request = (await withTimeout(
-    reader.read(),
-    5000,
-    "Native host did not forward the CLI request to the extension.",
-  )) as ReturnType<typeof createRequest<"tabs.list">>;
+  const request = (await withTimeout(reader.read(), {
+    timeoutMs: 5000,
+    timeoutMessage: () => "Native host did not forward the CLI request to the extension.",
+  })) as ReturnType<typeof createRequest<"tabs.list">>;
   if (request.command !== "tabs.list") {
     throw new Error(`Expected tabs.list request, received ${JSON.stringify(request)}`);
   }
@@ -131,35 +133,19 @@ async function waitForEndpoint(endpoint: LocalIpcEndpoint): Promise<void> {
     return;
   }
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 5000) {
-    try {
-      await access(endpoint.path);
-      return;
-    } catch {
-      await sleep(25);
-    }
-  }
-
-  throw new Error(`IPC endpoint did not appear: ${endpoint.path}`);
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), ms);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+  await pollUntil(
+    async () => {
+      try {
+        await access(endpoint.path);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      timeoutMs: 5000,
+      intervalMs: 25,
+      timeoutMessage: () => `IPC endpoint did not appear: ${endpoint.path}`,
+    },
+  );
 }

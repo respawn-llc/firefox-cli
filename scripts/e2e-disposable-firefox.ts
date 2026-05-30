@@ -23,6 +23,7 @@ import {
   type ManagedProcess,
 } from "./process-runner.js";
 import { parseJsonWithSchema } from "./manifest-validation.js";
+import { pollUntil } from "./script-timing.js";
 
 type CliRun = {
   readonly exitCode: number | null;
@@ -475,30 +476,6 @@ async function terminateProcesses(pids: readonly number[], force: boolean): Prom
 
 function webExtOutput(): string {
   return webExt?.output() ?? "";
-}
-
-async function pollUntil<T>(
-  check: () => Promise<T | false>,
-  options: {
-    readonly timeoutMs: number;
-    readonly intervalMs: number;
-    readonly timeoutMessage: () => string;
-  },
-): Promise<T> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const value = await check();
-    if (value !== false) {
-      return value;
-    }
-    await sleep(options.intervalMs);
-  }
-
-  throw new Error(options.timeoutMessage());
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
 function tail(value: string, maxChars: number): string {

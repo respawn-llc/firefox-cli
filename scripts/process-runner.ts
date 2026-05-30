@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { withTimeout } from "./script-timing.js";
 
 export type ProcessOutputMode = "pipe" | "ignore" | "inherit";
 
@@ -76,12 +77,15 @@ export async function runProcess(
   const wait =
     options.timeoutMs === undefined
       ? managed.wait()
-      : withTimeout(managed.wait(), options.timeoutMs, async () => {
-          await managed.stop();
-          throw new ProcessRunnerError(
+      : withTimeout(managed.wait(), {
+          timeoutMs: options.timeoutMs,
+          onTimeout: async () => {
+            await managed.stop();
+          },
+          timeoutMessage: () =>
             `${processLabel(command, options)} timed out after ${options.timeoutMs}ms.\n${managed.output()}`,
-            errorDetails({ pid: managed.pid }),
-          );
+          createError: (message) =>
+            new ProcessRunnerError(message, errorDetails({ pid: managed.pid })),
         });
   const result = await wait;
   const expectedExitCodes = options.expectedExitCodes ?? [0];
@@ -299,39 +303,10 @@ function exitDescription(result: ProcessResult): string {
     : `signal ${result.signal}`;
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  onTimeout: () => Promise<never>,
-): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => {
-          onTimeout().then(_resolve, reject);
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
 function waitForStop<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timeout = setTimeout(() => reject(new Error("process did not stop")), ms);
-    }),
-  ]).finally(() => {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
+  return withTimeout(promise, {
+    timeoutMs: ms,
+    timeoutMessage: () => "process did not stop",
   });
 }
 
