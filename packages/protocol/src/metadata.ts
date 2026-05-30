@@ -28,6 +28,23 @@ export type CommandSecurityMetadata =
       readonly reasons: readonly [CommandPrivilegeReason, ...CommandPrivilegeReason[]];
     };
 
+export type CommandProtocolParameterMatch = {
+  readonly path: readonly [string, ...string[]];
+  readonly equals: string | number | boolean | null;
+};
+
+export type CommandProtocolRequirement = {
+  readonly minProtocolVersion: number;
+  readonly reason: string;
+  readonly params?: {
+    readonly matches: readonly [CommandProtocolParameterMatch, ...CommandProtocolParameterMatch[]];
+  };
+};
+
+export type CommandCompatibilityMetadata = {
+  readonly requirements: readonly CommandProtocolRequirement[];
+};
+
 export type CliRouteMetadata = {
   readonly id: string;
   readonly path: readonly [string, ...string[]];
@@ -53,6 +70,7 @@ export type CommandSchemaMetadata = {
   readonly action: boolean;
   readonly timeout: CommandTimeoutPolicy;
   readonly security?: CommandSecurityMetadata;
+  readonly compatibility?: CommandCompatibilityMetadata;
   readonly batch: CommandBatchMetadata;
   readonly cliRoutes: readonly CliRouteMetadata[];
 };

@@ -2,6 +2,7 @@ import {
   PROTOCOL_VERSION,
   actionKinds,
   commandSchemas,
+  createErrorResponse,
   createRequest,
   type CommandId,
   type RequestEnvelope,
@@ -1197,5 +1198,33 @@ describe("browser command handling", () => {
       },
     });
     expect(response.ok ? "" : response.error.message).toContain("Open a normal web page");
+  });
+
+  it("surfaces stale content-script version mismatches without treating them as injection failures", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1", 1);
+    adapter.contentResponse = createErrorResponse(
+      "snapshot-1",
+      {
+        code: "VERSION_MISMATCH",
+        message: "Protocol version is not supported.",
+        details: { supported: 1, actual: 2 },
+      },
+      PROTOCOL_VERSION,
+    );
+
+    const response = await handleBrowserRequest(request, adapter);
+
+    expect(response).toMatchObject({
+      protocolVersion: 1,
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        message: expect.stringContaining("Reload the tab"),
+      },
+    });
+    expect(adapter.contentRequests).toEqual([{ tabId: 101, command: "snapshot" }]);
   });
 });

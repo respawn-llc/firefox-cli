@@ -5,6 +5,7 @@ import {
   createLocalComponentIdentity,
   createRequestProtocolMismatchError,
   createProtocolSession,
+  getNegotiatedProtocolSession,
   getRequestProtocolCompatibility,
   isRequestCommand,
   localProtocolVersionRange,
@@ -13,6 +14,7 @@ import {
   parseBatchStepResultAs,
   type BatchResult,
   type CommandId,
+  type ProtocolConnectionState,
   type ProtocolError,
   type ProtocolSession,
   type ProtocolVersionRange,
@@ -30,10 +32,10 @@ export type ExtensionConnection = {
   send(request: RequestEnvelope): Promise<unknown>;
 };
 
-export type ExtensionProtocolState =
-  | { readonly state: "negotiating" }
-  | { readonly state: "negotiated"; readonly session: ProtocolSession }
-  | { readonly state: "incompatible"; readonly error: ProtocolError };
+export type ExtensionProtocolState = Exclude<
+  ProtocolConnectionState,
+  { readonly state: "disconnected" }
+>;
 
 export type NativeHostBrokerOptions = {
   readonly hostIdentity: HostIdentity;
@@ -347,19 +349,8 @@ function getNegotiatedExtensionSession(
     return { ok: true, value: createProtocolSession(localProtocolVersionRange.protocolMax) };
   }
 
-  if (connection.protocolState.state === "negotiated") {
-    return { ok: true, value: connection.protocolState.session };
-  }
-
-  if (connection.protocolState.state === "incompatible") {
-    return { ok: false, error: connection.protocolState.error };
-  }
-
-  return {
-    ok: false,
-    error: {
-      code: "EXTENSION_NOT_CONNECTED",
-      message: "Firefox extension protocol negotiation has not completed.",
-    },
-  };
+  return getNegotiatedProtocolSession(connection.protocolState, {
+    code: "EXTENSION_NOT_CONNECTED",
+    message: "Firefox extension protocol negotiation has not completed.",
+  });
 }

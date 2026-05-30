@@ -6,6 +6,8 @@ import type {
   CliRouteEntry,
   CliRouteMetadata,
   CommandBatchMetadata,
+  CommandCompatibilityMetadata,
+  CommandProtocolRequirement,
   CommandSecurityMetadata,
 } from "../metadata.js";
 import { actionsCommandEntries } from "./actions.js";
@@ -157,6 +159,30 @@ export function getCommandSecurityMetadata(command: CommandId): CommandSecurityM
     : { level: "normal", reasons: [] };
 }
 
+export function getCommandCompatibilityMetadata(command: CommandId): CommandCompatibilityMetadata {
+  const entry = commandSchemas[command];
+  const metadata =
+    "compatibility" in entry
+      ? (entry.compatibility as CommandCompatibilityMetadata | undefined)
+      : undefined;
+  return metadata ?? { requirements: [] };
+}
+
+export function getRequestProtocolRequirement(request: {
+  readonly command: CommandId;
+  readonly params: unknown;
+}): CommandProtocolRequirement | undefined {
+  const requirements = getCommandCompatibilityMetadata(request.command).requirements.filter(
+    (requirement) => protocolRequirementMatchesParams(requirement, request.params),
+  );
+  return requirements.reduce<CommandProtocolRequirement | undefined>((highest, requirement) => {
+    if (highest === undefined) {
+      return requirement;
+    }
+    return requirement.minProtocolVersion > highest.minProtocolVersion ? requirement : highest;
+  }, undefined);
+}
+
 export function isPrivilegeSensitiveCommand(command: CommandId): boolean {
   return getCommandSecurityMetadata(command).level !== "normal";
 }
@@ -188,6 +214,27 @@ function isConditionallySensitiveRequest(request: {
     request.params.kind === "download" ||
     (request.params.kind === "load-state" && request.params.state === "networkidle")
   );
+}
+
+function protocolRequirementMatchesParams(
+  requirement: CommandProtocolRequirement,
+  params: unknown,
+): boolean {
+  const matches = requirement.params?.matches;
+  if (matches === undefined) {
+    return true;
+  }
+
+  return matches.every((match) => valueAtPath(params, match.path) === match.equals);
+}
+
+function valueAtPath(value: unknown, path: readonly string[]): unknown {
+  return path.reduce<unknown>((current, key) => {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    return current[key];
+  }, value);
 }
 
 function batchStepParamsWithDefaultTarget(command: string, params: unknown): unknown | undefined {

@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from "./constants.js";
 import type { ProtocolError } from "./core.js";
+import { getRequestProtocolRequirement, isCommandId, type CommandId } from "./registry/index.js";
 
 export type RequestProtocolCompatibility = {
   readonly compatible: boolean;
@@ -13,17 +14,16 @@ type RequestProtocolSubject = {
   readonly protocolVersion?: number;
 };
 
-const SCOPED_NETWORK_PROTOCOL_VERSION = 2;
-
 export function getRequestProtocolCompatibility(
   request: RequestProtocolSubject,
   protocolVersion: number = requestProtocolVersion(request),
 ): RequestProtocolCompatibility {
-  const requiredProtocolVersion = getRequiredRequestProtocolVersion(request);
+  const requirement = getRequestProtocolRequirementForSubject(request);
+  const requiredProtocolVersion = requirement?.minProtocolVersion ?? 1;
   return {
     compatible: protocolVersion >= requiredProtocolVersion,
     requiredProtocolVersion,
-    ...(requiredProtocolVersion > 1 ? { reason: requiredProtocolReason(request) } : {}),
+    ...(requirement === undefined ? {} : { reason: requirement.reason }),
   };
 }
 
@@ -44,54 +44,45 @@ export function createRequestProtocolMismatchError(
   };
 }
 
-function getRequiredRequestProtocolVersion(request: RequestProtocolSubject) {
-  return requestUsesScopedNetworkSemantics(request) ? SCOPED_NETWORK_PROTOCOL_VERSION : 1;
-}
-
-function requestUsesScopedNetworkSemantics(request: RequestProtocolSubject): boolean {
-  if (request.command === "network") {
-    return true;
-  }
-
-  if (request.command === "wait" && isNetworkIdleWaitParams(request.params)) {
-    return true;
-  }
-
-  if (request.command !== "batch" || !hasSteps(request.params)) {
-    return false;
-  }
-
-  return request.params.steps.some((step) =>
-    requestUsesScopedNetworkSemantics({
-      command: step.command,
-      params: step.params,
-    }),
-  );
-}
-
-function requiredProtocolReason(request: RequestProtocolSubject): string {
-  if (request.command === "batch") {
-    return "Batch contains scoped network command semantics.";
-  }
-  if (request.command === "wait") {
-    return "Network-idle waits are scoped to the resolved tab.";
-  }
-  return "Network commands are scoped to the resolved tab.";
-}
-
 function requestProtocolVersion(request: { readonly protocolVersion?: number }): number {
   return request.protocolVersion ?? PROTOCOL_VERSION;
 }
 
-function isNetworkIdleWaitParams(params: unknown): boolean {
-  return (
-    typeof params === "object" &&
-    params !== null &&
-    "kind" in params &&
-    params.kind === "load-state" &&
-    "state" in params &&
-    params.state === "networkidle"
-  );
+function getRequestProtocolRequirementForSubject(
+  request: RequestProtocolSubject,
+): { readonly minProtocolVersion: number; readonly reason: string } | undefined {
+  if (request.command === "batch" && hasSteps(request.params)) {
+    const childRequirement = request.params.steps.reduce<
+      { readonly minProtocolVersion: number; readonly reason: string } | undefined
+    >((highest, step) => {
+      const requirement = getRequestProtocolRequirementForSubject({
+        command: step.command,
+        params: step.params,
+      });
+      if (requirement === undefined) {
+        return highest;
+      }
+      if (highest === undefined) {
+        return requirement;
+      }
+      return requirement.minProtocolVersion > highest.minProtocolVersion ? requirement : highest;
+    }, undefined);
+    return childRequirement === undefined
+      ? undefined
+      : {
+          minProtocolVersion: childRequirement.minProtocolVersion,
+          reason: "Batch contains scoped network command semantics.",
+        };
+  }
+
+  if (!isCommandId(request.command)) {
+    return undefined;
+  }
+
+  return getRequestProtocolRequirement({
+    command: request.command as CommandId,
+    params: request.params,
+  });
 }
 
 function hasSteps(params: unknown): params is {

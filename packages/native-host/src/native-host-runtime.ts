@@ -4,11 +4,16 @@ import {
   createLocalComponentIdentity,
   createErrorResponse,
   createProtocolSession,
+  createProtocolStateErrorResponse,
+  getNegotiatedProtocolSession,
+  getProtocolMessageId,
+  isProtocolResponseLike,
+  isUnknownRequestCommand,
   kernelCapabilities,
   localProtocolVersionRange,
   parseBoundaryRequest,
   type CommandId,
-  type ProtocolError,
+  type ProtocolConnectionState,
   type ProtocolSession,
   type RequestEnvelope,
   type ResponseEnvelope,
@@ -189,7 +194,7 @@ async function runReadLoop(options: {
       message = await options.reader.read();
     } catch (error) {
       if (error instanceof NativeMessagingFrameError && error.recoverable) {
-        const protocolSession = getExtensionProtocolSession(options.connectionState.protocolState);
+        const protocolSession = getNativeProtocolSession(options.connectionState.protocolState);
         await writeNativeMessage(
           options.output,
           protocolSession.createErrorResponse("invalid-request", {
@@ -206,13 +211,13 @@ async function runReadLoop(options: {
       return;
     }
 
-    if (isResponseLike(message)) {
+    if (isProtocolResponseLike(message)) {
       const command = options.pending.getCommand(message.id);
       if (command === undefined) {
         continue;
       }
 
-      const protocolSession = getExtensionProtocolSession(options.connectionState.protocolState);
+      const protocolSession = getNativeProtocolSession(options.connectionState.protocolState);
       const parsed = protocolSession.parseResponse("host-to-extension", command, message);
       options.pending.settle(
         message.id,
@@ -255,10 +260,10 @@ async function handleExtensionRequest(options: {
   if (!parsed.ok) {
     const response = createProtocolStateErrorResponse(
       connectionState.protocolState,
-      getMessageId(message),
+      getProtocolMessageId(message),
       parsed.error,
     );
-    if (isRequestCommand(message, "hello") || parsed.error.code === "VERSION_MISMATCH") {
+    if (isUnknownRequestCommand(message, "hello") || parsed.error.code === "VERSION_MISMATCH") {
       connectionState.protocolState = { state: "incompatible", error: parsed.error };
     }
     return response;
@@ -373,49 +378,12 @@ function helloPairingStatus(
   return "not-approved";
 }
 
-function isResponseLike(message: unknown): message is { readonly id: string } {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "id" in message &&
-    "ok" in message &&
-    typeof message.id === "string"
-  );
-}
+type ExtensionProtocolState = Exclude<ProtocolConnectionState, { readonly state: "disconnected" }>;
 
-type ExtensionProtocolState =
-  | { readonly state: "negotiating" }
-  | { readonly state: "negotiated"; readonly session: ProtocolSession }
-  | { readonly state: "incompatible"; readonly error: ProtocolError };
-
-function getExtensionProtocolSession(state: ExtensionProtocolState): ProtocolSession {
-  return state.state === "negotiated"
-    ? state.session
-    : createProtocolSession(localProtocolVersionRange.protocolMax);
-}
-
-function createProtocolStateErrorResponse(
-  state: ExtensionProtocolState,
-  id: string,
-  error: ProtocolError,
-): ResponseEnvelope {
-  return getExtensionProtocolSession(state).createErrorResponse(id, error);
-}
-
-function getMessageId(message: unknown): string {
-  return typeof message === "object" &&
-    message !== null &&
-    "id" in message &&
-    typeof message.id === "string"
-    ? message.id
-    : "invalid-request";
-}
-
-function isRequestCommand(message: unknown, command: string): boolean {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "command" in message &&
-    message.command === command
-  );
+function getNativeProtocolSession(state: ExtensionProtocolState): ProtocolSession {
+  const result = getNegotiatedProtocolSession(state, {
+    code: "EXTENSION_NOT_CONNECTED",
+    message: "Firefox extension protocol negotiation has not completed.",
+  });
+  return result.ok ? result.value : createProtocolSession(localProtocolVersionRange.protocolMax);
 }

@@ -222,6 +222,14 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     security: { level: "sensitive", reasons: ["network-observation"] },
+    compatibility: {
+      requirements: [
+        {
+          minProtocolVersion: 2,
+          reason: "Network commands are scoped to the resolved tab.",
+        },
+      ],
+    },
     batch: { allowed: true, extensionDefaultTarget: true },
     cliRoutes: [{ id: "network", path: ["network"], batch: true }],
   },

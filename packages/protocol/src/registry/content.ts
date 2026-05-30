@@ -74,6 +74,20 @@ export const contentCommandEntries = defineCommandEntries({
       level: "conditional",
       reasons: ["page-function-evaluation", "downloads", "network-observation"],
     },
+    compatibility: {
+      requirements: [
+        {
+          minProtocolVersion: 2,
+          reason: "Network-idle waits are scoped to the resolved tab.",
+          params: {
+            matches: [
+              { path: ["kind"], equals: "load-state" },
+              { path: ["state"], equals: "networkidle" },
+            ],
+          },
+        },
+      ],
+    },
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
     cliRoutes: [{ id: "wait", path: ["wait"], batch: true }],
   },

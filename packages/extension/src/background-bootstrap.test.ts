@@ -73,6 +73,29 @@ describe("background bootstrap", () => {
       world: "MAIN",
     });
   });
+
+  it("does not refresh content scripts when an existing script returns a structured mismatch", async () => {
+    const port = new FakeNativePort();
+    const browser = createFakeBrowserApi(port);
+    const networkTracker = new NetworkRequestTracker();
+    const adapter = createBackgroundBrowserAdapter({ browser, networkTracker });
+
+    (browser.tabs as unknown as { response: unknown }).response = {
+      protocolVersion: 1,
+      id: "snapshot-1",
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        message: "Protocol version is not supported.",
+      },
+    };
+
+    await adapter.sendContentRequest(42, createRequest("snapshot", {}, "snapshot-1"));
+
+    const scriptingCalls = (browser.scripting as unknown as { readonly calls: readonly unknown[] })
+      .calls;
+    expect(scriptingCalls).toEqual([]);
+  });
 });
 
 class FakeNativePort implements NativePortLike {
@@ -115,13 +138,17 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
       goBack: async () => undefined,
       goForward: async () => undefined,
       reload: async () => undefined,
-      sendMessage: async function sendMessage(this: { failNextSendMessage: boolean }) {
+      response: undefined,
+      sendMessage: async function sendMessage(this: {
+        failNextSendMessage: boolean;
+        response: unknown;
+      }) {
         sendMessageCalls += 1;
         if (this.failNextSendMessage) {
           this.failNextSendMessage = false;
           throw new Error("content script missing");
         }
-        return { sendMessageCalls };
+        return this.response ?? { sendMessageCalls };
       },
       captureVisibleTab: async () => "data:image/png;base64,",
       onRemoved,

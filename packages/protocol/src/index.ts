@@ -12,4 +12,5 @@ export * from "./registry/define.js";
 export * from "./registry/index.js";
 export * from "./capabilities.js";
 export * from "./envelopes.js";
+export * from "./protocol-state.js";
 export * from "./typed-dispatch.js";

@@ -44,6 +44,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   clipboardText = "";
   networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
   contentFailure: Error | undefined;
+  contentResponse: unknown | undefined;
   evalFailure: Error | undefined;
   evalResult: EvalExecutorResult | undefined;
   captureFailure: Error | undefined;
@@ -160,6 +161,9 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     this.contentRequestVersions.push(request.protocolVersion);
     if (this.contentFailure !== undefined) {
       throw this.contentFailure;
+    }
+    if (this.contentResponse !== undefined) {
+      return this.contentResponse;
     }
 
     if (request.command === "ref.resolve") {

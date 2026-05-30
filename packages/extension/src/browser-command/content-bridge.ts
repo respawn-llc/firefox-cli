@@ -4,6 +4,7 @@ import {
   parseBoundaryResponse,
   withRequestProtocolVersion,
   type ContentCommandId,
+  type ProtocolError,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
@@ -34,6 +35,9 @@ export async function sendContentCommand<C extends ContentCommandId>(
     { protocolVersion: PROTOCOL_VERSION },
   );
   if (!contentResponse.ok) {
+    if (contentResponse.error.code === "VERSION_MISMATCH") {
+      return createContentVersionMismatchResponse(command, contentResponse.error);
+    }
     return createErrorResponse(
       command.id,
       contentResponse.error,
@@ -41,5 +45,24 @@ export async function sendContentCommand<C extends ContentCommandId>(
     ) as ResponseEnvelope<C>;
   }
 
+  if (!contentResponse.value.ok && contentResponse.value.error.code === "VERSION_MISMATCH") {
+    return createContentVersionMismatchResponse(command, contentResponse.value.error);
+  }
+
   return contentResponse.value as ResponseEnvelope<C>;
+}
+
+function createContentVersionMismatchResponse<C extends ContentCommandId>(
+  command: RequestEnvelope<C>,
+  error: ProtocolError,
+): ResponseEnvelope<C> {
+  return createErrorResponse(
+    command.id,
+    {
+      ...error,
+      message:
+        "Content script protocol mismatch. Reload the tab and ensure the Firefox extension is upgraded.",
+    },
+    command.protocolVersion,
+  ) as ResponseEnvelope<C>;
 }

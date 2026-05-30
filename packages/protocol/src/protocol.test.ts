@@ -21,7 +21,9 @@ import {
   getRequestProtocolCompatibility,
   getCliRoutes,
   getCommandCliRoutes,
+  getCommandCompatibilityMetadata,
   getCommandSecurityMetadata,
+  getRequestProtocolRequirement,
   isActionCommand,
   isBatchableCommandId,
   isContentCommand,
@@ -496,6 +498,40 @@ describe("protocol command metadata", () => {
 });
 
 describe("request protocol compatibility", () => {
+  it("derives command protocol requirements from registry metadata", () => {
+    expect(getCommandCompatibilityMetadata("network")).toEqual({
+      requirements: [
+        {
+          minProtocolVersion: 2,
+          reason: "Network commands are scoped to the resolved tab.",
+        },
+      ],
+    });
+    expect(getRequestProtocolRequirement(createRequest("network", { action: "list" }))).toEqual({
+      minProtocolVersion: 2,
+      reason: "Network commands are scoped to the resolved tab.",
+    });
+    expect(
+      getRequestProtocolRequirement(
+        createRequest("wait", { kind: "load-state", state: "networkidle" }),
+      ),
+    ).toEqual({
+      minProtocolVersion: 2,
+      reason: "Network-idle waits are scoped to the resolved tab.",
+      params: {
+        matches: [
+          { path: ["kind"], equals: "load-state" },
+          { path: ["state"], equals: "networkidle" },
+        ],
+      },
+    });
+    expect(
+      getRequestProtocolRequirement(
+        createRequest("wait", { kind: "load-state", state: "complete" }),
+      ),
+    ).toBeUndefined();
+  });
+
   it("requires protocol v2 for scoped network semantics", () => {
     const network = createRequest("network", { action: "list" }, "network-v2");
     const networkIdle = createRequest(
