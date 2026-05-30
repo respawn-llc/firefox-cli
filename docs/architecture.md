@@ -27,7 +27,7 @@ Private windows are guarded at the extension command boundary. Read-only listing
 
 ## Content Scripts
 
-The extension injects content scripts on demand into normal web pages. Content scripts implement snapshots, element refs, getters, waits, and WebExtension-backed interactions. Refs belong to a document generation and are diagnostic handles, not durable selectors.
+The extension injects content scripts on demand into the main frame of normal web pages. Content scripts implement snapshots, element refs, getters, waits, and WebExtension-backed interactions. Refs belong to a document generation and are diagnostic handles, not durable selectors. Iframes are diagnostic/read-only through `snapshot` and `frame`; iframe-targeted execution is unsupported.
 
 Firefox-restricted pages and some privileged pages reject script injection. The CLI reports these failures as protocol errors instead of trying to bypass Firefox restrictions.
 

@@ -7,6 +7,7 @@ import type {
   CliRouteMetadata,
   CommandBatchMetadata,
   CommandCompatibilityMetadata,
+  CommandFrameScopeMetadata,
   CommandProtocolRequirement,
   CommandSecurityMetadata,
 } from "../metadata.js";
@@ -166,6 +167,27 @@ export function getCommandCompatibilityMetadata(command: CommandId): CommandComp
       ? (entry.compatibility as CommandCompatibilityMetadata | undefined)
       : undefined;
   return metadata ?? { requirements: [] };
+}
+
+export function getCommandFrameScopeMetadata(command: CommandId): CommandFrameScopeMetadata {
+  const entry = commandSchemas[command];
+  const metadata =
+    "frameScope" in entry ? (entry.frameScope as CommandFrameScopeMetadata | undefined) : undefined;
+  if (metadata !== undefined) {
+    return metadata;
+  }
+  if (entry.action || entry.content !== "never") {
+    return {
+      scope: "main-frame-only",
+      reason:
+        "This command runs in the resolved tab's main frame; iframe targeting is not implemented.",
+      future: "docs/iframe-targeting-future.md",
+    };
+  }
+  return {
+    scope: "not-applicable",
+    reason: "This command does not execute inside a page frame.",
+  };
 }
 
 export function getRequestProtocolRequirement(request: {

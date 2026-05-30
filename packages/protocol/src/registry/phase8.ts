@@ -50,6 +50,11 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "command",
     security: { level: "sensitive", reasons: ["page-code-execution"] },
+    frameScope: {
+      scope: "main-frame-only",
+      reason: "Eval runs in the resolved tab's main frame; iframe targeting is not implemented.",
+      future: "docs/iframe-targeting-future.md",
+    },
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
     cliRoutes: [{ id: "eval", path: ["eval"], batch: true }],
   },
@@ -146,6 +151,11 @@ export const phase8CommandEntries = defineCommandEntries({
     content: "always",
     action: false,
     timeout: "none",
+    frameScope: {
+      scope: "main-frame-with-iframe-diagnostics",
+      reason: "The frame command lists iframe diagnostics from the main frame only.",
+      future: "docs/iframe-targeting-future.md",
+    },
     batch: { allowed: true, extensionDefaultTarget: true },
     cliRoutes: [{ id: "frame", path: ["frame"], batch: true }],
   },

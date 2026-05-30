@@ -22,6 +22,12 @@ export const contentCommandEntries = defineCommandEntries({
     content: "always",
     action: false,
     timeout: "none",
+    frameScope: {
+      scope: "main-frame-with-iframe-diagnostics",
+      reason:
+        "Snapshot refs are generated for the main frame; iframe entries are diagnostic/read-only.",
+      future: "docs/iframe-targeting-future.md",
+    },
     batch: { allowed: true, extensionDefaultTarget: true },
     cliRoutes: [{ id: "snapshot", path: ["snapshot"], batch: true }],
   },

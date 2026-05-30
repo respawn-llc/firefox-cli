@@ -6,6 +6,15 @@ export type CommandOwner = "native-host" | "extension";
 export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
 export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
 export type CommandTimeoutPolicy = "none" | "command" | "batch";
+export type CommandFrameScope =
+  | "not-applicable"
+  | "main-frame-only"
+  | "main-frame-with-iframe-diagnostics";
+export type CommandFrameScopeMetadata = {
+  readonly scope: CommandFrameScope;
+  readonly reason: string;
+  readonly future?: string;
+};
 export type CommandPrivilegeReason =
   | "page-mutation"
   | "page-code-execution"
@@ -71,6 +80,7 @@ export type CommandSchemaMetadata = {
   readonly timeout: CommandTimeoutPolicy;
   readonly security?: CommandSecurityMetadata;
   readonly compatibility?: CommandCompatibilityMetadata;
+  readonly frameScope?: CommandFrameScopeMetadata;
   readonly batch: CommandBatchMetadata;
   readonly cliRoutes: readonly CliRouteMetadata[];
 };

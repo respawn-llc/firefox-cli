@@ -82,6 +82,7 @@ describe("runCli", () => {
       { argv: ["eval", "--bogus", "1"], stderr: "Unsupported eval option: --bogus\n" },
       { argv: ["screenshot", "--bogus"], stderr: "Unsupported screenshot option: --bogus\n" },
       { argv: ["find", "text", "Ready", "--bogus"], stderr: "Unsupported find option: --bogus\n" },
+      { argv: ["frame", "--frame", "0"], stderr: "Unsupported frame option: --frame\n" },
       { argv: ["upload", "--bogus"], stderr: "Unsupported upload option: --bogus\n" },
       { argv: ["fill", "#email", "text", "--bogus"], stderr: "Unsupported fill option: --bogus\n" },
       {

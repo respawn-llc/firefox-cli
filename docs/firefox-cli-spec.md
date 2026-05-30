@@ -240,14 +240,13 @@ Ref registry:
 - Invalidate refs on navigation, reload, frame reload, document replacement, or registry memory pressure.
 - `batch` shares refs created earlier in the same batch transaction.
 - Stale refs return `REF_NOT_FOUND` with "run `firefox-cli snapshot -i` again" guidance.
-- MVP refs are actionable only in the main frame.
-- Iframe output is diagnostic/read-only in `snapshot` and `frame`; interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
+- Refs are actionable only in the main frame.
+- Iframe output is diagnostic/read-only in `snapshot` and `frame`; iframe-targeted commands and interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
 
 Implementation approach:
 
 - Build snapshots from DOM, ARIA attributes, computed visibility, form metadata, and bounding boxes.
 - Start with main-frame content-script snapshots.
-- Add same-origin and cross-origin frame merging only after the frame prototype proves ref lifetime, frame targeting, and partial failure behavior.
 - Restricted frames may produce partial output with diagnostics.
 
 ## Action Backend
@@ -265,8 +264,8 @@ Generated DOM events are not trusted user input. Sites that check `event.isTrust
 `eval` is included in MVP but must be explicitly specified and tested.
 
 - Support `eval <js>`, `eval --stdin`, and `eval -b <base64>`.
-- Default execution target is the resolved tab's main frame.
-- Add frame targeting only after the snapshot/ref frame model is implemented.
+- Execution target is the resolved tab's main frame.
+- Frame-targeted eval returns `UNSUPPORTED_CAPABILITY`.
 - Execute in the page/main world when Firefox supports it; otherwise return `UNSUPPORTED_CAPABILITY` for operations that require page-world access.
 - Results must be structured-cloneable or JSON-serializable; unsupported values return a structured serialization error.
 - Capture thrown errors with name, message, stack when available, and frame context.

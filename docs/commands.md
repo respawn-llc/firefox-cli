@@ -53,7 +53,7 @@ firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--max-output bytes] [--
 firefox-cli ref <@ref> [--generation id] [--json]
 ```
 
-`snapshot` returns a text representation of the main-frame DOM and assigns element refs such as `@e1`. Refs are scoped to the reported generation ID; use `--generation` when consuming a ref after another snapshot has run.
+`snapshot` returns a text representation of the main-frame DOM and assigns element refs such as `@e1`. Refs are scoped to the reported generation ID; use `--generation` when consuming a ref after another snapshot has run. Iframe entries are diagnostic/read-only; iframe refs and frame-targeted commands are unsupported.
 
 Options:
 
@@ -149,7 +149,7 @@ Example:
 | Command | Behavior |
 | --- | --- |
 | `firefox-cli find role|text|label|placeholder|alt|title|testid <value> [--first\|--last\|--nth n] [--json]` | Find elements by semantic locator. |
-| `firefox-cli frame [--json]` | List main-frame iframe diagnostics. |
+| `firefox-cli frame [--json]` | List iframe diagnostics visible from the main frame. |
 | `firefox-cli download <url> [filename] [--save-as] [--json]` | Start a Firefox download. |
 | `firefox-cli dialog status|accept|dismiss [--json]` | Report dialog command status; native modal accept/dismiss is not available through content scripts. |
 | `firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]` | Read/write clipboard text or copy/paste element text. |

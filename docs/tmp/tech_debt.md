@@ -22,7 +22,7 @@ This repository is small enough for a full architectural pass: roughly 35k lines
 
 - [x] Decide the protocol compatibility and content-script refresh policy before refactoring negotiation. `packages/protocol/src/envelopes.ts` hardcodes feature-version checks, while `packages/native-host/src/native-host-runtime.ts`, `packages/extension/src/background-controller.ts`, `packages/native-host/src/local-ipc.ts`, and `packages/native-host/src/host-broker.ts` duplicate session state machines. Decide whether required protocol versions live entirely in command metadata, how negotiated CLI-host and host-extension sessions compose, and whether background should reinject content scripts on `VERSION_MISMATCH`. Implement the refactor only after this policy is documented in the plan.
 
-- [ ] Decide iframe command scope as a product contract. Docs and architecture mention frame-scoped work, but implementation lists iframe diagnostics and injects content scripts with `allFrames: false` in `packages/extension/src/background.ts`. Decide whether iframe actions are unsupported, prototype-gated, or first-class frame targets. Encode that decision in protocol capability metadata, CLI help, snapshot diagnostics, and tests.
+- [x] Decide iframe command scope as a product contract. Docs and architecture mention frame-scoped work, but implementation lists iframe diagnostics and injects content scripts with `allFrames: false` in `packages/extension/src/background.ts`. Decide whether iframe actions are unsupported, prototype-gated, or first-class frame targets. Encode that decision in protocol capability metadata, CLI help, snapshot diagnostics, and tests.
 
 ## Medium Workstreams
 
