@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { createTempDir } from "@firefox-cli/test-support";
 import {
   ProcessRunnerError,
   raceWithProcessFailure,
@@ -70,6 +73,29 @@ describe("process runner", () => {
     await eventually(() => expectProcessGone(pid));
   });
 
+  it("terminates timed-out process trees", async () => {
+    const tempDir = await createTempDir("firefox-cli-process-tree");
+    const grandchildPidFile = join(tempDir, "grandchild.pid");
+    let failure: unknown;
+    let grandchildPid: number | undefined;
+    try {
+      try {
+        await runProcess(node, processTreeArgs(grandchildPidFile), {
+          timeoutMs: 150,
+        });
+      } catch (error) {
+        failure = error;
+        grandchildPid = Number(await readFile(grandchildPidFile, "utf8"));
+      }
+
+      expect(failure).toBeInstanceOf(ProcessRunnerError);
+      expect(grandchildPid).toBeTypeOf("number");
+      await eventually(() => expectProcessGone(grandchildPid));
+    } finally {
+      cleanupProcess(grandchildPid);
+    }
+  });
+
   it("stops managed children with signal escalation", async () => {
     const managed = startManagedProcess(node, ["-e", "setInterval(() => undefined, 1000);"]);
     const pid = managed.pid;
@@ -79,6 +105,34 @@ describe("process runner", () => {
     expect(stopped.signal ?? stopped.exitCode).not.toBeNull();
     expect(pid).toBeTypeOf("number");
     await eventually(() => expectProcessGone(pid));
+  });
+
+  it("stops managed process trees with signal escalation", async () => {
+    const tempDir = await createTempDir("firefox-cli-process-tree");
+    const grandchildPidFile = join(tempDir, "grandchild.pid");
+    const managed = startManagedProcess(node, processTreeArgs(grandchildPidFile));
+    const pid = managed.pid;
+    let grandchildPid: number | undefined;
+
+    try {
+      grandchildPid = await eventuallyValue(async () => {
+        const value = Number(await readFile(grandchildPidFile, "utf8"));
+        return Number.isInteger(value) && value > 0 ? value : false;
+      });
+      const stopped = await managed.stop({
+        interruptGraceMs: 50,
+        terminateGraceMs: 50,
+        forceGraceMs: 500,
+      });
+
+      expect(stopped.signal ?? stopped.exitCode).not.toBeNull();
+      expect(pid).toBeTypeOf("number");
+      await eventually(() => expectProcessGone(pid));
+      await eventually(() => expectProcessGone(grandchildPid));
+    } finally {
+      cleanupProcessTree(pid);
+      cleanupProcess(grandchildPid);
+    }
   });
 
   it("races readiness against child exit and spawn failure", async () => {
@@ -129,11 +183,65 @@ async function eventually(assertion: () => void): Promise<void> {
   }
 }
 
+async function eventuallyValue<T>(read: () => Promise<T | false>): Promise<T> {
+  const startedAt = Date.now();
+  let lastError: unknown;
+  while (Date.now() - startedAt < 1000) {
+    try {
+      const value = await read();
+      if (value !== false) {
+        return value;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(25);
+  }
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error("Timed out waiting for value.");
+}
+
 function expectProcessGone(pid: number | undefined): void {
   if (pid === undefined) {
     throw new Error("pid was not captured");
   }
   expect(() => process.kill(pid, 0)).toThrow();
+}
+
+function processTreeArgs(grandchildPidFile: string): readonly string[] {
+  const grandchildScript = "setInterval(() => undefined, 1000);";
+  const parentScript = [
+    'const { spawn } = require("node:child_process");',
+    'const { writeFileSync } = require("node:fs");',
+    `const child = spawn(process.execPath, ["-e", ${JSON.stringify(grandchildScript)}], { stdio: "ignore" });`,
+    "writeFileSync(process.argv[1], String(child.pid));",
+    "setInterval(() => undefined, 1000);",
+  ].join("\n");
+  return ["-e", parentScript, grandchildPidFile];
+}
+
+function cleanupProcessTree(pid: number | undefined): void {
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(process.platform === "win32" ? pid : -pid, "SIGKILL");
+  } catch {
+    // Process already exited.
+  }
+}
+
+function cleanupProcess(pid: number | undefined): void {
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // Process already exited.
+  }
 }
 
 function sleep(ms: number): Promise<void> {

@@ -428,36 +428,49 @@ async function findFirefoxBinary(): Promise<string> {
 
 async function stopFirefoxProcessesForProfile(profileDir: string): Promise<void> {
   const pids = await findDisposableFirefoxProcessIds(profileDir);
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // Process already exited.
-    }
-  }
+  await terminateProcesses(pids, false);
 
   await pollUntil(async () => (await findDisposableFirefoxProcessIds(profileDir)).length === 0, {
     timeoutMs: 5000,
     intervalMs: 100,
     timeoutMessage: () => `Disposable Firefox did not exit for profile ${profileDir}.`,
   }).catch(async () => {
-    for (const pid of await findDisposableFirefoxProcessIds(profileDir)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        // Process already exited.
-      }
-    }
+    await terminateProcesses(await findDisposableFirefoxProcessIds(profileDir), true);
+    await pollUntil(async () => (await findDisposableFirefoxProcessIds(profileDir)).length === 0, {
+      timeoutMs: 3000,
+      intervalMs: 100,
+      timeoutMessage: () => `Disposable Firefox survived force cleanup for profile ${profileDir}.`,
+    });
   });
 }
 
 async function findDisposableFirefoxProcessIds(profileDir: string): Promise<number[]> {
-  const result = await runProcess("ps", ["-axo", "pid=,command="], {
+  const result = await runProcess("ps", ["-axo", "pid=,comm=,args="], {
     timeoutMs: 5000,
     maxOutputBytes: 512 * 1024,
     label: "profile-scoped Firefox process scan",
   });
   return parseDisposableFirefoxProcessIds(result.stdout, { profileDir });
+}
+
+async function terminateProcesses(pids: readonly number[], force: boolean): Promise<void> {
+  await Promise.all(
+    pids.map(async (pid) => {
+      if (process.platform === "win32") {
+        await runProcess("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], {
+          expectedExitCodes: [0, 128],
+          timeoutMs: 5000,
+          label: `taskkill Firefox process ${String(pid)}`,
+        }).catch(() => undefined);
+        return;
+      }
+      try {
+        process.kill(pid, force ? "SIGKILL" : "SIGTERM");
+      } catch {
+        // Process already exited.
+      }
+    }),
+  );
 }
 
 function webExtOutput(): string {

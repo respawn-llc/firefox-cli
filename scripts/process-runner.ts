@@ -31,6 +31,7 @@ export type ProcessRunnerOptions = {
 export type StopProcessOptions = {
   readonly interruptGraceMs?: number;
   readonly terminateGraceMs?: number;
+  readonly forceGraceMs?: number;
 };
 
 export class ProcessRunnerError extends Error {
@@ -64,6 +65,7 @@ export type ManagedProcess = {
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
 const DEFAULT_INTERRUPT_GRACE_MS = 5000;
 const DEFAULT_TERMINATE_GRACE_MS = 3000;
+const DEFAULT_FORCE_GRACE_MS = 3000;
 
 export async function runProcess(
   command: string,
@@ -199,18 +201,30 @@ async function stopManagedProcess(
     return waitPromise;
   }
 
-  child.kill("SIGINT");
+  if (child.pid === undefined) {
+    return waitPromise;
+  }
+
+  await signalProcessTree(child.pid, "interrupt");
   try {
     return await waitForStop(waitPromise, options.interruptGraceMs ?? DEFAULT_INTERRUPT_GRACE_MS);
   } catch {
-    child.kill("SIGTERM");
+    await signalProcessTree(child.pid, "terminate");
   }
 
   try {
     return await waitForStop(waitPromise, options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS);
   } catch {
-    child.kill("SIGKILL");
-    return waitPromise;
+    await signalProcessTree(child.pid, "force");
+  }
+
+  try {
+    return await waitForStop(waitPromise, options.forceGraceMs ?? DEFAULT_FORCE_GRACE_MS);
+  } catch {
+    throw new ProcessRunnerError(
+      `Process tree ${String(child.pid)} did not stop after force termination.`,
+      errorDetails({ pid: child.pid }),
+    );
   }
 }
 
@@ -218,8 +232,61 @@ function spawnOptions(options: ProcessRunnerOptions): SpawnOptions {
   return {
     cwd: options.cwd,
     env: options.env,
+    detached: process.platform !== "win32",
     stdio: [options.stdin ?? "ignore", options.stdout ?? "pipe", options.stderr ?? "pipe"],
   };
+}
+
+async function signalProcessTree(
+  pid: number,
+  mode: "interrupt" | "terminate" | "force",
+): Promise<void> {
+  if (process.platform === "win32") {
+    await taskkillProcessTree(pid, mode === "force");
+    return;
+  }
+
+  const signal = mode === "interrupt" ? "SIGINT" : mode === "terminate" ? "SIGTERM" : "SIGKILL";
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (!isNodeErrorCode(error, "ESRCH")) {
+      throw error;
+    }
+  }
+}
+
+async function taskkillProcessTree(pid: number, force: boolean): Promise<void> {
+  const args = ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])];
+  const taskkill = spawn("taskkill", args, { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  taskkill.stderr?.setEncoding("utf8");
+  taskkill.stderr?.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
+    taskkill.once("error", rejectExit);
+    taskkill.once("close", (code) => resolveExit(code ?? 1));
+  });
+  if (exitCode !== 0 && isProcessRunning(pid)) {
+    throw new ProcessRunnerError(
+      `taskkill failed for process tree ${String(pid)}: ${stderr.trim()}`,
+      errorDetails({ pid }),
+    );
+  }
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return isNodeErrorCode(error, "EPERM");
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 function processLabel(command: string, options: ProcessRunnerOptions): string {
