@@ -524,6 +524,88 @@ describe("FirefoxCliBackgroundController", () => {
       approved: true,
     });
   });
+
+  it("stops controller effects, drains pending requests, and ignores stale native messages", async () => {
+    const port = new FakeNativePort();
+    const scheduled: { readonly callback: () => void }[] = [];
+    const storedTokens: (string | null)[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => port,
+      productVersion: "0.0.0",
+      reconnectDelaysMs: [1],
+      scheduleTimer: (callback) => {
+        scheduled.push({ callback });
+      },
+      storageAdapter: {
+        getPairToken: async () => null,
+        setPairToken: async (token) => {
+          storedTokens.push(token);
+        },
+      },
+    });
+    controller.start();
+    await completeNativeHello(port);
+
+    const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve" });
+    const approve = port.messages.at(-1) as ReturnType<typeof createRequest<"pair.approve">>;
+    controller.stop();
+    await approval;
+
+    expect(controller.getStatus()).toMatchObject({
+      connected: false,
+      approved: false,
+      lastError: "Extension background stopped before the native host responded.",
+    });
+
+    port.emitMessage(
+      createOkResponse(approve, {
+        hostId: "host-1",
+        extensionId: "firefox-cli@example.invalid",
+        token: "late-token",
+        generation: 1,
+        approvedAt: "2026-01-02T03:04:05.000Z",
+      }),
+    );
+    port.emitDisconnect({ message: "Native app exited." });
+    await flushPromises();
+
+    expect(controller.getStatus()).toMatchObject({
+      connected: false,
+      approved: false,
+    });
+    expect(storedTokens).toEqual([]);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("suppresses reconnect callbacks after stop", () => {
+    const firstPort = new FakeNativePort();
+    const secondPort = new FakeNativePort();
+    const ports = [firstPort, secondPort];
+    const scheduled: { readonly callback: () => void }[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      connectNative: () => {
+        const port = ports.shift();
+        if (port === undefined) {
+          throw new Error("unexpected reconnect");
+        }
+        return port;
+      },
+      productVersion: "0.0.0",
+      reconnectDelaysMs: [1],
+      scheduleTimer: (callback) => {
+        scheduled.push({ callback });
+      },
+    });
+    controller.start();
+
+    firstPort.emitDisconnect({ message: "Native app exited." });
+    expect(scheduled).toHaveLength(1);
+    controller.stop();
+    scheduled[0]?.callback();
+
+    expect(secondPort.messages).toEqual([]);
+    expect(controller.getStatus().connected).toBe(false);
+  });
 });
 
 class FakeNativePort implements NativePortLike {

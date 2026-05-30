@@ -26,6 +26,9 @@ declare const browser: {
       addListener(
         listener: (message: { readonly type?: string }) => Promise<unknown> | unknown,
       ): void;
+      removeListener(
+        listener: (message: { readonly type?: string }) => Promise<unknown> | unknown,
+      ): void;
     };
     connectNative(name: string): {
       readonly onMessage: {
@@ -152,5 +155,14 @@ type BrowserWebRequestEvent = {
       readonly statusCode?: number;
     }) => void,
     filter: { readonly urls: readonly string[] },
+  ): void;
+  removeListener(
+    listener: (details: {
+      readonly requestId: string | number;
+      readonly url: string;
+      readonly method?: string;
+      readonly type?: string;
+      readonly statusCode?: number;
+    }) => void,
   ): void;
 };

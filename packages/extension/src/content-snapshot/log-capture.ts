@@ -27,6 +27,7 @@ type LogEntryStore = {
 
 type LogCaptureState = {
   installed: boolean;
+  globalRefCount: number;
   consoleEntries: LogEntryStore;
   errorEntries: LogEntryStore;
   capturedWindows: WeakSet<Window>;
@@ -56,7 +57,19 @@ type ErrorListenerTarget = {
 };
 
 type ErrorListenerRegistration = {
+  refCount: number;
   restore(target: ErrorListenerTarget): void;
+};
+
+export type LogCaptureHandle = {
+  dispose(): void;
+};
+
+export type ContentLogCaptureService = {
+  installGlobal(): LogCaptureHandle;
+  installWindow(view: Window | null): LogCaptureHandle;
+  createConsoleResult(action: ConsoleResult["action"], protocolVersion?: number): ConsoleResult;
+  createErrorsResult(action: ErrorsResult["action"], protocolVersion?: number): ErrorsResult;
 };
 
 export class BoundedLogBuffer implements LogEntryStore {
@@ -231,6 +244,7 @@ function getLogCaptureState(): LogCaptureState {
     errorEntries: new BoundedLogBuffer("errors"),
     capturedWindows: new WeakSet<Window>(),
     errorListeners: new WeakMap<object, ErrorListenerRegistration>(),
+    globalRefCount: 0,
   };
   const state = global[LOG_CAPTURE_STATE_KEY];
   state.consoleEntries = normalizeLogEntryStore("entries", state.consoleEntries);
@@ -238,34 +252,61 @@ function getLogCaptureState(): LogCaptureState {
   state.capturedWindows ??= new WeakSet<Window>();
   state.errorListeners ??= new WeakMap<object, ErrorListenerRegistration>();
   state.installed ??= false;
+  state.globalRefCount ??= state.installed ? 1 : 0;
   return state as LogCaptureState;
 }
 
-export function installLogCapture(): void {
+export function createContentLogCaptureService(): ContentLogCaptureService {
+  return {
+    installGlobal: installLogCapture,
+    installWindow: installWindowLogCapture,
+    createConsoleResult,
+    createErrorsResult,
+  };
+}
+
+export function installLogCapture(): LogCaptureHandle {
   const state = getLogCaptureState();
   const global = globalThis as typeof globalThis & {
     readonly addEventListener?: typeof addEventListener;
   };
-  if (state.installed) {
-    return;
+  state.globalRefCount += 1;
+  if (!state.installed) {
+    state.installed = true;
+    state.consolePatch ??= installConsolePatch(state);
+    installErrorListeners(global, state);
   }
-  state.installed = true;
-
-  state.consolePatch ??= installConsolePatch(state);
-  installErrorListeners(global, state);
+  return createScopedHandle(() => {
+    state.globalRefCount = Math.max(0, state.globalRefCount - 1);
+    if (state.globalRefCount === 0) {
+      restoreGlobalLogCapture(state);
+    }
+  });
 }
 
-export function installWindowLogCapture(view: Window | null): void {
+export function installWindowLogCapture(view: Window | null): LogCaptureHandle {
   const state = getLogCaptureState();
-  if (view === null || state.capturedWindows.has(view)) {
-    return;
+  if (view === null) {
+    return createScopedHandle(() => undefined);
   }
+  const registration = installErrorListeners(view, state);
   state.capturedWindows.add(view);
-  installErrorListeners(view, state);
+  return createScopedHandle(() => {
+    registration.refCount = Math.max(0, registration.refCount - 1);
+    if (registration.refCount === 0) {
+      restoreErrorListeners(view, state);
+      state.capturedWindows.delete(view);
+    }
+  });
 }
 
 export function restoreLogCapture(): void {
   const state = getLogCaptureState();
+  state.globalRefCount = 0;
+  restoreGlobalLogCapture(state);
+}
+
+function restoreGlobalLogCapture(state: LogCaptureState): void {
   const global = globalThis as typeof globalThis & ErrorListenerTarget;
   state.consolePatch?.restore();
   delete state.consolePatch;
@@ -310,9 +351,14 @@ function installConsolePatch(state: LogCaptureState): ConsolePatch {
   };
 }
 
-function installErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): void {
-  if (state.errorListeners.has(target)) {
-    return;
+function installErrorListeners(
+  target: ErrorListenerTarget,
+  state: LogCaptureState,
+): ErrorListenerRegistration {
+  const existing = state.errorListeners.get(target);
+  if (existing !== undefined) {
+    existing.refCount += 1;
+    return existing;
   }
 
   const errorListener: EventListener = (event) => {
@@ -333,12 +379,15 @@ function installErrorListeners(target: ErrorListenerTarget, state: LogCaptureSta
   };
   target.addEventListener?.("error", errorListener);
   target.addEventListener?.("unhandledrejection", rejectionListener);
-  state.errorListeners.set(target, {
+  const registration: ErrorListenerRegistration = {
+    refCount: 1,
     restore: (restoreTarget) => {
       restoreTarget.removeEventListener?.("error", errorListener);
       restoreTarget.removeEventListener?.("unhandledrejection", rejectionListener);
     },
-  });
+  };
+  state.errorListeners.set(target, registration);
+  return registration;
 }
 
 function restoreErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): void {
@@ -348,6 +397,19 @@ function restoreErrorListeners(target: ErrorListenerTarget, state: LogCaptureSta
   }
   registration.restore(target);
   state.errorListeners.delete(target);
+}
+
+function createScopedHandle(dispose: () => void): LogCaptureHandle {
+  let disposed = false;
+  return {
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      dispose();
+    },
+  };
 }
 
 export function createConsoleResult(

@@ -69,6 +69,7 @@ export class FirefoxCliBackgroundController {
   #reconnectScheduled = false;
   #lastError: string | undefined;
   #nativeProtocolState: NativeProtocolState = { state: "disconnected" };
+  #stopped = false;
   constructor(options: {
     readonly connectNative: BackgroundRuntimeAdapter["connectNative"];
     readonly browserAdapter?: BackgroundBrowserAdapter;
@@ -186,6 +187,9 @@ export class FirefoxCliBackgroundController {
   }
 
   start(): void {
+    if (this.#stopped) {
+      return;
+    }
     const approvalLoadRevision = this.#approvalRevision;
     void this.#storageAdapter
       .getPairToken()
@@ -265,6 +269,29 @@ export class FirefoxCliBackgroundController {
     return undefined;
   }
 
+  stop(): void {
+    if (this.#stopped) {
+      return;
+    }
+    this.#stopped = true;
+    this.#approvalRevision += 1;
+    this.#connected = false;
+    this.#port = null;
+    this.#reconnectScheduled = false;
+    this.#nativeProtocolState = { state: "disconnected" };
+    this.#lastError = "Extension background stopped.";
+    this.#pendingCommands.drain((request) =>
+      createErrorResponse(
+        request.id,
+        {
+          code: "NATIVE_HOST_UNAVAILABLE",
+          message: "Extension background stopped before the native host responded.",
+        },
+        request.protocolVersion ?? localProtocolVersionRange.protocolMax,
+      ),
+    );
+  }
+
   #postHello(): void {
     const request = createRequest(
       "hello",
@@ -291,6 +318,9 @@ export class FirefoxCliBackgroundController {
   }
 
   #connectNative(): void {
+    if (this.#stopped) {
+      return;
+    }
     try {
       this.#port = this.#runtime.connectNative(NATIVE_HOST_NAME);
       this.#connected = true;
@@ -299,9 +329,15 @@ export class FirefoxCliBackgroundController {
       this.#reconnectScheduled = false;
       this.#lastError = undefined;
       this.#port.onMessage.addListener((message) => {
+        if (this.#stopped) {
+          return;
+        }
         void this.#handleNativeMessage(message);
       });
       this.#port.onDisconnect.addListener((error) => {
+        if (this.#stopped) {
+          return;
+        }
         this.#connected = false;
         this.#port = null;
         this.#nativeProtocolState = { state: "disconnected" };
@@ -328,7 +364,7 @@ export class FirefoxCliBackgroundController {
   }
 
   #scheduleReconnect(): void {
-    if (this.#reconnectScheduled || this.#reconnectDelaysMs.length === 0) {
+    if (this.#stopped || this.#reconnectScheduled || this.#reconnectDelaysMs.length === 0) {
       return;
     }
 
@@ -337,6 +373,9 @@ export class FirefoxCliBackgroundController {
     this.#reconnectAttempt += 1;
     this.#reconnectScheduled = true;
     this.#scheduleTimer(() => {
+      if (this.#stopped) {
+        return;
+      }
       this.#reconnectScheduled = false;
       this.#connectNative();
     }, delay ?? 0);
@@ -345,6 +384,19 @@ export class FirefoxCliBackgroundController {
   #sendNativeRequest<C extends CommandId>(
     request: RequestEnvelope<C>,
   ): Promise<ResponseEnvelope<C>> {
+    if (this.#stopped) {
+      return Promise.resolve(
+        createErrorResponse(
+          request.id,
+          {
+            code: "NATIVE_HOST_UNAVAILABLE",
+            message: "Extension background is stopped.",
+          },
+          request.protocolVersion,
+        ),
+      ) as Promise<ResponseEnvelope<C>>;
+    }
+
     if (this.#port === null || !this.#connected) {
       return Promise.resolve(
         createErrorResponse(
@@ -394,6 +446,9 @@ export class FirefoxCliBackgroundController {
   }
 
   async #handleNativeMessage(message: unknown): Promise<void> {
+    if (this.#stopped) {
+      return;
+    }
     if (isResponseLike(message)) {
       const command = this.#pendingCommands.getCommand(message.id);
       if (command === undefined) {

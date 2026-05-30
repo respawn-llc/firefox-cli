@@ -1,4 +1,5 @@
 import type { GetValue, WaitElementSummary, WaitParams, WaitResult } from "@firefox-cli/protocol";
+import type { ContentElementResolver } from "./content-snapshot/element-resolver.js";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 100;
@@ -17,11 +18,7 @@ export async function createWaitResult(options: {
   readonly now?: number;
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
-  readonly resolveRef: (
-    ref: string,
-    options: { readonly generationId?: string; readonly now: number },
-  ) => { readonly element: Element; readonly generationId: string };
-  readonly queryElement: (selector: string) => Element | null;
+  readonly elementResolver: ContentElementResolver;
   readonly summarizeElement: (
     element: Element,
     options?: { readonly ref: string; readonly generationId: string },
@@ -61,11 +58,7 @@ async function evaluateWaitCondition(options: {
   readonly document: Document;
   readonly params: WaitParams;
   readonly now: number;
-  readonly resolveRef: (
-    ref: string,
-    options: { readonly generationId?: string; readonly now: number },
-  ) => { readonly element: Element; readonly generationId: string };
-  readonly queryElement: (selector: string) => Element | null;
+  readonly elementResolver: ContentElementResolver;
   readonly summarizeElement: (
     element: Element,
     options?: { readonly ref: string; readonly generationId: string },
@@ -106,11 +99,7 @@ async function evaluateWaitCondition(options: {
 function evaluateElementWait(options: {
   readonly params: WaitParams;
   readonly now: number;
-  readonly resolveRef: (
-    ref: string,
-    options: { readonly generationId?: string; readonly now: number },
-  ) => { readonly element: Element; readonly generationId: string };
-  readonly queryElement: (selector: string) => Element | null;
+  readonly elementResolver: ContentElementResolver;
   readonly summarizeElement: (
     element: Element,
     options?: { readonly ref: string; readonly generationId: string },
@@ -120,7 +109,7 @@ function evaluateElementWait(options: {
 }): PendingWaitResult | undefined {
   const state = options.params.state ?? "visible";
   if (options.params.ref !== undefined) {
-    const resolved = options.resolveRef(options.params.ref, {
+    const resolved = options.elementResolver.resolveRef(options.params.ref, {
       ...(options.params.generationId === undefined
         ? {}
         : { generationId: options.params.generationId }),
@@ -150,7 +139,7 @@ function evaluateElementWait(options: {
     throw options.createError("SELECTOR_NOT_FOUND", "Element selector is required.");
   }
 
-  const element = options.queryElement(selector);
+  const element = options.elementResolver.queryOptional(selector);
   if (state === "hidden") {
     return element === null || !options.isVisible(element)
       ? {

@@ -1,17 +1,5 @@
-import type {
-  ActionKind,
-  DragParams,
-  ElementActionParams,
-  KeyboardTextActionParams,
-  KeyEventParams,
-  MouseParams,
-  PressParams,
-  ScrollParams,
-  SelectParams,
-  TextActionParams,
-  UploadParams,
-  WaitElementSummary,
-} from "@firefox-cli/protocol";
+import type { ActionKind, CommandParams, WaitElementSummary } from "@firefox-cli/protocol";
+import type { ContentElementResolver } from "./content-snapshot/element-resolver.js";
 
 export type ActionErrorCode =
   | "SELECTOR_NOT_FOUND"
@@ -37,21 +25,10 @@ export type EditableValueElement = HTMLElement & {
   setSelectionRange?(start: number, end: number): void;
 };
 
-export type ActionOptions = {
+export type ContentActionServices = {
   readonly document: Document;
-  readonly command: ActionKind;
-  readonly params:
-    | ElementActionParams
-    | TextActionParams
-    | KeyboardTextActionParams
-    | PressParams
-    | SelectParams
-    | ScrollParams
-    | DragParams
-    | UploadParams
-    | MouseParams
-    | KeyEventParams;
   readonly now: number;
+  readonly elementResolver?: ContentElementResolver;
   readonly resolveRef: (
     ref: string,
     options: { readonly generationId?: string; readonly now: number },
@@ -64,6 +41,11 @@ export type ActionOptions = {
   readonly isVisible: (element: Element) => boolean;
   readonly isDisabled: (element: Element) => boolean;
   readonly createError: (code: ActionErrorCode, message: string) => Error;
+};
+
+export type ActionOptions<C extends ActionKind = ActionKind> = ContentActionServices & {
+  readonly command: C;
+  readonly params: CommandParams<C>;
 };
 
 export type ContentActionResult = {

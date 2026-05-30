@@ -4,7 +4,9 @@ import {
   MAX_UPLOAD_TOTAL_BYTES,
 } from "@firefox-cli/protocol";
 import type {
+  ActionKind,
   ActionResult,
+  CommandParams,
   DragParams,
   ElementActionParams,
   KeyboardTextActionParams,
@@ -19,15 +21,29 @@ import type {
 import type {
   ActionOptions,
   ContentActionResult,
-  EditableValueElement,
   ElementResolution,
 } from "./content-action-types.js";
 import {
   assignFileInputFiles,
   createDomDataTransfer,
   createLocalFileList,
-  dispatchDragEventWithDataTransfer,
-} from "./content-dom-adapter.js";
+} from "./content-actions/dom-compat.js";
+import {
+  clickElement,
+  dispatchDragEvent,
+  dispatchInputEvents,
+  dispatchKeyboardEvent,
+  dispatchMouseEvent,
+  dispatchWheelEvent,
+  focusElement,
+  requireElementWindow,
+} from "./content-actions/dom-events.js";
+import {
+  insertText,
+  requireEditable,
+  requireFocusedElement,
+  setEditableText,
+} from "./content-actions/editable.js";
 
 const DEFAULT_SCROLL_DISTANCE_PX = 600;
 
@@ -35,52 +51,47 @@ export function createActionResult(options: ActionOptions): ActionResult {
   return createContentActionResult(options) as ActionResult;
 }
 
-function createContentActionResult(options: ActionOptions): ContentActionResult {
-  switch (options.command) {
-    case "click":
-      return mouseAction(options, "click");
-    case "dblclick":
-      return mouseAction(options, "dblclick");
-    case "hover":
-      return mouseAction(options, "hover");
-    case "focus":
-      return focusAction(options);
-    case "fill":
-      return fillAction(options, options.params as TextActionParams);
-    case "type":
-      return typeAction(options, options.params as TextActionParams);
-    case "keyboard.type":
-    case "keyboard.inserttext":
-      return keyboardTextAction(options, options.params as KeyboardTextActionParams);
-    case "press":
-      return pressAction(options, options.params as PressParams);
-    case "check":
-      return checkAction(options, true);
-    case "uncheck":
-      return checkAction(options, false);
-    case "select":
-      return selectAction(options, options.params as SelectParams);
-    case "scroll":
-    case "swipe":
-      return scrollAction(options, options.params as ScrollParams);
-    case "scrollintoview":
-      return scrollIntoViewAction(options);
-    case "drag":
-      return dragAction(options, options.params as DragParams);
-    case "upload":
-      return uploadAction(options, options.params as UploadParams);
-    case "mouse":
-      return directMouseAction(options, options.params as MouseParams);
-    case "keydown":
-    case "keyup":
-      return keyEventAction(options, options.params as KeyEventParams);
-    default:
-      return assertUnhandledAction(options, options.command);
-  }
-}
+type ActionHandlerMap = {
+  readonly [C in ActionKind]: (
+    options: ActionOptions<C>,
+    params: CommandParams<C>,
+  ) => ContentActionResult;
+};
 
-function assertUnhandledAction(options: ActionOptions, command: never): never {
-  throw options.createError("ACTION_REJECTED", `Unsupported content action: ${String(command)}`);
+const actionHandlers: ActionHandlerMap = {
+  click: (options, params) => mouseAction(options, params, "click"),
+  dblclick: (options, params) => mouseAction(options, params, "dblclick"),
+  hover: (options, params) => mouseAction(options, params, "hover"),
+  focus: focusAction,
+  fill: fillAction,
+  type: typeAction,
+  "keyboard.type": keyboardTextAction,
+  "keyboard.inserttext": keyboardTextAction,
+  press: pressAction,
+  check: (options, params) => checkAction(options, params, true),
+  uncheck: (options, params) => checkAction(options, params, false),
+  select: selectAction,
+  scroll: scrollAction,
+  swipe: scrollAction,
+  scrollintoview: scrollIntoViewAction,
+  drag: dragAction,
+  upload: uploadAction,
+  mouse: directMouseAction,
+  keydown: keyEventAction,
+  keyup: keyEventAction,
+};
+
+function createContentActionResult<C extends ActionKind>(
+  options: ActionOptions<C>,
+): ContentActionResult {
+  const handler = actionHandlers[options.command];
+  if (handler === undefined) {
+    throw options.createError(
+      "ACTION_REJECTED",
+      `Unsupported content action: ${String(options.command)}`,
+    );
+  }
+  return handler(options, options.params);
 }
 
 function dragAction(options: ActionOptions, params: DragParams): ContentActionResult {
@@ -192,9 +203,10 @@ function keyEventAction(options: ActionOptions, params: KeyEventParams): Content
 
 function mouseAction(
   options: ActionOptions,
+  params: ElementActionParams,
   action: "click" | "dblclick" | "hover",
 ): ContentActionResult {
-  const resolution = resolveRequiredElement(options, options.params as ElementActionParams);
+  const resolution = resolveRequiredElement(options, params);
   assertActionableElement(options, resolution.element);
 
   if (action === "hover") {
@@ -219,8 +231,8 @@ function mouseAction(
   return elementActionResult(options, resolution);
 }
 
-function focusAction(options: ActionOptions): ContentActionResult {
-  const resolution = resolveRequiredElement(options, options.params as ElementActionParams);
+function focusAction(options: ActionOptions, params: ElementActionParams): ContentActionResult {
+  const resolution = resolveRequiredElement(options, params);
   assertVisible(options, resolution.element);
   assertEnabled(options, resolution.element);
   focusElement(resolution.element);
@@ -284,8 +296,12 @@ function pressAction(options: ActionOptions, params: PressParams): ContentAction
   };
 }
 
-function checkAction(options: ActionOptions, checked: boolean): ContentActionResult {
-  const resolution = resolveRequiredElement(options, options.params as ElementActionParams);
+function checkAction(
+  options: ActionOptions,
+  params: ElementActionParams,
+  checked: boolean,
+): ContentActionResult {
+  const resolution = resolveRequiredElement(options, params);
   assertActionableElement(options, resolution.element);
   const changed = setCheckedState(options, resolution.element, checked);
   if (changed) {
@@ -365,8 +381,11 @@ function scrollAction(options: ActionOptions, params: ScrollParams): ContentActi
   };
 }
 
-function scrollIntoViewAction(options: ActionOptions): ContentActionResult {
-  const resolution = resolveRequiredElement(options, options.params as ElementActionParams);
+function scrollIntoViewAction(
+  options: ActionOptions,
+  params: ElementActionParams,
+): ContentActionResult {
+  const resolution = resolveRequiredElement(options, params);
   assertVisible(options, resolution.element);
   resolution.element.scrollIntoView?.({ block: "center", inline: "center", behavior: "instant" });
   return elementActionResult(options, resolution);
@@ -376,6 +395,13 @@ function resolveRequiredElement(
   options: ActionOptions,
   params: ElementActionParams | TextActionParams | SelectParams | UploadParams,
 ): ElementResolution {
+  if (options.elementResolver !== undefined) {
+    return options.elementResolver.resolveRequiredTarget(params, {
+      missingMessage: "Element selector or ref is required.",
+      now: options.now,
+    });
+  }
+
   const resolution = resolveOptionalElement(options, params);
   if (resolution === undefined) {
     throw options.createError("SELECTOR_NOT_FOUND", "Element selector or ref is required.");
@@ -392,6 +418,10 @@ function resolveOptionalElement(
     | UploadParams
     | Pick<ScrollParams, "selector" | "ref" | "generationId">,
 ): ElementResolution | undefined {
+  if (options.elementResolver !== undefined) {
+    return options.elementResolver.resolveOptionalTarget(params, options.now);
+  }
+
   if (params.ref !== undefined) {
     const resolved = options.resolveRef(params.ref, {
       ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
@@ -416,6 +446,10 @@ function resolveRequiredDragElement(
   params: DragParams,
   role: "source" | "target",
 ): ElementResolution {
+  if (options.elementResolver !== undefined) {
+    return options.elementResolver.resolveRequiredDragTarget(params, role, options.now);
+  }
+
   const selector = role === "source" ? params.sourceSelector : params.targetSelector;
   const ref = role === "source" ? params.sourceRef : params.targetRef;
   const generationId = role === "source" ? params.sourceGenerationId : params.targetGenerationId;
@@ -463,151 +497,6 @@ function assertEnabled(options: ActionOptions, element: Element): void {
   }
 }
 
-function requireFocusedElement(options: ActionOptions): Element {
-  const focused = options.document.activeElement;
-  if (
-    focused === null ||
-    (isDocumentShell(options.document, focused) && findEditableHost(options, focused) === undefined)
-  ) {
-    throw options.createError("NO_FOCUSED_ELEMENT", "No focused element is available.");
-  }
-  return focused;
-}
-
-function isDocumentShell(document: Document, element: Element): boolean {
-  return element === document.body || element === document.documentElement;
-}
-
-function requireEditable(options: ActionOptions, element: Element): HTMLElement {
-  const editable = findEditableHost(options, element);
-  if (editable === undefined) {
-    throw options.createError("NOT_EDITABLE", "Element is not editable.");
-  }
-  if (options.isDisabled(editable)) {
-    throw options.createError("ELEMENT_DISABLED", "Element is disabled.");
-  }
-  return editable;
-}
-
-function findEditableHost(options: ActionOptions, element: Element): HTMLElement | undefined {
-  const view = options.document.defaultView;
-  if (view === null || !(element instanceof view.HTMLElement)) {
-    return undefined;
-  }
-
-  if (
-    element instanceof view.HTMLInputElement &&
-    isEditableInputType(element.getAttribute("type"))
-  ) {
-    return element;
-  }
-
-  if (element instanceof view.HTMLTextAreaElement) {
-    return element;
-  }
-
-  const editable = element.closest<HTMLElement>("[contenteditable]");
-  if (editable !== null && editable.getAttribute("contenteditable") !== "false") {
-    return editable;
-  }
-
-  return undefined;
-}
-
-function isEditableInputType(type: string | null): boolean {
-  return ![
-    "button",
-    "checkbox",
-    "color",
-    "file",
-    "hidden",
-    "image",
-    "radio",
-    "range",
-    "reset",
-    "submit",
-  ].includes((type ?? "text").toLowerCase());
-}
-
-function setEditableText(element: HTMLElement, text: string): void {
-  if (isEditableValueElement(element)) {
-    element.value = text;
-    setSelection(element, text.length);
-    return;
-  }
-
-  element.textContent = text;
-}
-
-function insertText(
-  options: ActionOptions,
-  element: HTMLElement,
-  text: string,
-  settings: { readonly keyboardEvents: boolean },
-): void {
-  for (const char of text) {
-    if (settings.keyboardEvents) {
-      dispatchKeyboardEvent(element, "keydown", char);
-      dispatchKeyboardEvent(element, "keypress", char);
-    }
-
-    dispatchBeforeInput(options, element, char);
-    insertTextValue(element, char);
-    dispatchInputEvent(element);
-
-    if (settings.keyboardEvents) {
-      dispatchKeyboardEvent(element, "keyup", char);
-    }
-  }
-
-  dispatchChangeEvent(element);
-}
-
-function insertTextValue(element: HTMLElement, text: string): void {
-  if (isEditableValueElement(element)) {
-    const value = element.value;
-    const start =
-      typeof element.selectionStart === "number" ? element.selectionStart : value.length;
-    const end = typeof element.selectionEnd === "number" ? element.selectionEnd : start;
-    element.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
-    setSelection(element, start + text.length);
-    return;
-  }
-
-  element.textContent = `${element.textContent ?? ""}${text}`;
-}
-
-function setSelection(element: HTMLElement, position: number): void {
-  if (isEditableValueElement(element) && typeof element.setSelectionRange === "function") {
-    try {
-      element.setSelectionRange(position, position);
-    } catch {
-      // Some input types expose selection APIs but reject programmatic selection.
-    }
-  }
-}
-
-function isEditableValueElement(element: HTMLElement): element is EditableValueElement {
-  return "value" in element && typeof element.value === "string";
-}
-
-function dispatchBeforeInput(options: ActionOptions, element: Element, text: string): void {
-  const view = requireElementWindow(element);
-  const InputEventConstructor = view.InputEvent;
-  const event =
-    InputEventConstructor === undefined
-      ? new view.Event("beforeinput", { bubbles: true, cancelable: true })
-      : new InputEventConstructor("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          inputType: "insertText",
-          data: text,
-        });
-  if (!element.dispatchEvent(event)) {
-    throw options.createError("ACTION_REJECTED", "Text insertion was rejected by the page.");
-  }
-}
-
 function setCheckedState(options: ActionOptions, element: Element, checked: boolean): boolean {
   const view = options.document.defaultView;
   if (view !== null && element instanceof view.HTMLInputElement) {
@@ -635,106 +524,8 @@ function setCheckedState(options: ActionOptions, element: Element, checked: bool
   throw options.createError("ACTION_REJECTED", "Check action requires a checkable element.");
 }
 
-function clickElement(element: Element): void {
-  if ("click" in element && typeof element.click === "function") {
-    element.click();
-    return;
-  }
-
-  dispatchMouseEvent(element, "click");
-}
-
-function focusElement(element: Element): void {
-  if ("focus" in element && typeof element.focus === "function") {
-    element.focus();
-  }
-}
-
-function dispatchInputEvents(element: Element): void {
-  dispatchInputEvent(element);
-  dispatchChangeEvent(element);
-}
-
-function dispatchInputEvent(element: Element): void {
-  const view = requireElementWindow(element);
-  element.dispatchEvent(new view.Event("input", { bubbles: true, cancelable: false }));
-}
-
-function dispatchChangeEvent(element: Element): void {
-  const view = requireElementWindow(element);
-  element.dispatchEvent(new view.Event("change", { bubbles: true, cancelable: false }));
-}
-
-function dispatchMouseEvent(
-  element: Element,
-  type: string,
-  options: {
-    readonly x?: number;
-    readonly y?: number;
-    readonly button?: number;
-  } = {},
-): void {
-  const view = requireElementWindow(element);
-  element.dispatchEvent(
-    new view.MouseEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      view,
-      ...(options.x === undefined ? {} : { clientX: options.x }),
-      ...(options.y === undefined ? {} : { clientY: options.y }),
-      ...(options.button === undefined ? {} : { button: options.button }),
-    }),
-  );
-}
-
-function dispatchWheelEvent(
-  element: Element,
-  deltaX: number,
-  deltaY: number,
-  options: {
-    readonly x?: number;
-    readonly y?: number;
-  } = {},
-): void {
-  const view = requireElementWindow(element);
-  element.dispatchEvent(
-    new view.WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      deltaX,
-      deltaY,
-      view,
-      ...(options.x === undefined ? {} : { clientX: options.x }),
-      ...(options.y === undefined ? {} : { clientY: options.y }),
-    }),
-  );
-}
-
-function dispatchDragEvent(element: Element, type: string, dataTransfer: DataTransfer): void {
-  dispatchDragEventWithDataTransfer(element, type, dataTransfer);
-}
-
 function assignFiles(input: HTMLInputElement, files: FileList): void {
   assignFileInputFiles(input, files);
-}
-
-function dispatchKeyboardEvent(element: Element, type: string, key: string): void {
-  const view = requireElementWindow(element);
-  element.dispatchEvent(
-    new view.KeyboardEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      key,
-    }),
-  );
-}
-
-function requireElementWindow(element: Element): NonNullable<Document["defaultView"]> {
-  const view = element.ownerDocument.defaultView;
-  if (view === null) {
-    throw new Error("Document has no window.");
-  }
-  return view;
 }
 
 function scrollDelta(

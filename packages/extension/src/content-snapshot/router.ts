@@ -19,10 +19,16 @@ import {
   createDialogResult,
   createStorageResult,
 } from "./commands/page-state.js";
-import { queryOptionalElement, resolveElement } from "./dom.js";
+import { createContentElementResolver, type ContentElementResolver } from "./element-resolver.js";
 import { ContentSnapshotError, createContentErrorResponseForRequest } from "./errors.js";
 import { applyElementHighlight, type HighlightScheduler } from "./highlight.js";
-import { createConsoleResult, createErrorsResult, installWindowLogCapture } from "./log-capture.js";
+import {
+  createConsoleResult,
+  createContentLogCaptureService,
+  createErrorsResult,
+  installWindowLogCapture,
+  type ContentLogCaptureService,
+} from "./log-capture.js";
 import { createSnapshotResult } from "./snapshot-render.js";
 
 type ContentScriptRequestContext = {
@@ -32,6 +38,8 @@ type ContentScriptRequestContext = {
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
   readonly highlightScheduler?: HighlightScheduler;
+  readonly logCapture?: ContentLogCaptureService;
+  readonly elementResolver?: ContentElementResolver;
 };
 
 type DirectContentCommand =
@@ -108,14 +116,7 @@ const directContentHandlers: CommandHandlerMap<
       ...(options.now === undefined ? {} : { now: options.now }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
-      resolveRef: (ref, resolveOptions) =>
-        options.registry.resolveRef(ref, {
-          ...(resolveOptions.generationId === undefined
-            ? {}
-            : { generationId: resolveOptions.generationId }),
-          now: resolveOptions.now,
-        }),
-      queryElement: (selector) => queryOptionalElement(options.document, selector),
+      elementResolver: getElementResolver(options),
       summarizeElement: summarizeWaitElement,
       isVisible,
       createError: (code, message) => new ContentSnapshotError(code, message),
@@ -171,16 +172,17 @@ const directContentHandlers: CommandHandlerMap<
   highlight: (request, options) => {
     try {
       const params = request.params;
-      const element = resolveElement(
-        options.document,
+      const element = getElementResolver(options).resolveRequiredTarget(
         {
           ...(params.selector === undefined ? {} : { selector: params.selector }),
           ...(params.ref === undefined ? {} : { ref: params.ref }),
           ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
         },
-        options.registry,
-        options.now,
-      );
+        {
+          missingMessage: "Selector or ref is required.",
+          ...(options.now === undefined ? {} : { now: options.now }),
+        },
+      ).element;
       const view = options.document.defaultView;
       if (view !== null && element instanceof view.HTMLElement) {
         applyElementHighlight(element, {
@@ -204,14 +206,22 @@ export function handleContentScriptRequest(
   request: RequestEnvelope,
   options: ContentScriptRequestContext,
 ): ResponseEnvelope | Promise<ResponseEnvelope> {
-  installWindowLogCapture(options.document.defaultView);
+  const logCapture = options.logCapture ?? createContentLogCaptureService();
+  const elementResolver = options.elementResolver ?? getElementResolver(options);
+  if (options.logCapture === undefined) {
+    installWindowLogCapture(options.document.defaultView);
+  }
 
   if (isDirectContentRequest(request)) {
-    return dispatchCommandHandler(directContentHandlers, request, options);
+    return dispatchCommandHandler(directContentHandlers, request, {
+      ...options,
+      logCapture,
+      elementResolver,
+    });
   }
 
   if (isActionRequest(request)) {
-    return handleActionCommand(request, options);
+    return handleActionCommand(request, { ...options, elementResolver });
   }
 
   return createErrorResponseForRequest(request, {
@@ -232,14 +242,10 @@ function handleActionCommand(
         command: request.command,
         params: request.params,
         now: options.now ?? Date.now(),
+        elementResolver: getElementResolver(options),
         resolveRef: (ref, resolveOptions) =>
-          options.registry.resolveRef(ref, {
-            ...(resolveOptions.generationId === undefined
-              ? {}
-              : { generationId: resolveOptions.generationId }),
-            now: resolveOptions.now,
-          }),
-        queryElement: (selector) => queryOptionalElement(options.document, selector),
+          getElementResolver(options).resolveRef(ref, resolveOptions),
+        queryElement: (selector) => getElementResolver(options).queryOptional(selector),
         summarizeElement: summarizeWaitElement,
         isVisible,
         isDisabled,
@@ -259,4 +265,15 @@ function isDirectContentRequest(
   request: RequestEnvelope,
 ): request is RequestEnvelope<DirectContentCommand> {
   return Object.hasOwn(directContentHandlers, request.command);
+}
+
+function getElementResolver(options: ContentScriptRequestContext): ContentElementResolver {
+  return (
+    options.elementResolver ??
+    createContentElementResolver({
+      document: options.document,
+      registry: options.registry,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    })
+  );
 }

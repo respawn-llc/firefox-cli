@@ -15,10 +15,12 @@ import {
 import { describeFrame } from "./content-snapshot/accessibility.js";
 import { escapeCssString } from "./content-snapshot/format.js";
 import { createContentMessageHandler } from "./content.js";
+import { startContentScriptRuntime } from "./content-runtime.js";
 import type { HighlightScheduler } from "./content-snapshot/highlight.js";
 import {
   BoundedLogBuffer,
   createConsoleResult,
+  createContentLogCaptureService,
   createErrorsResult,
   installLogCapture,
   installWindowLogCapture,
@@ -1033,91 +1035,106 @@ describe("content snapshot", () => {
       registry: new ElementRefRegistry<Element>(),
       now: 1000,
     };
+    const globalLogHandle = installLogCapture();
 
-    expect(
-      handleContentScriptRequest(
-        createRequest("clipboard", { action: "copy", selector: "#clip" }, "copy-1"),
-        base,
-      ),
-    ).toMatchObject({ ok: true, result: { action: "copy", ok: true, text: "copied" } });
-    expect(
-      handleContentScriptRequest(
-        createRequest(
-          "clipboard",
-          { action: "paste", selector: "#clip", text: "pasted" },
-          "paste-1",
+    try {
+      expect(
+        handleContentScriptRequest(
+          createRequest("clipboard", { action: "copy", selector: "#clip" }, "copy-1"),
+          base,
         ),
-        base,
-      ),
-    ).toMatchObject({ ok: true, result: { action: "paste", ok: true } });
-    expect(window.document.querySelector<HTMLInputElement>("#clip")?.value).toBe("pasted");
+      ).toMatchObject({ ok: true, result: { action: "copy", ok: true, text: "copied" } });
+      expect(
+        handleContentScriptRequest(
+          createRequest(
+            "clipboard",
+            { action: "paste", selector: "#clip", text: "pasted" },
+            "paste-1",
+          ),
+          base,
+        ),
+      ).toMatchObject({ ok: true, result: { action: "paste", ok: true } });
+      expect(window.document.querySelector<HTMLInputElement>("#clip")?.value).toBe("pasted");
 
-    expect(
-      handleContentScriptRequest(
-        createRequest("storage", { area: "local", action: "set", key: "phase", value: "8" }, "s1"),
-        base,
-      ),
-    ).toMatchObject({ ok: true, result: { area: "local", action: "set", ok: true } });
-    expect(
-      handleContentScriptRequest(
-        createRequest("storage", { area: "local", action: "get", key: "phase" }, "s2"),
-        base,
-      ),
-    ).toMatchObject({ ok: true, result: { area: "local", action: "get", value: "8" } });
-    expect(
-      handleContentScriptRequest(
-        createRequest("storage", { area: "local", action: "get" }, "s3"),
-        base,
-      ),
-    ).toMatchObject({ ok: true, result: { entries: { phase: "8" } } });
+      expect(
+        handleContentScriptRequest(
+          createRequest(
+            "storage",
+            { area: "local", action: "set", key: "phase", value: "8" },
+            "s1",
+          ),
+          base,
+        ),
+      ).toMatchObject({ ok: true, result: { area: "local", action: "set", ok: true } });
+      expect(
+        handleContentScriptRequest(
+          createRequest("storage", { area: "local", action: "get", key: "phase" }, "s2"),
+          base,
+        ),
+      ).toMatchObject({ ok: true, result: { area: "local", action: "get", value: "8" } });
+      expect(
+        handleContentScriptRequest(
+          createRequest("storage", { area: "local", action: "get" }, "s3"),
+          base,
+        ),
+      ).toMatchObject({ ok: true, result: { entries: { phase: "8" } } });
 
-    expect(
-      handleContentScriptRequest(createRequest("dialog", { action: "status" }, "dialog-1"), base),
-    ).toMatchObject({ ok: true, result: { action: "status", handled: false } });
+      expect(
+        handleContentScriptRequest(createRequest("dialog", { action: "status" }, "dialog-1"), base),
+      ).toMatchObject({ ok: true, result: { action: "status", handled: false } });
 
-    handleContentScriptRequest(
-      createRequest("console", { action: "clear" }, "console-clear"),
-      base,
-    );
-    captureConsoleLogWithoutStdout("phase8-log", 42);
-    expect(
       handleContentScriptRequest(
-        createRequest("console", { action: "list" }, "console-list"),
+        createRequest("console", { action: "clear" }, "console-clear"),
         base,
-      ),
-    ).toMatchObject({
-      ok: true,
-      result: {
-        entries: [expect.objectContaining({ level: "log", text: "phase8-log 42" })],
-      },
-    });
-
-    handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
-    window.dispatchEvent(new window.ErrorEvent("error", { message: "phase8-error" }));
-    expect(
-      handleContentScriptRequest(createRequest("errors", { action: "list" }, "errors-list"), base),
-    ).toMatchObject({
-      ok: true,
-      result: {
-        errors: [expect.objectContaining({ level: "error", text: "phase8-error" })],
-      },
-    });
-
-    expect(
-      handleContentScriptRequest(
-        createRequest("highlight", { selector: "#highlight" }, "highlight-1"),
-        base,
-      ),
-    ).toMatchObject({
-      ok: true,
-      result: {
+      );
+      captureConsoleLogWithoutStdout("phase8-log", 42);
+      expect(
+        handleContentScriptRequest(
+          createRequest("console", { action: "list" }, "console-list"),
+          base,
+        ),
+      ).toMatchObject({
         ok: true,
-        element: { role: "button", name: "Highlight me" },
-      },
-    });
-    const highlighted = window.document.querySelector<HTMLElement>("#highlight");
-    expect(highlighted?.dataset.firefoxCliHighlight).toBe("true");
-    expect(highlighted?.style.outline).toContain("#ff9500");
+        result: {
+          entries: [expect.objectContaining({ level: "log", text: "phase8-log 42" })],
+        },
+      });
+
+      handleContentScriptRequest(
+        createRequest("errors", { action: "clear" }, "errors-clear"),
+        base,
+      );
+      window.dispatchEvent(new window.ErrorEvent("error", { message: "phase8-error" }));
+      expect(
+        handleContentScriptRequest(
+          createRequest("errors", { action: "list" }, "errors-list"),
+          base,
+        ),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          errors: [expect.objectContaining({ level: "error", text: "phase8-error" })],
+        },
+      });
+
+      expect(
+        handleContentScriptRequest(
+          createRequest("highlight", { selector: "#highlight" }, "highlight-1"),
+          base,
+        ),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          ok: true,
+          element: { role: "button", name: "Highlight me" },
+        },
+      });
+      const highlighted = window.document.querySelector<HTMLElement>("#highlight");
+      expect(highlighted?.dataset.firefoxCliHighlight).toBe("true");
+      expect(highlighted?.style.outline).toContain("#ff9500");
+    } finally {
+      globalLogHandle.dispose();
+    }
   });
 
   it("cleans up timed highlights without mutating non-target elements", () => {
@@ -1300,47 +1317,52 @@ describe("content snapshot", () => {
     });
   });
 
-  it("captures facade-installed console logs in the same buffer cleared by content commands", () => {
+  it("captures explicitly installed console logs in the same buffer cleared by content commands", () => {
     const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
       now: 1000,
     };
+    const globalLogHandle = installLogCapture();
 
-    handleContentScriptRequest(
-      createRequest("console", { action: "clear" }, "console-clear"),
-      base,
-    );
-    captureConsoleLogWithoutStdout("facade-load-log");
-
-    expect(
+    try {
       handleContentScriptRequest(
-        createRequest("console", { action: "list" }, "console-list"),
+        createRequest("console", { action: "clear" }, "console-clear"),
         base,
-      ),
-    ).toMatchObject({
-      ok: true,
-      result: {
-        entries: [expect.objectContaining({ level: "log", text: "facade-load-log" })],
-      },
-    });
+      );
+      captureConsoleLogWithoutStdout("explicit-log");
 
-    handleContentScriptRequest(
-      createRequest("console", { action: "clear" }, "console-clear-2"),
-      base,
-    );
-    expect(
+      expect(
+        handleContentScriptRequest(
+          createRequest("console", { action: "list" }, "console-list"),
+          base,
+        ),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          entries: [expect.objectContaining({ level: "log", text: "explicit-log" })],
+        },
+      });
+
       handleContentScriptRequest(
-        createRequest("console", { action: "list" }, "console-list-2"),
+        createRequest("console", { action: "clear" }, "console-clear-2"),
         base,
-      ),
-    ).toMatchObject({
-      ok: true,
-      result: {
-        entries: [],
-      },
-    });
+      );
+      expect(
+        handleContentScriptRequest(
+          createRequest("console", { action: "list" }, "console-list-2"),
+          base,
+        ),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          entries: [],
+        },
+      });
+    } finally {
+      globalLogHandle.dispose();
+    }
   });
 
   it("bounds console capture by retained entry count and preserves newest order", () => {
@@ -1493,7 +1515,7 @@ describe("content snapshot", () => {
     expect(buffer.encodedResultBytes()).toBeLessThanOrEqual(droppedOnlyBudget);
   });
 
-  it("installs log capture only from a cold facade import and keeps buffers across reloads", async () => {
+  it("keeps the content snapshot facade side-effect free across cold imports", async () => {
     const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
     const global = globalThis as typeof globalThis & {
       [stateKey]?: unknown;
@@ -1511,28 +1533,21 @@ describe("content snapshot", () => {
       const firstFacade = (await import(
         /* @vite-ignore */ `./content-snapshot.js?cold=${Date.now()}-first`
       )) as typeof import("./content-snapshot.js");
-      const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
-      const base = {
-        document: window.document,
-        registry: new firstFacade.ElementRefRegistry<Element>(),
-        now: 1000,
-      };
-
-      firstFacade.handleContentScriptRequest(
-        createRequest("console", { action: "clear" }, "console-clear"),
-        base,
-      );
       console.log("cold-facade-log");
 
       expect(
         firstFacade.handleContentScriptRequest(
           createRequest("console", { action: "list" }, "console-list"),
-          base,
+          {
+            document: new JSDOM(`<main></main>`).window.document,
+            registry: new firstFacade.ElementRefRegistry<Element>(),
+            now: 1000,
+          },
         ),
       ).toMatchObject({
         ok: true,
         result: {
-          entries: [expect.objectContaining({ level: "log", text: "cold-facade-log" })],
+          entries: [],
         },
       });
 
@@ -1543,22 +1558,18 @@ describe("content snapshot", () => {
 
       const listed = secondFacade.handleContentScriptRequest(
         createRequest("console", { action: "list" }, "console-list-after-reload"),
-        base,
+        {
+          document: new JSDOM(`<main></main>`).window.document,
+          registry: new secondFacade.ElementRefRegistry<Element>(),
+          now: 1000,
+        },
       ) as ResponseEnvelope<"console">;
-      const reloadedEntryCount =
-        listed.ok && listed.result.entries !== undefined
-          ? listed.result.entries.filter((entry) => entry.text === "after-facade-reload").length
-          : 0;
       expect(listed).toMatchObject({
         ok: true,
         result: {
-          entries: [
-            expect.objectContaining({ text: "cold-facade-log" }),
-            expect.objectContaining({ text: "after-facade-reload" }),
-          ],
+          entries: [],
         },
       });
-      expect(reloadedEntryCount).toBe(1);
       expect(passthroughCalls).toEqual([["cold-facade-log"], ["after-facade-reload"]]);
     } finally {
       console.log = savedLog;
@@ -1568,6 +1579,120 @@ describe("content snapshot", () => {
         global[stateKey] = savedState;
       }
     }
+  });
+
+  it("starts content runtime explicitly, captures before registering messages, and disposes scoped listeners", async () => {
+    const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
+    const registrationOrder: string[] = [];
+    const runtime = createFakeContentRuntime(registrationOrder);
+    const realLogCapture = createContentLogCaptureService();
+    const logCapture = {
+      installGlobal: () => {
+        registrationOrder.push("installGlobal");
+        return realLogCapture.installGlobal();
+      },
+      installWindow: (view: Window | null) => {
+        registrationOrder.push("installWindow");
+        return realLogCapture.installWindow(view);
+      },
+      createConsoleResult: realLogCapture.createConsoleResult,
+      createErrorsResult: realLogCapture.createErrorsResult,
+    };
+    restoreLogCapture();
+    createConsoleResult("clear");
+
+    const lifecycle = startContentScriptRuntime({
+      browserRuntime: runtime.browserRuntime,
+      document: window.document,
+      logCapture,
+      now: 1000,
+    });
+
+    expect(registrationOrder).toEqual(["installGlobal", "installWindow", "addListener"]);
+    expect(runtime.listenerCount()).toBe(1);
+    captureConsoleLogWithoutStdout("runtime-log-before-message");
+    const response = await runtime.emit(
+      createRequest("console", { action: "list" }, "runtime-console-list"),
+    );
+    const parsed = parseBoundaryResponse("extension-to-content-script", "console", response);
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: {
+        ok: true,
+        result: {
+          entries: [expect.objectContaining({ text: "runtime-log-before-message" })],
+        },
+      },
+    });
+
+    lifecycle.dispose();
+    expect(runtime.listenerCount()).toBe(0);
+    captureConsoleLogWithoutStdout("after-runtime-dispose");
+    expect(
+      createConsoleResult("list").entries?.some((entry) => entry.text === "after-runtime-dispose"),
+    ).toBe(false);
+  });
+
+  it("keeps duplicate content runtime starts idempotent and preserves refs until explicit dispose", async () => {
+    const { window } = new JSDOM(`<button id="save">Save</button>`, {
+      url: "https://example.test/",
+    });
+    const runtime = createFakeContentRuntime();
+
+    const first = startContentScriptRuntime({
+      browserRuntime: runtime.browserRuntime,
+      document: window.document,
+      now: 1000,
+    });
+    const snapshotResponse = await runtime.emit(
+      createRequest("snapshot", { selector: "#save", interactiveOnly: true }, "snapshot-ref"),
+    );
+    const snapshotParsed = parseBoundaryResponse(
+      "extension-to-content-script",
+      "snapshot",
+      snapshotResponse,
+    );
+    expect(snapshotParsed).toMatchObject({
+      ok: true,
+      value: {
+        ok: true,
+        result: {
+          refs: 1,
+        },
+      },
+    });
+
+    const second = startContentScriptRuntime({
+      browserRuntime: runtime.browserRuntime,
+      document: window.document,
+      now: 1000,
+    });
+    expect(runtime.listenerCount()).toBe(1);
+
+    const resolvedWhileDuplicateStarted = await runtime.emit(
+      createRequest("ref.resolve", { ref: "@e1" }, "resolve-ref"),
+    );
+    expect(
+      parseBoundaryResponse(
+        "extension-to-content-script",
+        "ref.resolve",
+        resolvedWhileDuplicateStarted,
+      ),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        ok: true,
+        result: {
+          element: expect.objectContaining({ ref: "@e1" }),
+        },
+      },
+    });
+
+    second.dispose();
+    expect(runtime.listenerCount()).toBe(1);
+    first.dispose();
+    expect(runtime.listenerCount()).toBe(0);
   });
 
   it("restores and reinstalls console capture without replacing buffers", () => {
@@ -1603,6 +1728,37 @@ describe("content snapshot", () => {
     } finally {
       restoreLogCapture();
       console.log = baselineLog;
+      installLogCapture();
+    }
+  });
+
+  it("keeps global log capture installed until the last scoped handle is disposed", () => {
+    restoreLogCapture();
+    createConsoleResult("clear");
+    const firstHandle = installLogCapture();
+    const secondHandle = installLogCapture();
+
+    try {
+      captureConsoleLogWithoutStdout("scoped-global-before-dispose");
+      secondHandle.dispose();
+      captureConsoleLogWithoutStdout("scoped-global-after-one-dispose");
+      expect(createConsoleResult("list")).toMatchObject({
+        entries: [
+          expect.objectContaining({ text: "scoped-global-before-dispose" }),
+          expect.objectContaining({ text: "scoped-global-after-one-dispose" }),
+        ],
+      });
+
+      firstHandle.dispose();
+      captureConsoleLogWithoutStdout("scoped-global-after-all-dispose");
+      expect(
+        createConsoleResult("list").entries?.some(
+          (entry) => entry.text === "scoped-global-after-all-dispose",
+        ),
+      ).toBe(false);
+    } finally {
+      firstHandle.dispose();
+      secondHandle.dispose();
       installLogCapture();
     }
   });
@@ -1647,6 +1803,34 @@ describe("content snapshot", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps window log capture installed until the last scoped handle is disposed", () => {
+    const dom = new JSDOM(`<main></main>`, { url: "https://scoped.example.test/" });
+    const view = dom.window as unknown as Window;
+    createErrorsResult("clear");
+
+    const firstHandle = installWindowLogCapture(view);
+    const secondHandle = installWindowLogCapture(view);
+
+    dom.window.dispatchEvent(
+      new dom.window.ErrorEvent("error", { message: "scoped-window-before-dispose" }),
+    );
+    firstHandle.dispose();
+    dom.window.dispatchEvent(
+      new dom.window.ErrorEvent("error", { message: "scoped-window-after-one-dispose" }),
+    );
+    secondHandle.dispose();
+    dom.window.dispatchEvent(
+      new dom.window.ErrorEvent("error", { message: "scoped-window-after-all-dispose" }),
+    );
+
+    const listed = createErrorsResult("list").errors ?? [];
+    expect(listed.filter((entry) => entry.text === "scoped-window-before-dispose")).toHaveLength(1);
+    expect(listed.filter((entry) => entry.text === "scoped-window-after-one-dispose")).toHaveLength(
+      1,
+    );
+    expect(listed.some((entry) => entry.text === "scoped-window-after-all-dispose")).toBe(false);
+  });
+
   it("returns an async protocol envelope for browser.tabs.sendMessage", async () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
@@ -1678,6 +1862,41 @@ function captureConsoleLogWithoutStdout(...args: readonly unknown[]): void {
   } finally {
     process.stdout.write = originalWrite;
   }
+}
+
+function createFakeContentRuntime(registrationOrder: string[] = []): {
+  readonly browserRuntime: Parameters<typeof startContentScriptRuntime>[0]["browserRuntime"];
+  readonly registrationOrder: readonly string[];
+  readonly listenerCount: () => number;
+  readonly emit: (message: unknown) => Promise<unknown>;
+} {
+  const listeners: ((message: unknown) => Promise<unknown>)[] = [];
+  return {
+    browserRuntime: {
+      onMessage: {
+        addListener(listener) {
+          registrationOrder.push("addListener");
+          listeners.push(listener);
+        },
+        removeListener(listener) {
+          registrationOrder.push("removeListener");
+          const index = listeners.indexOf(listener);
+          if (index >= 0) {
+            listeners.splice(index, 1);
+          }
+        },
+      },
+    },
+    registrationOrder,
+    listenerCount: () => listeners.length,
+    emit: async (message) => {
+      const [listener] = listeners;
+      if (listener === undefined) {
+        return undefined;
+      }
+      return listener(message);
+    },
+  };
 }
 
 function readHighlightFields(element: HTMLElement): {
