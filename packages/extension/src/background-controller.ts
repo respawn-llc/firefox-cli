@@ -2,78 +2,46 @@ import {
   NATIVE_HOST_NAME,
   PendingRequestTracker,
   PROTOCOL_VERSION,
-  createLocalComponentIdentity,
   createErrorResponse,
-  createProtocolSession,
+  createLocalComponentIdentity,
   createRequest,
   localProtocolVersionRange,
-  parseBoundaryRequest,
-  parseBoundaryResponse,
   type CommandId,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
-import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
 import { createUnconfiguredBrowserAdapter } from "./background-default-browser-adapter.js";
-import {
-  createProtocolStateErrorResponse,
-  getMessageId,
-  getMessageProtocolVersion,
-  getNegotiatedNativeSession,
-  isRequestCommand,
-  isResponseLike,
-  type NativeProtocolState,
-} from "./background-native-protocol-state.js";
-import { handleRequest } from "./background-request-handler.js";
+import { NativeConnectionManager } from "./background-native-connection.js";
+import { isResponseLike } from "./background-native-protocol-state.js";
+import { NativeSessionService } from "./background-native-session.js";
+import { PairingStateService } from "./background-pairing-service.js";
+import { BackgroundRequestForwarder } from "./background-request-forwarder.js";
+import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
+import type {
+  BackgroundRuntimeAdapter,
+  BackgroundStorageAdapter,
+  ExtensionStatus,
+} from "./background-controller-types.js";
 
 export type { BackgroundBrowserAdapter, BrowserWindowSnapshot };
+export type {
+  BackgroundRuntimeAdapter,
+  BackgroundStorageAdapter,
+  ExtensionStatus,
+  NativePortLike,
+} from "./background-controller-types.js";
 
 const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
 
-export type NativePortLike = {
-  readonly onMessage: {
-    addListener(listener: (message: unknown) => void): void;
-  };
-  readonly onDisconnect: {
-    addListener(listener: (error?: { readonly message?: string }) => void): void;
-  };
-  postMessage(message: unknown): void;
-};
-
-export type BackgroundRuntimeAdapter = {
-  connectNative(name: string): NativePortLike;
-};
-
-export type BackgroundStorageAdapter = {
-  getPairToken(): Promise<string | null>;
-  setPairToken(token: string | null): Promise<void>;
-};
-
-export type ExtensionStatus = {
-  readonly connected: boolean;
-  readonly approved: boolean;
-  readonly lastError?: string;
-  readonly diagnostics: string;
-};
-
 export class FirefoxCliBackgroundController {
-  readonly #runtime: BackgroundRuntimeAdapter;
-  readonly #browserAdapter: BackgroundBrowserAdapter;
-  readonly #storageAdapter: BackgroundStorageAdapter;
+  readonly #connection: NativeConnectionManager;
+  readonly #pairing: PairingStateService;
+  readonly #nativeSession = new NativeSessionService();
+  readonly #requestForwarder: BackgroundRequestForwarder;
   readonly #productVersion: string;
-  readonly #reconnectDelaysMs: readonly number[];
-  readonly #scheduleTimer: (callback: () => void, delayMs: number) => void;
   readonly #pendingCommands: PendingRequestTracker<CommandId, ResponseEnvelope>;
-  #port: NativePortLike | null = null;
-  #connected = false;
-  #approved = false;
-  #pairToken: string | null = null;
-  #approvalRevision = 0;
-  #reconnectAttempt = 0;
-  #reconnectScheduled = false;
   #lastError: string | undefined;
-  #nativeProtocolState: NativeProtocolState = { state: "disconnected" };
-  #stopped = false;
+
   constructor(options: {
     readonly connectNative: BackgroundRuntimeAdapter["connectNative"];
     readonly browserAdapter?: BackgroundBrowserAdapter;
@@ -83,21 +51,46 @@ export class FirefoxCliBackgroundController {
     readonly scheduleTimer?: (callback: () => void, delayMs: number) => void;
     readonly requestTimeoutMs?: number;
   }) {
-    this.#runtime = {
-      connectNative: options.connectNative,
-    };
-    this.#browserAdapter = options.browserAdapter ?? createUnconfiguredBrowserAdapter();
-    this.#storageAdapter = options.storageAdapter ?? {
+    const browserAdapter = options.browserAdapter ?? createUnconfiguredBrowserAdapter();
+    const storageAdapter = options.storageAdapter ?? {
       getPairToken: async () => null,
       setPairToken: async () => undefined,
     };
     this.#productVersion = options.productVersion;
-    this.#reconnectDelaysMs = options.reconnectDelaysMs ?? [250, 1000, 5000, 10_000];
-    this.#scheduleTimer =
-      options.scheduleTimer ??
-      ((callback, delayMs) => {
-        setTimeout(callback, delayMs);
-      });
+    this.#pairing = new PairingStateService(storageAdapter);
+    this.#requestForwarder = new BackgroundRequestForwarder({
+      browserAdapter,
+      productVersion: this.#productVersion,
+    });
+    this.#connection = new NativeConnectionManager({
+      connectNative: options.connectNative,
+      reconnectDelaysMs: options.reconnectDelaysMs ?? [250, 1000, 5000, 10_000],
+      scheduleTimer:
+        options.scheduleTimer ??
+        ((callback, delayMs) => {
+          setTimeout(callback, delayMs);
+        }),
+      events: {
+        onConnect: () => {
+          this.#nativeSession.beginNegotiation();
+          this.#lastError = undefined;
+          this.#postHello();
+        },
+        onMessage: (message) => {
+          void this.#handleNativeMessage(message);
+        },
+        onDisconnect: (message) => {
+          this.#nativeSession.markDisconnected();
+          this.#lastError = message;
+          this.#drainPendingOnDisconnect();
+        },
+        onConnectError: (message) => {
+          this.#nativeSession.markDisconnected();
+          this.#lastError = message;
+        },
+      },
+    });
+
     const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_PENDING_REQUEST_TIMEOUT_MS;
     this.#pendingCommands = new PendingRequestTracker<CommandId, ResponseEnvelope>({
       timeoutMs: requestTimeoutMs,
@@ -123,41 +116,36 @@ export class FirefoxCliBackgroundController {
   }
 
   start(): void {
-    if (this.#stopped) {
+    if (this.#connection.stopped) {
       return;
     }
-    const approvalLoadRevision = this.#approvalRevision;
-    void this.#storageAdapter
-      .getPairToken()
-      .then((pairToken) => {
-        if (this.#approvalRevision === approvalLoadRevision) {
-          this.#pairToken = pairToken;
-          this.#approved = pairToken !== null;
-          if (pairToken !== null && this.#connected) {
-            this.#postHello();
-          }
+    void this.#pairing
+      .loadStoredPairToken()
+      .then(({ applied, pairToken }) => {
+        if (applied && pairToken !== null && this.#connection.connected) {
+          this.#postHello();
         }
       })
       .catch((error: unknown) => {
         this.#lastError = error instanceof Error ? error.message : String(error);
       });
 
-    this.#connectNative();
+    this.#connection.start();
   }
 
   getStatus(): ExtensionStatus {
     return {
-      connected: this.#connected,
-      approved: this.#approved,
+      connected: this.#connection.connected,
+      approved: this.#pairing.approved,
       ...(this.#lastError === undefined ? {} : { lastError: this.#lastError }),
       diagnostics: JSON.stringify(
         {
-          connected: this.#connected,
-          approved: this.#approved,
+          connected: this.#connection.connected,
+          approved: this.#pairing.approved,
           lastError: this.#lastError,
           nativeHostName: NATIVE_HOST_NAME,
           protocolVersion: PROTOCOL_VERSION,
-          nativeProtocolState: this.#nativeProtocolState.state,
+          nativeProtocolState: this.#nativeSession.stateName,
         },
         null,
         2,
@@ -171,34 +159,30 @@ export class FirefoxCliBackgroundController {
     }
 
     if (message.type === "firefox-cli:approve") {
-      this.#approvalRevision += 1;
+      this.#pairing.beginMutation();
       const request = createRequest("pair.approve", {});
       const response = await this.#sendNativeRequest(request);
       if (response.ok) {
-        this.#pairToken = response.result.token;
-        this.#approved = true;
+        await this.#pairing.approve(response.result.token);
         this.#lastError = undefined;
-        await this.#storageAdapter.setPairToken(response.result.token);
       } else {
-        this.#approved = false;
+        this.#pairing.markRejected();
         this.#lastError = response.error.message;
       }
       return this.getStatus();
     }
 
     if (message.type === "firefox-cli:reset") {
-      this.#approvalRevision += 1;
-      if (this.#connected) {
+      this.#pairing.beginMutation();
+      if (this.#connection.connected) {
         const response = await this.#sendNativeRequest(createRequest("pair.reset", {}));
         if (!response.ok) {
           this.#lastError = response.error.message;
           return this.getStatus();
         }
       }
-      this.#pairToken = null;
-      this.#approved = false;
+      await this.#pairing.reset();
       this.#lastError = undefined;
-      await this.#storageAdapter.setPairToken(null);
       return this.getStatus();
     }
 
@@ -206,15 +190,12 @@ export class FirefoxCliBackgroundController {
   }
 
   stop(): void {
-    if (this.#stopped) {
+    if (this.#connection.stopped) {
       return;
     }
-    this.#stopped = true;
-    this.#approvalRevision += 1;
-    this.#connected = false;
-    this.#port = null;
-    this.#reconnectScheduled = false;
-    this.#nativeProtocolState = { state: "disconnected" };
+    this.#connection.stop();
+    this.#pairing.beginMutation();
+    this.#nativeSession.markDisconnected();
     this.#lastError = "Extension background stopped.";
     this.#pendingCommands.drain((request) =>
       createErrorResponse(
@@ -236,12 +217,12 @@ export class FirefoxCliBackgroundController {
         productVersion: this.#productVersion,
         protocolMin: localProtocolVersionRange.protocolMin,
         protocolMax: localProtocolVersionRange.protocolMax,
-        ...(this.#pairToken === null ? {} : { pairToken: this.#pairToken }),
+        ...(this.#pairing.pairToken === null ? {} : { pairToken: this.#pairing.pairToken }),
       },
       undefined,
       localProtocolVersionRange.protocolMin,
     );
-    this.#nativeProtocolState = { state: "negotiating" };
+    this.#nativeSession.beginNegotiation();
     this.#sendNativeRequest(request)
       .then((response) => {
         if (!response.ok) {
@@ -253,74 +234,10 @@ export class FirefoxCliBackgroundController {
       });
   }
 
-  #connectNative(): void {
-    if (this.#stopped) {
-      return;
-    }
-    try {
-      this.#port = this.#runtime.connectNative(NATIVE_HOST_NAME);
-      this.#connected = true;
-      this.#nativeProtocolState = { state: "negotiating" };
-      this.#reconnectAttempt = 0;
-      this.#reconnectScheduled = false;
-      this.#lastError = undefined;
-      this.#port.onMessage.addListener((message) => {
-        if (this.#stopped) {
-          return;
-        }
-        void this.#handleNativeMessage(message);
-      });
-      this.#port.onDisconnect.addListener((error) => {
-        if (this.#stopped) {
-          return;
-        }
-        this.#connected = false;
-        this.#port = null;
-        this.#nativeProtocolState = { state: "disconnected" };
-        this.#lastError = error?.message ?? "Native host disconnected.";
-        this.#pendingCommands.drain((request) =>
-          createErrorResponse(
-            request.id,
-            {
-              code: "NATIVE_HOST_UNAVAILABLE",
-              message: "Native host disconnected before responding.",
-            },
-            request.protocolVersion ?? localProtocolVersionRange.protocolMax,
-          ),
-        );
-        this.#scheduleReconnect();
-      });
-      this.#postHello();
-    } catch (error) {
-      this.#connected = false;
-      this.#port = null;
-      this.#lastError = error instanceof Error ? error.message : String(error);
-      this.#scheduleReconnect();
-    }
-  }
-
-  #scheduleReconnect(): void {
-    if (this.#stopped || this.#reconnectScheduled || this.#reconnectDelaysMs.length === 0) {
-      return;
-    }
-
-    const delay =
-      this.#reconnectDelaysMs[Math.min(this.#reconnectAttempt, this.#reconnectDelaysMs.length - 1)];
-    this.#reconnectAttempt += 1;
-    this.#reconnectScheduled = true;
-    this.#scheduleTimer(() => {
-      if (this.#stopped) {
-        return;
-      }
-      this.#reconnectScheduled = false;
-      this.#connectNative();
-    }, delay ?? 0);
-  }
-
   #sendNativeRequest<C extends CommandId>(
     request: RequestEnvelope<C>,
   ): Promise<ResponseEnvelope<C>> {
-    if (this.#stopped) {
+    if (this.#connection.stopped) {
       return Promise.resolve(
         createErrorResponse(
           request.id,
@@ -333,7 +250,7 @@ export class FirefoxCliBackgroundController {
       ) as Promise<ResponseEnvelope<C>>;
     }
 
-    if (this.#port === null || !this.#connected) {
+    if (!this.#connection.connected) {
       return Promise.resolve(
         createErrorResponse(
           request.id,
@@ -347,9 +264,7 @@ export class FirefoxCliBackgroundController {
     }
 
     const session =
-      request.command === "hello"
-        ? undefined
-        : getNegotiatedNativeSession(this.#nativeProtocolState);
+      request.command === "hello" ? undefined : this.#nativeSession.getNegotiatedSession();
     if (session !== undefined && !session.ok) {
       return Promise.resolve(
         createErrorResponse(request.id, session.error, request.protocolVersion),
@@ -362,9 +277,7 @@ export class FirefoxCliBackgroundController {
       return Promise.resolve(tracked.value as ResponseEnvelope<C>);
     }
 
-    try {
-      this.#port.postMessage(wireRequest);
-    } catch {
+    if (!this.#connection.postMessage(wireRequest)) {
       this.#pendingCommands.settle(
         wireRequest.id,
         createErrorResponse(
@@ -382,121 +295,86 @@ export class FirefoxCliBackgroundController {
   }
 
   async #handleNativeMessage(message: unknown): Promise<void> {
-    if (this.#stopped) {
+    if (this.#connection.stopped) {
       return;
     }
     if (isResponseLike(message)) {
-      const command = this.#pendingCommands.getCommand(message.id);
-      if (command === undefined) {
-        return;
-      }
-      const response =
-        command === "hello"
-          ? parseBoundaryResponse("host-to-extension", command, message, {
-              hello: {
-                local: localProtocolVersionRange,
-                expectedPeerComponent: "native-host",
-              },
-            })
-          : parseBoundaryResponse("host-to-extension", command, message, {
-              protocolVersion:
-                this.#nativeProtocolState.state === "negotiated"
-                  ? this.#nativeProtocolState.session.protocolVersion
-                  : localProtocolVersionRange.protocolMax,
-            });
-      if (!response.ok) {
-        this.#lastError = response.error.message;
-        if (command === "hello") {
-          this.#nativeProtocolState = { state: "incompatible", error: response.error };
-        }
-        this.#pendingCommands.settle(
-          message.id,
-          createErrorResponse(message.id, response.error, getMessageProtocolVersion(message)),
-        );
-        return;
-      }
-      let helloPairingError: string | undefined;
-      if (command === "hello") {
-        if (response.value.ok) {
-          this.#nativeProtocolState = {
-            state: "negotiated",
-            session: createProtocolSession(response.value.protocolVersion),
-          };
-          const helloResponse = response.value as Extract<ResponseEnvelope<"hello">, { ok: true }>;
-          const pairing = helloResponse.result.pairing;
-          if (pairing !== undefined) {
-            this.#approved = pairing.approved;
-            if (
-              !pairing.approved &&
-              pairing.status !== "invalid-pair-state" &&
-              this.#pairToken !== null
-            ) {
-              this.#pairToken = null;
-              await this.#storageAdapter.setPairToken(null);
-            }
-            if (!pairing.approved && pairing.status === "invalid-pair-state") {
-              helloPairingError = pairing.message ?? "Native host pair state is invalid.";
-            }
-          }
-        } else {
-          this.#nativeProtocolState = {
-            state: "incompatible",
-            error: response.value.error,
-          };
-        }
-      }
-      this.#pendingCommands.settle(message.id, response.value);
-      this.#lastError = helloPairingError;
+      await this.#handleNativeResponse(message);
       return;
     }
 
-    const request = parseBoundaryRequest("host-to-extension", message, {
-      ...(this.#nativeProtocolState.state === "negotiated"
-        ? { protocolVersion: this.#nativeProtocolState.session.protocolVersion }
-        : {}),
-      hello: {
-        local: localProtocolVersionRange,
-        expectedPeerComponent: "native-host",
-      },
-    });
+    await this.#handleNativeRequest(message);
+  }
+
+  async #handleNativeResponse(message: { readonly id: string }): Promise<void> {
+    const command = this.#pendingCommands.getCommand(message.id);
+    if (command === undefined) {
+      return;
+    }
+    const response = this.#nativeSession.parseResponse(command, message);
+    if (!response.ok) {
+      this.#lastError = response.error.message;
+      this.#nativeSession.applyResponseParseFailure(command, response.error);
+      this.#pendingCommands.settle(
+        message.id,
+        createErrorResponse(
+          message.id,
+          response.error,
+          this.#nativeSession.getMessageProtocolVersion(message),
+        ),
+      );
+      return;
+    }
+
+    let helloPairingError: string | undefined;
+    if (command === "hello") {
+      const helloResponse = response.value as ResponseEnvelope<"hello">;
+      this.#nativeSession.applyHelloResponse(helloResponse);
+      if (helloResponse.ok) {
+        helloPairingError = await this.#pairing.applyHelloPairing(helloResponse.result.pairing);
+      }
+    }
+    this.#pendingCommands.settle(message.id, response.value);
+    this.#lastError = helloPairingError;
+  }
+
+  async #handleNativeRequest(message: unknown): Promise<void> {
+    const request = this.#nativeSession.parseRequest(message);
     if (!request.ok) {
-      const response = createProtocolStateErrorResponse(
-        this.#nativeProtocolState,
-        getMessageId(message),
+      const response = this.#nativeSession.createStateErrorResponse(message, request.error);
+      this.#nativeSession.markRequestIncompatibleIfNeeded(
+        message,
+        request.error.code,
         request.error,
       );
-      if (isRequestCommand(message, "hello") || request.error.code === "VERSION_MISMATCH") {
-        this.#nativeProtocolState = { state: "incompatible", error: request.error };
-      }
-      this.#port?.postMessage(response);
+      this.#connection.postMessage(response);
       return;
     }
 
-    const protocolSession = createProtocolSession(request.value.protocolVersion);
-    if (request.value.command === "hello") {
-      this.#nativeProtocolState = { state: "negotiated", session: protocolSession };
-    } else if (this.#nativeProtocolState.state === "incompatible") {
-      this.#port?.postMessage(
-        protocolSession.createErrorResponse(request.value.id, this.#nativeProtocolState.error),
-      );
-      return;
-    } else if (this.#nativeProtocolState.state !== "negotiated") {
-      this.#port?.postMessage(
-        protocolSession.createErrorResponse(request.value.id, {
-          code: "NATIVE_HOST_UNAVAILABLE",
-          message: "Native host protocol negotiation has not completed.",
-        }),
-      );
+    const prepared = this.#nativeSession.prepareRequest(request.value);
+    if (!prepared.ok) {
+      this.#connection.postMessage(prepared.response);
       return;
     }
 
-    this.#port?.postMessage(
-      await handleRequest(
+    this.#connection.postMessage(
+      await this.#requestForwarder.forward(
         request.value,
-        this.#productVersion,
-        this.#approved,
-        this.#browserAdapter,
-        protocolSession,
+        this.#pairing.approved,
+        prepared.protocolSession,
+      ),
+    );
+  }
+
+  #drainPendingOnDisconnect(): void {
+    this.#pendingCommands.drain((request) =>
+      createErrorResponse(
+        request.id,
+        {
+          code: "NATIVE_HOST_UNAVAILABLE",
+          message: "Native host disconnected before responding.",
+        },
+        request.protocolVersion ?? localProtocolVersionRange.protocolMax,
       ),
     );
   }
