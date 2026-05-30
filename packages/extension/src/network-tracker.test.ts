@@ -131,4 +131,43 @@ describe("NetworkRequestTracker", () => {
       { id: "meta", url: "https://example.test/file+name[1].json" },
     ]);
   });
+
+  it("prunes all network state for removed tabs", () => {
+    const tracker = new NetworkRequestTracker();
+
+    tracker.recordStart({ requestId: "active", tabId: 101, url: "https://example.test/active" });
+    tracker.recordStart({ requestId: "done", tabId: 101, url: "https://example.test/done" });
+    tracker.recordEnd({ requestId: "done", statusCode: 200 });
+    tracker.recordStart({ requestId: "other", tabId: 202, url: "https://other.test/api" });
+
+    tracker.pruneTab(101);
+
+    expect(tracker.list({ tabId: 101 })).toEqual([]);
+    expect(tracker.isIdle({ tabId: 101, idleMs: 0 })).toBe(true);
+    expect(tracker.list({ tabId: 202 })).toEqual([{ id: "other", url: "https://other.test/api" }]);
+  });
+
+  it("sweeps stale active requests into bounded history", () => {
+    let now = 1_000;
+    const tracker = new NetworkRequestTracker({
+      maxActiveRequestAgeMs: 100,
+      now: () => now,
+    });
+
+    tracker.recordStart({ requestId: "stale", tabId: 101, url: "https://example.test/stale" });
+    now += 50;
+    tracker.recordStart({ requestId: "fresh", tabId: 101, url: "https://example.test/fresh" });
+    now += 51;
+    expect(tracker.pruneStaleActiveRequests()).toBe(1);
+
+    expect(tracker.list({ tabId: 101 })).toEqual([
+      { id: "stale", url: "https://example.test/stale" },
+      { id: "fresh", url: "https://example.test/fresh" },
+    ]);
+    expect(tracker.isIdle({ tabId: 101, idleMs: 0 })).toBe(false);
+
+    now += 49;
+    expect(tracker.pruneStaleActiveRequests()).toBe(1);
+    expect(tracker.isIdle({ tabId: 101, idleMs: 0 })).toBe(true);
+  });
 });

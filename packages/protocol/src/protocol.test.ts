@@ -21,9 +21,12 @@ import {
   getRequestProtocolCompatibility,
   getCliRoutes,
   getCommandCliRoutes,
+  getCommandSecurityMetadata,
   isActionCommand,
   isBatchableCommandId,
   isContentCommand,
+  isPrivilegeSensitiveCommand,
+  isPrivilegeSensitiveRequest,
   kernelCapabilities,
   localProtocolVersionRange,
   negotiateProtocolVersion,
@@ -436,6 +439,59 @@ describe("protocol command metadata", () => {
     const timeoutRebaseCommands = commandIds().filter(commandAcceptsBatchTimeout);
 
     expect(timeoutRebaseCommands).toEqual(["wait", "eval", "screenshot"]);
+  });
+
+  it("marks privilege-sensitive commands and request shapes explicitly", () => {
+    const sensitiveCommands = commandIds().filter(isPrivilegeSensitiveCommand);
+
+    expect(sensitiveCommands).toEqual([
+      "wait",
+      "eval",
+      "drag",
+      "upload",
+      "mouse",
+      "keydown",
+      "keyup",
+      "download",
+      "clipboard",
+      "cookies",
+      "network",
+      "click",
+      "dblclick",
+      "focus",
+      "hover",
+      "fill",
+      "type",
+      "press",
+      "keyboard.type",
+      "keyboard.inserttext",
+      "check",
+      "uncheck",
+      "select",
+      "scroll",
+      "scrollintoview",
+      "swipe",
+    ]);
+    expect(getCommandSecurityMetadata("eval")).toEqual({
+      level: "sensitive",
+      reasons: ["page-code-execution"],
+    });
+    expect(getCommandSecurityMetadata("click")).toEqual({
+      level: "sensitive",
+      reasons: ["page-mutation"],
+    });
+
+    expect(
+      isPrivilegeSensitiveRequest(createRequest("wait", { kind: "element", selector: "#main" })),
+    ).toBe(false);
+    expect(
+      isPrivilegeSensitiveRequest(createRequest("wait", { kind: "function", expression: "1" })),
+    ).toBe(true);
+    expect(
+      isPrivilegeSensitiveRequest(
+        createRequest("wait", { kind: "load-state", state: "networkidle" }),
+      ),
+    ).toBe(true);
   });
 });
 

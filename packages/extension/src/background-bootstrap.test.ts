@@ -28,6 +28,7 @@ describe("background bootstrap", () => {
     }>;
     expect(runtimeOnMessage.listenerCount()).toBe(1);
     expect(onBeforeRequest.listenerCount()).toBe(1);
+    expect((browser.tabs.onRemoved as unknown as FakeEvent<number>).listenerCount()).toBe(1);
 
     onBeforeRequest.emit({
       requestId: "before-dispose",
@@ -35,17 +36,20 @@ describe("background bootstrap", () => {
       url: "https://example.test/app",
     });
     expect(networkTracker.list({ tabId: 7 })).toHaveLength(1);
+    (browser.tabs.onRemoved as unknown as FakeEvent<number>).emit(7);
+    expect(networkTracker.list({ tabId: 7 })).toEqual([]);
 
     lifecycle.dispose();
     expect(runtimeOnMessage.listenerCount()).toBe(0);
     expect(onBeforeRequest.listenerCount()).toBe(0);
+    expect((browser.tabs.onRemoved as unknown as FakeEvent<number>).listenerCount()).toBe(0);
 
     onBeforeRequest.emit({
       requestId: "after-dispose",
       tabId: 7,
       url: "https://example.test/after",
     });
-    expect(networkTracker.list({ tabId: 7 })).toHaveLength(1);
+    expect(networkTracker.list({ tabId: 7 })).toEqual([]);
   });
 
   it("preserves content injection and eval execution product contracts", async () => {
@@ -85,6 +89,7 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
   const onBeforeRequest = createWebRequestEvent();
   const onCompleted = createWebRequestEvent();
   const onErrorOccurred = createWebRequestEvent();
+  const onRemoved = createEvent<number>();
   let sendMessageCalls = 0;
   const scriptingCalls: unknown[] = [];
 
@@ -119,6 +124,7 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
         return { sendMessageCalls };
       },
       captureVisibleTab: async () => "data:image/png;base64,",
+      onRemoved,
     },
     scripting: {
       calls: scriptingCalls,

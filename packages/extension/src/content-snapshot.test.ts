@@ -609,6 +609,26 @@ describe("content snapshot", () => {
     }
   });
 
+  it("rejects wrong-boundary privileged browser commands in the content router", () => {
+    const { window } = new JSDOM(`<main>Page</main>`, { url: "https://example.test/" });
+
+    const response = handleContentScriptRequest(
+      createRequest("eval", { script: "document.title", source: "argv" }, "wrong-boundary-eval"),
+      {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "UNSUPPORTED_CAPABILITY",
+        message: "Unsupported content command: eval",
+      },
+    });
+  });
+
   it("truncates large get text results deterministically", () => {
     const { window } = new JSDOM(`<main>${"x".repeat(100)}</main>`, {
       url: "https://example.test/",

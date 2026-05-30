@@ -27,11 +27,13 @@ export type NetworkRequestEnd = {
 
 export type NetworkTrackerOptions = {
   readonly maxCompletedRequestsPerTab?: number;
+  readonly maxActiveRequestAgeMs?: number;
   readonly now?: () => number;
 };
 
 export class NetworkRequestTracker {
   readonly #maxCompletedRequestsPerTab: number;
+  readonly #maxActiveRequestAgeMs: number;
   readonly #now: () => number;
   readonly #activeByRequestId = new Map<string, NetworkRequestRecord>();
   readonly #completedByTabId = new Map<number, NetworkRequestRecord[]>();
@@ -39,10 +41,12 @@ export class NetworkRequestTracker {
 
   constructor(options: NetworkTrackerOptions = {}) {
     this.#maxCompletedRequestsPerTab = options.maxCompletedRequestsPerTab ?? 1_000;
+    this.#maxActiveRequestAgeMs = options.maxActiveRequestAgeMs ?? 60_000;
     this.#now = options.now ?? (() => Date.now());
   }
 
   recordStart(details: NetworkRequestStart): void {
+    this.pruneStaleActiveRequests();
     if (!isTrackableTabId(details.tabId) || !isTrackableUrl(details.url)) {
       return;
     }
@@ -61,6 +65,7 @@ export class NetworkRequestTracker {
   }
 
   recordEnd(details: NetworkRequestEnd): void {
+    this.pruneStaleActiveRequests();
     const id = String(details.requestId);
     const active = this.#activeByRequestId.get(id);
     if (active === undefined) {
@@ -74,18 +79,14 @@ export class NetworkRequestTracker {
       ...(details.statusCode === undefined ? {} : { statusCode: details.statusCode }),
       completedAt: now,
     };
-    const completedForTab = [...(this.#completedByTabId.get(completed.tabId) ?? []), completed];
-    this.#completedByTabId.set(
-      completed.tabId,
-      pruneCompletedHistory(completedForTab, this.#maxCompletedRequestsPerTab),
-    );
-    this.#lastActivityByTabId.set(completed.tabId, now);
+    this.#recordCompletedRequest(completed);
   }
 
   list(options: {
     readonly tabId: number;
     readonly urlGlob?: string;
   }): NonNullable<NetworkResult["requests"]> {
+    this.pruneStaleActiveRequests();
     const matchesUrl =
       options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     return this.#recordsForTab(options.tabId)
@@ -95,6 +96,7 @@ export class NetworkRequestTracker {
   }
 
   clear(options: { readonly tabId: number; readonly urlGlob?: string }): void {
+    this.pruneStaleActiveRequests();
     const completed = this.#completedByTabId.get(options.tabId);
     if (completed === undefined) {
       return;
@@ -109,6 +111,7 @@ export class NetworkRequestTracker {
   }
 
   isIdle(options: { readonly tabId: number; readonly idleMs: number }): boolean {
+    this.pruneStaleActiveRequests();
     if ([...this.#activeByRequestId.values()].some((request) => request.tabId === options.tabId)) {
       return false;
     }
@@ -117,11 +120,47 @@ export class NetworkRequestTracker {
     return this.#now() - lastActivity >= options.idleMs;
   }
 
+  pruneTab(tabId: number): void {
+    if (!isTrackableTabId(tabId)) {
+      return;
+    }
+    for (const [requestId, request] of this.#activeByRequestId) {
+      if (request.tabId === tabId) {
+        this.#activeByRequestId.delete(requestId);
+      }
+    }
+    this.#completedByTabId.delete(tabId);
+    this.#lastActivityByTabId.delete(tabId);
+  }
+
+  pruneStaleActiveRequests(maxAgeMs: number = this.#maxActiveRequestAgeMs): number {
+    const now = this.#now();
+    let pruned = 0;
+    for (const [requestId, request] of this.#activeByRequestId) {
+      if (now - request.startedAt < maxAgeMs) {
+        continue;
+      }
+      this.#activeByRequestId.delete(requestId);
+      this.#recordCompletedRequest({ ...request, completedAt: now });
+      pruned += 1;
+    }
+    return pruned;
+  }
+
   #recordsForTab(tabId: number): readonly NetworkRequestRecord[] {
     return [
       ...(this.#completedByTabId.get(tabId) ?? []),
       ...[...this.#activeByRequestId.values()].filter((request) => request.tabId === tabId),
     ];
+  }
+
+  #recordCompletedRequest(request: NetworkRequestRecord): void {
+    const completedForTab = [...(this.#completedByTabId.get(request.tabId) ?? []), request];
+    this.#completedByTabId.set(
+      request.tabId,
+      pruneCompletedHistory(completedForTab, this.#maxCompletedRequestsPerTab),
+    );
+    this.#lastActivityByTabId.set(request.tabId, request.completedAt ?? this.#now());
   }
 }
 

@@ -2,7 +2,12 @@ import type { z } from "zod";
 
 import { createBatchSchemas } from "../batch.js";
 import { targetSelectorSchema } from "../target.js";
-import type { CliRouteEntry, CliRouteMetadata, CommandBatchMetadata } from "../metadata.js";
+import type {
+  CliRouteEntry,
+  CliRouteMetadata,
+  CommandBatchMetadata,
+  CommandSecurityMetadata,
+} from "../metadata.js";
 import { actionsCommandEntries } from "./actions.js";
 import { browsingCommandEntries } from "./browsing.js";
 import { contentCommandEntries } from "./content.js";
@@ -138,6 +143,51 @@ export function isContentCommand(command: string): command is ContentCommandId {
   }
   const content = commandSchemas[command].content;
   return content === "always" || content === "mixed" || content === "action";
+}
+
+export function getCommandSecurityMetadata(command: CommandId): CommandSecurityMetadata {
+  const entry = commandSchemas[command];
+  const metadata =
+    "security" in entry ? (entry.security as CommandSecurityMetadata | undefined) : undefined;
+  if (metadata !== undefined) {
+    return metadata;
+  }
+  return entry.action
+    ? { level: "sensitive", reasons: ["page-mutation"] }
+    : { level: "normal", reasons: [] };
+}
+
+export function isPrivilegeSensitiveCommand(command: CommandId): boolean {
+  return getCommandSecurityMetadata(command).level !== "normal";
+}
+
+export function isPrivilegeSensitiveRequest(request: {
+  readonly command: CommandId;
+  readonly params: unknown;
+}): boolean {
+  const metadata = getCommandSecurityMetadata(request.command);
+  if (metadata.level === "normal") {
+    return false;
+  }
+  if (metadata.level === "sensitive") {
+    return true;
+  }
+
+  return isConditionallySensitiveRequest(request);
+}
+
+function isConditionallySensitiveRequest(request: {
+  readonly command: CommandId;
+  readonly params: unknown;
+}): boolean {
+  if (request.command !== "wait" || !isRecord(request.params)) {
+    return false;
+  }
+  return (
+    request.params.kind === "function" ||
+    request.params.kind === "download" ||
+    (request.params.kind === "load-state" && request.params.state === "networkidle")
+  );
 }
 
 function batchStepParamsWithDefaultTarget(command: string, params: unknown): unknown | undefined {

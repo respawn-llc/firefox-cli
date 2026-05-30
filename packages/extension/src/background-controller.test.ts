@@ -1,4 +1,9 @@
-import { createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
+import {
+  createOkResponse,
+  createRequest,
+  isPrivilegeSensitiveRequest,
+  kernelCapabilities,
+} from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import {
   FirefoxCliBackgroundController,
@@ -171,6 +176,199 @@ describe("FirefoxCliBackgroundController", () => {
         message: "Approve firefox-cli in the extension popup before running CLI commands.",
       },
     });
+  });
+
+  it("gates unapproved privilege-sensitive native-host requests before browser handlers", async () => {
+    const port = new FakeNativePort();
+    const browserCalls: string[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      browserAdapter: createTestBrowserAdapter(
+        [
+          {
+            id: 7,
+            focused: true,
+            private: false,
+            tabs: [
+              {
+                id: 42,
+                index: 0,
+                active: true,
+                title: "Example",
+                url: "https://example.com/",
+                windowId: 7,
+                private: false,
+              },
+            ],
+          },
+        ],
+        {
+          listWindows: async () => {
+            browserCalls.push("listWindows");
+            return [];
+          },
+          executeEval: async () => {
+            browserCalls.push("executeEval");
+            return {
+              ok: true,
+              value: { type: "json", value: "unreachable" },
+              elapsedMs: 1,
+            };
+          },
+        },
+      ),
+      connectNative: () => port,
+      productVersion: "0.0.0",
+    });
+    controller.start();
+    await completeNativeHello(port);
+
+    const request = createRequest(
+      "eval",
+      { script: "document.title", source: "argv" },
+      "sensitive-request",
+    );
+    expect(isPrivilegeSensitiveRequest(request)).toBe(true);
+    port.emitMessage(request);
+    await flushPromises();
+
+    expect(port.messages[1]).toEqual({
+      protocolVersion: request.protocolVersion,
+      id: "sensitive-request",
+      ok: false,
+      error: {
+        code: "NOT_APPROVED",
+        message: "Approve firefox-cli in the extension popup before running CLI commands.",
+      },
+    });
+    expect(browserCalls).toEqual([]);
+  });
+
+  it("rejects malformed sensitive native-host requests before browser handlers", async () => {
+    const port = new FakeNativePort();
+    const browserCalls: string[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      browserAdapter: createTestBrowserAdapter([], {
+        listWindows: async () => {
+          browserCalls.push("listWindows");
+          return [];
+        },
+        executeEval: async () => {
+          browserCalls.push("executeEval");
+          return {
+            ok: true,
+            value: { type: "json", value: "unreachable" },
+            elapsedMs: 1,
+          };
+        },
+      }),
+      connectNative: () => port,
+      productVersion: "0.0.0",
+    });
+    controller.start();
+    await approveWithNativeHost(controller, port);
+
+    const malformedEval = {
+      ...createRequest("eval", { script: "document.title", source: "argv" }, "malformed-eval"),
+      params: { script: 42, source: "argv" },
+    };
+    port.emitMessage(malformedEval);
+    await flushPromises();
+
+    expect(port.messages[2]).toMatchObject({
+      protocolVersion: malformedEval.protocolVersion,
+      id: "malformed-eval",
+      ok: false,
+      error: {
+        code: "INVALID_ENVELOPE",
+      },
+    });
+    expect(browserCalls).toEqual([]);
+  });
+
+  it("preserves approved privilege-sensitive native-host command execution", async () => {
+    const port = new FakeNativePort();
+    const browserCalls: string[] = [];
+    const controller = new FirefoxCliBackgroundController({
+      browserAdapter: createTestBrowserAdapter(
+        [
+          {
+            id: 7,
+            focused: true,
+            private: false,
+            tabs: [
+              {
+                id: 42,
+                index: 0,
+                active: true,
+                title: "Example",
+                url: "https://example.com/",
+                windowId: 7,
+                private: false,
+              },
+            ],
+          },
+        ],
+        {
+          listWindows: async () => {
+            browserCalls.push("listWindows");
+            return [
+              {
+                id: 7,
+                focused: true,
+                private: false,
+                tabs: [
+                  {
+                    id: 42,
+                    index: 0,
+                    active: true,
+                    title: "Example",
+                    url: "https://example.com/",
+                    windowId: 7,
+                    private: false,
+                  },
+                ],
+              },
+            ];
+          },
+          executeEval: async (tabId, payload) => {
+            browserCalls.push(`executeEval:${tabId}:${payload.script}`);
+            return {
+              ok: true,
+              value: { type: "json", value: "Example" },
+              elapsedMs: 2,
+            };
+          },
+        },
+      ),
+      connectNative: () => port,
+      productVersion: "0.0.0",
+    });
+    controller.start();
+    await approveWithNativeHost(controller, port);
+
+    const request = createRequest(
+      "eval",
+      { script: "document.title", source: "argv" },
+      "approved-sensitive-request",
+    );
+    expect(isPrivilegeSensitiveRequest(request)).toBe(true);
+    port.emitMessage(request);
+    await flushPromises();
+
+    expect(port.messages[2]).toMatchObject({
+      protocolVersion: request.protocolVersion,
+      id: "approved-sensitive-request",
+      ok: true,
+      result: {
+        value: { type: "json", value: "Example" },
+        elapsedMs: 2,
+        target: {
+          windowId: 7,
+          tabId: 42,
+        },
+      },
+    });
+    expect(browserCalls).toEqual(["listWindows", "executeEval:42:document.title"]);
   });
 
   it("rejects native-host requests before protocol negotiation completes", async () => {
@@ -650,6 +848,7 @@ async function sleep(delayMs: number): Promise<void> {
 
 function createTestBrowserAdapter(
   windows: readonly BrowserWindowSnapshot[],
+  overrides: Partial<BackgroundBrowserAdapter> = {},
 ): BackgroundBrowserAdapter {
   return {
     listWindows: async () => windows,
@@ -715,6 +914,7 @@ function createTestBrowserAdapter(
     resizeWindow: async () => {
       throw new Error("not implemented");
     },
+    ...overrides,
   };
 }
 

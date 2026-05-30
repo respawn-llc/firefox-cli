@@ -6,6 +6,27 @@ export type CommandOwner = "native-host" | "extension";
 export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
 export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
 export type CommandTimeoutPolicy = "none" | "command" | "batch";
+export type CommandPrivilegeReason =
+  | "page-mutation"
+  | "page-code-execution"
+  | "page-function-evaluation"
+  | "clipboard"
+  | "downloads"
+  | "cookies"
+  | "network-observation";
+export type CommandSecurityMetadata =
+  | {
+      readonly level: "normal";
+      readonly reasons: readonly [];
+    }
+  | {
+      readonly level: "sensitive";
+      readonly reasons: readonly [CommandPrivilegeReason, ...CommandPrivilegeReason[]];
+    }
+  | {
+      readonly level: "conditional";
+      readonly reasons: readonly [CommandPrivilegeReason, ...CommandPrivilegeReason[]];
+    };
 
 export type CliRouteMetadata = {
   readonly id: string;
@@ -31,6 +52,7 @@ export type CommandSchemaMetadata = {
   readonly content: CommandContentPolicy;
   readonly action: boolean;
   readonly timeout: CommandTimeoutPolicy;
+  readonly security?: CommandSecurityMetadata;
   readonly batch: CommandBatchMetadata;
   readonly cliRoutes: readonly CliRouteMetadata[];
 };

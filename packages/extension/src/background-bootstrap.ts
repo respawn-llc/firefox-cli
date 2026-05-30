@@ -83,9 +83,13 @@ export function startBackground(options: {
     readonly event: WebRequestEvent;
     readonly listener: (details: WebRequestDetails) => void;
   }[] = [];
+  const onTabRemoved = (tabId: number) => {
+    networkTracker.pruneTab(tabId);
+  };
 
   controller.start();
   options.browser.runtime.onMessage.addListener(runtimeListener);
+  options.browser.tabs.onRemoved?.addListener(onTabRemoved);
   addWebRequestListener(
     options.browser.webRequest?.onBeforeRequest,
     onBeforeRequest,
@@ -110,6 +114,7 @@ export function startBackground(options: {
         registration.event.removeListener(registration.listener);
       }
       webRequestRegistrations.length = 0;
+      options.browser.tabs.onRemoved?.removeListener(onTabRemoved);
       controller.stop();
     },
   };

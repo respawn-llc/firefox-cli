@@ -70,6 +70,10 @@ export const contentCommandEntries = defineCommandEntries({
     content: "mixed",
     action: false,
     timeout: "command",
+    security: {
+      level: "conditional",
+      reasons: ["page-function-evaluation", "downloads", "network-observation"],
+    },
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
     cliRoutes: [{ id: "wait", path: ["wait"], batch: true }],
   },

@@ -71,6 +71,10 @@ declare const browser: {
       windowId: number,
       options: { readonly format?: "png" | "jpeg"; readonly quality?: number },
     ): Promise<string>;
+    readonly onRemoved?: {
+      addListener(listener: (tabId: number) => void): void;
+      removeListener(listener: (tabId: number) => void): void;
+    };
   };
   readonly scripting: {
     executeScript(options: {
