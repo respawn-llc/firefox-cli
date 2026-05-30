@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { calculateCrc32 } from "./zip-archive.js";
+import { calculateCrc32 } from "../zip-archive.js";
 
 export type ZipFixtureEntryInput = {
   readonly name: string;

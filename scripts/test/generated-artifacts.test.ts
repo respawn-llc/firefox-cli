@@ -2,7 +2,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { resetGeneratedArtifact } from "./generated-artifacts.js";
+import { resetGeneratedArtifact } from "../generated-artifacts.js";
 
 describe("generated artifact reset", () => {
   it("resets only generated paths under dist", async () => {

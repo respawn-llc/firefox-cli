@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readZipArchive, ZipArchiveError } from "./zip-archive.js";
+import { readZipArchive, ZipArchiveError } from "../zip-archive.js";
 import { createZipFixture } from "./zip-test-utils.js";
 
 describe("readZipArchive", () => {

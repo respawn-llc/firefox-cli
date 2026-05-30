@@ -94,4 +94,4 @@ jobs:
           packages/native-host/src/native-messaging-frame.test.ts
           packages/native-host/src/pair-state.test.ts
           packages/cli/src/cli.test.ts
-          scripts/package-check.test.ts
+          scripts/test/package-check.test.ts

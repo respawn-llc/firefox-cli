@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveReleaseSignedXpiPolicy } from "./release-policy.js";
+import { resolveReleaseSignedXpiPolicy } from "../release-policy.js";
 
 describe("release signed-XPI policy", () => {
   it("requires signed provenance by default", () => {

@@ -8,7 +8,7 @@ import {
   renderDependencyUpgradePolicy,
   runDependencyUpgradeCheck,
   SECONDS_PER_DAY,
-} from "./dependency-upgrade-check.js";
+} from "../dependency-upgrade-check.js";
 
 describe("dependency upgrade policy", () => {
   it("classifies semantic version upgrades by migration risk", () => {

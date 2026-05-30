@@ -34,7 +34,7 @@ This repository is small enough for a full architectural pass: roughly 35k lines
 
 ## Lower Workstreams
 
-- [x] Split oversized test suites and add focused module coverage. `packages/cli/src/cli.test.ts`, `packages/protocol/src/protocol.test.ts`, `packages/extension/src/content-snapshot.test.ts`, `packages/extension/src/browser-commands.test.ts`, `packages/extension/src/content-actions.test.ts`, and `scripts/package-check.test.ts` are large enough to hide coupling. Add focused `parse.test.ts`, `format.test.ts`, command-builder tests, content-action adapter tests, and protocol registry tests, then keep one small boundary suite per runtime crossing.
+- [x] Split oversized test suites and add focused module coverage. `packages/cli/src/cli.test.ts`, `packages/protocol/src/protocol.test.ts`, `packages/extension/src/content-snapshot.test.ts`, `packages/extension/src/browser-commands.test.ts`, `packages/extension/src/content-actions.test.ts`, and `scripts/test/package-check.test.ts` are large enough to hide coupling. Add focused `parse.test.ts`, `format.test.ts`, command-builder tests, content-action adapter tests, and protocol registry tests, then keep one small boundary suite per runtime crossing.
 
 - [x] Consolidate duplicated timeout, sleep, and polling helpers in scripts. `scripts/marionette-client.ts`, `scripts/e2e-disposable-workflow.ts`, `scripts/e2e-disposable-firefox.ts`, `scripts/e2e-phase2.ts`, and `scripts/process-runner.ts` each carry similar timeout or sleep utilities. Move them into a shared script utility with cancellation, consistent timeout messages, and output diagnostics.
 

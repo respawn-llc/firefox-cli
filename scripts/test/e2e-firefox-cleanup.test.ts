@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isFirefoxExecutableCommand,
   parseDisposableFirefoxProcessIds,
-} from "./e2e-firefox-cleanup.js";
+} from "../e2e-firefox-cleanup.js";
 
 describe("disposable Firefox process cleanup parsing", () => {
   it("keeps only Firefox processes for the disposable profile", () => {

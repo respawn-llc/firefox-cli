@@ -8,7 +8,7 @@ import {
   renderCommand,
   runProcess,
   startManagedProcess,
-} from "./process-runner.js";
+} from "../process-runner.js";
 
 const node = process.execPath;
 

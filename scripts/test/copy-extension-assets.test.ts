@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { copyExtensionAssets } from "./copy-extension-assets.js";
+import { copyExtensionAssets } from "../copy-extension-assets.js";
 
 describe("copyExtensionAssets", () => {
   it("validates and versions source extension manifests before copying", async () => {

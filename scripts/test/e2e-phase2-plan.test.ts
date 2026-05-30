@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NATIVE_HOST_NAME, createLocalIpcEndpointScope } from "@firefox-cli/native-host";
-import { planPhase2E2e } from "./e2e-phase2-plan.js";
+import { planPhase2E2e } from "../e2e-phase2-plan.js";
 
 describe("phase 2 E2E planning", () => {
   it("uses macOS state and native manifest paths", () => {

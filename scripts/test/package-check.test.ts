@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import rootPackage from "../package.json" with { type: "json" };
+import rootPackage from "../../package.json" with { type: "json" };
 import { createTempDir } from "@firefox-cli/test-support";
 import { getBinaryName, getPlatformKey, type PlatformInput } from "@firefox-cli/native-host";
 import {
   hashPayloadMap,
   packagedSignedExtensionProvenanceFile,
-} from "./extension-artifact-provenance.js";
-import { verifyPackageLayout } from "./package-check.js";
+} from "../extension-artifact-provenance.js";
+import { verifyPackageLayout } from "../package-check.js";
 import { createZipFixture, type ZipFixtureEntryInput } from "./zip-test-utils.js";
 
 const platform: PlatformInput = {

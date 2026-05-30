@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pollUntil, sleep, withTimeout } from "./script-timing.js";
+import { pollUntil, sleep, withTimeout } from "../script-timing.js";
 
 describe("script timing helpers", () => {
   it("polls until a check returns a value", async () => {
