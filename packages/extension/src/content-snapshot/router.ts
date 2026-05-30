@@ -24,9 +24,7 @@ import { ContentSnapshotError, createContentErrorResponseForRequest } from "./er
 import { applyElementHighlight, type HighlightScheduler } from "./highlight.js";
 import {
   createConsoleResult,
-  createContentLogCaptureService,
   createErrorsResult,
-  installWindowLogCapture,
   type ContentLogCaptureService,
 } from "./log-capture.js";
 import { createSnapshotResult } from "./snapshot-render.js";
@@ -38,7 +36,7 @@ type ContentScriptRequestContext = {
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
   readonly highlightScheduler?: HighlightScheduler;
-  readonly logCapture?: ContentLogCaptureService;
+  readonly logCapture: ContentLogCaptureService;
   readonly elementResolver?: ContentElementResolver;
 };
 
@@ -206,11 +204,8 @@ export function handleContentScriptRequest(
   request: RequestEnvelope,
   options: ContentScriptRequestContext,
 ): ResponseEnvelope | Promise<ResponseEnvelope> {
-  const logCapture = options.logCapture ?? createContentLogCaptureService();
+  const logCapture = getRequiredLogCapture(options);
   const elementResolver = options.elementResolver ?? getElementResolver(options);
-  if (options.logCapture === undefined) {
-    installWindowLogCapture(options.document.defaultView);
-  }
 
   if (isDirectContentRequest(request)) {
     return dispatchCommandHandler(directContentHandlers, request, {
@@ -221,13 +216,21 @@ export function handleContentScriptRequest(
   }
 
   if (isActionRequest(request)) {
-    return handleActionCommand(request, { ...options, elementResolver });
+    return handleActionCommand(request, { ...options, logCapture, elementResolver });
   }
 
   return createErrorResponseForRequest(request, {
     code: "UNSUPPORTED_CAPABILITY",
     message: `Unsupported content command: ${request.command}`,
   });
+}
+
+function getRequiredLogCapture(options: ContentScriptRequestContext): ContentLogCaptureService {
+  const logCapture = (options as { readonly logCapture?: ContentLogCaptureService }).logCapture;
+  if (logCapture === undefined) {
+    throw new Error("ContentLogCaptureService is required at the content runtime boundary.");
+  }
+  return logCapture;
 }
 
 function handleActionCommand(

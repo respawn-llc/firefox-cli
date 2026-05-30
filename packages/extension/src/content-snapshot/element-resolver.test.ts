@@ -4,9 +4,30 @@ import { describe, expect, it } from "vitest";
 import {
   ElementRefRegistry,
   createSnapshotResult,
-  handleContentScriptRequest,
+  handleContentScriptRequest as handleRawContentScriptRequest,
 } from "../content-snapshot.js";
+import {
+  createContentLogCaptureService,
+  type ContentLogCaptureService,
+} from "../content-snapshot/log-capture.js";
 import { createContentElementResolver } from "./element-resolver.js";
+
+type TestContentOptions = Omit<
+  Parameters<typeof handleRawContentScriptRequest>[1],
+  "logCapture"
+> & {
+  readonly logCapture?: ContentLogCaptureService;
+};
+
+function handleContentScriptRequest(
+  request: Parameters<typeof handleRawContentScriptRequest>[0],
+  options: TestContentOptions,
+) {
+  return handleRawContentScriptRequest(request, {
+    logCapture: createContentLogCaptureService(),
+    ...options,
+  });
+}
 
 describe("content element resolver", () => {
   it("centralizes selector validation and required/optional target errors", () => {

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   ElementRefRegistry,
   createSnapshotResult,
-  handleContentScriptRequest,
+  handleContentScriptRequest as handleRawContentScriptRequest,
 } from "./content-snapshot.js";
 import { describeFrame } from "./content-snapshot/accessibility.js";
 import { escapeCssString } from "./content-snapshot/format.js";
@@ -24,7 +24,25 @@ import {
   installWindowLogCapture,
   restoreLogCapture,
   restoreWindowLogCapture,
+  type ContentLogCaptureService,
 } from "./content-snapshot/log-capture.js";
+
+type TestContentOptions = Omit<
+  Parameters<typeof handleRawContentScriptRequest>[1],
+  "logCapture"
+> & {
+  readonly logCapture?: ContentLogCaptureService;
+};
+
+function handleContentScriptRequest(
+  request: Parameters<typeof handleRawContentScriptRequest>[0],
+  options: TestContentOptions,
+) {
+  return handleRawContentScriptRequest(request, {
+    logCapture: createContentLogCaptureService(),
+    ...options,
+  });
+}
 
 describe("content snapshot", () => {
   it("emits compact interactive refs with accessible names", () => {
@@ -284,6 +302,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
         now: 1000,
       },
     );
@@ -320,6 +339,7 @@ describe("content snapshot", () => {
     const handler = createContentMessageHandler({
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
     });
 
     const snapshot = await handler(
@@ -594,6 +614,7 @@ describe("content snapshot", () => {
         {
           document: window.document,
           registry: new ElementRefRegistry<Element>(),
+          logCapture: createContentLogCaptureService(),
           now: 1000,
         },
       );
@@ -615,6 +636,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
       },
     );
 
@@ -637,6 +659,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
         now: 1000,
       },
     );
@@ -661,6 +684,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
         now: 1000,
       },
     ) as ResponseEnvelope<"get">;
@@ -685,6 +709,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
         now: 1000,
       },
     );
@@ -845,6 +870,7 @@ describe("content snapshot", () => {
       {
         document: window.document,
         registry: new ElementRefRegistry<Element>(),
+        logCapture: createContentLogCaptureService(),
         now: 1000,
       },
     );
@@ -989,6 +1015,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
     };
 
@@ -1048,9 +1075,12 @@ describe("content snapshot", () => {
       </main>`,
       { url: "https://example.test/", pretendToBeVisual: true },
     );
+    const logCapture = createContentLogCaptureService();
+    const windowLogHandle = logCapture.installWindow(window as unknown as Window);
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture,
       now: 1000,
     };
     const globalLogHandle = installLogCapture();
@@ -1151,6 +1181,7 @@ describe("content snapshot", () => {
       expect(highlighted?.dataset.firefoxCliHighlight).toBe("true");
       expect(highlighted?.style.outline).toContain("#ff9500");
     } finally {
+      windowLogHandle.dispose();
       globalLogHandle.dispose();
     }
   });
@@ -1172,6 +1203,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
       highlightScheduler: scheduler.scheduler,
     };
@@ -1213,6 +1245,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
       highlightScheduler: scheduler.scheduler,
     };
@@ -1247,6 +1280,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
       highlightScheduler: scheduler.scheduler,
     };
@@ -1298,6 +1332,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
       highlightScheduler: scheduler.scheduler,
     };
@@ -1340,6 +1375,7 @@ describe("content snapshot", () => {
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
       now: 1000,
     };
     const globalLogHandle = installLogCapture();
@@ -1383,31 +1419,63 @@ describe("content snapshot", () => {
     }
   });
 
+  it("rejects direct content handlers without installing implicit window log capture", () => {
+    const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+    createErrorsResult("clear");
+
+    expect(() =>
+      handleRawContentScriptRequest(createRequest("errors", { action: "list" }, "errors-list"), {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      } as never),
+    ).toThrow("ContentLogCaptureService is required");
+
+    window.dispatchEvent(
+      new window.ErrorEvent("error", { message: "missing-capture-service-leak-check" }),
+    );
+    expect(
+      createErrorsResult("list").errors?.some(
+        (entry) => entry.text === "missing-capture-service-leak-check",
+      ),
+    ).toBe(false);
+  });
+
   it("bounds error capture by retained entry count", () => {
     const { window } = new JSDOM(`<main></main>`, { url: "https://example.test/" });
+    const logCapture = createContentLogCaptureService();
+    const windowLogHandle = logCapture.installWindow(window as unknown as Window);
     const base = {
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture,
       now: 1000,
     };
 
-    handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
-    for (let index = 0; index < MAX_LOG_ENTRIES + 2; index += 1) {
-      window.dispatchEvent(new window.ErrorEvent("error", { message: `bounded-error-${index}` }));
-    }
+    try {
+      handleContentScriptRequest(
+        createRequest("errors", { action: "clear" }, "errors-clear"),
+        base,
+      );
+      for (let index = 0; index < MAX_LOG_ENTRIES + 2; index += 1) {
+        window.dispatchEvent(new window.ErrorEvent("error", { message: `bounded-error-${index}` }));
+      }
 
-    const response = handleContentScriptRequest(
-      createRequest("errors", { action: "list" }, "errors-list"),
-      base,
-    ) as ResponseEnvelope<"errors">;
+      const response = handleContentScriptRequest(
+        createRequest("errors", { action: "list" }, "errors-list"),
+        base,
+      ) as ResponseEnvelope<"errors">;
 
-    expect(response.ok).toBe(true);
-    if (response.ok) {
-      expect(response.result.errors).toHaveLength(MAX_LOG_ENTRIES);
-      expect(response.result.errors?.[0]?.text).toBe("bounded-error-2");
-      expect(response.result.errors?.at(-1)?.text).toBe(`bounded-error-${MAX_LOG_ENTRIES + 1}`);
-      expect(response.result.truncated).toBe(true);
-      expect(response.result.droppedEntries).toBe(2);
+      expect(response.ok).toBe(true);
+      if (response.ok) {
+        expect(response.result.errors).toHaveLength(MAX_LOG_ENTRIES);
+        expect(response.result.errors?.[0]?.text).toBe("bounded-error-2");
+        expect(response.result.errors?.at(-1)?.text).toBe(`bounded-error-${MAX_LOG_ENTRIES + 1}`);
+        expect(response.result.truncated).toBe(true);
+        expect(response.result.droppedEntries).toBe(2);
+      }
+    } finally {
+      windowLogHandle.dispose();
     }
   });
 
@@ -1482,6 +1550,7 @@ describe("content snapshot", () => {
           {
             document: new JSDOM(`<main></main>`).window.document,
             registry: new firstFacade.ElementRefRegistry<Element>(),
+            logCapture: createContentLogCaptureService(),
             now: 1000,
           },
         ),
@@ -1502,6 +1571,7 @@ describe("content snapshot", () => {
         {
           document: new JSDOM(`<main></main>`).window.document,
           registry: new secondFacade.ElementRefRegistry<Element>(),
+          logCapture: createContentLogCaptureService(),
           now: 1000,
         },
       ) as ResponseEnvelope<"console">;
@@ -1778,6 +1848,7 @@ describe("content snapshot", () => {
     const response = await createContentMessageHandler({
       document: window.document,
       registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
     })(request);
 
     const parsed = parseBoundaryResponse("extension-to-content-script", "snapshot", response);

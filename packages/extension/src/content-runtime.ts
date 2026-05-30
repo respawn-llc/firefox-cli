@@ -95,7 +95,7 @@ export function startContentScriptRuntime(options: ContentRuntimeOptions): Conte
 export function createContentMessageHandler(options: {
   readonly document: Document;
   readonly registry: ElementRefRegistry<Element>;
-  readonly logCapture?: ContentLogCaptureService;
+  readonly logCapture: ContentLogCaptureService;
   readonly now?: number;
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
@@ -106,13 +106,12 @@ export function createContentMessageHandler(options: {
       return createErrorResponse("invalid-content-request", request.error);
     }
 
-    const logCapture = options.logCapture ?? createContentLogCaptureService();
-    const windowLogHandle = logCapture.installWindow(options.document.defaultView);
+    const windowLogHandle = options.logCapture.installWindow(options.document.defaultView);
     try {
       return await handleContentScriptRequest(request.value, {
         document: options.document,
         registry: options.registry,
-        logCapture,
+        logCapture: options.logCapture,
         ...(options.now === undefined ? {} : { now: options.now }),
         ...(options.clock === undefined ? {} : { clock: options.clock }),
         ...(options.sleep === undefined ? {} : { sleep: options.sleep }),

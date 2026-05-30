@@ -6,8 +6,29 @@ import { createActionResult } from "./content-actions.js";
 import {
   ElementRefRegistry,
   createSnapshotResult,
-  handleContentScriptRequest,
+  handleContentScriptRequest as handleRawContentScriptRequest,
 } from "./content-snapshot.js";
+import {
+  createContentLogCaptureService,
+  type ContentLogCaptureService,
+} from "./content-snapshot/log-capture.js";
+
+type TestContentOptions = Omit<
+  Parameters<typeof handleRawContentScriptRequest>[1],
+  "logCapture"
+> & {
+  readonly logCapture?: ContentLogCaptureService;
+};
+
+function handleContentScriptRequest(
+  request: Parameters<typeof handleRawContentScriptRequest>[0],
+  options: TestContentOptions,
+) {
+  return handleRawContentScriptRequest(request, {
+    logCapture: createContentLogCaptureService(),
+    ...options,
+  });
+}
 
 class TestActionError extends Error {
   constructor(
