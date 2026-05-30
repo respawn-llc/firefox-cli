@@ -30,7 +30,7 @@ This repository is small enough for a full architectural pass: roughly 35k lines
 
 - [x] Make script process management platform-aware and tree-safe. `scripts/process-runner.ts`, `scripts/e2e-disposable-firefox.ts`, `scripts/e2e-firefox-cleanup.ts`, and `scripts/marionette-client.ts` use POSIX-style signals, broad `ps` parsing, and command-substring matching. Add platform process adapters, use process groups on POSIX and `taskkill /T` or equivalent on Windows, and verify descendant process termination before E2E scripts exit.
 
-- [ ] Replace allocation-heavy frame parsers with cursor-based buffering. `packages/native-host/src/native-messaging-frame.ts` repeatedly concatenates buffers while filling frames, and `packages/native-host/src/local-ipc-frame.ts` buffers line chunks similarly. Use a retained buffer with read offsets or a small frame-reader abstraction that enforces byte caps before copying, copies only completed frames, and has stress tests for adversarial chunking near size limits.
+- [x] Replace allocation-heavy frame parsers with cursor-based buffering. `packages/native-host/src/native-messaging-frame.ts` repeatedly concatenates buffers while filling frames, and `packages/native-host/src/local-ipc-frame.ts` buffers line chunks similarly. Use a retained buffer with read offsets or a small frame-reader abstraction that enforces byte caps before copying, copies only completed frames, and has stress tests for adversarial chunking near size limits.
 
 ## Lower Workstreams
 

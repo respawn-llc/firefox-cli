@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "node:stream";
+import { BufferCursor } from "./buffer-cursor.js";
 
 export const MAX_NATIVE_MESSAGE_OUTGOING_BYTES = 1024 * 1024;
 export const DEFAULT_MAX_NATIVE_MESSAGE_INCOMING_BYTES = 16 * 1024 * 1024;
@@ -36,7 +37,7 @@ export type NativeMessagingFrameReaderOptions = {
 export class NativeMessagingFrameReader {
   readonly #iterator: AsyncIterator<Buffer>;
   readonly #maxIncomingBytes: number;
-  #buffer = Buffer.alloc(0);
+  readonly #buffer = new BufferCursor();
   #ended = false;
 
   constructor(input: Readable, options: NativeMessagingFrameReaderOptions = {}) {
@@ -47,19 +48,18 @@ export class NativeMessagingFrameReader {
   async read(): Promise<unknown | null> {
     const hasHeader = await this.#fill(4);
     if (!hasHeader) {
-      if (this.#buffer.byteLength === 0) {
+      if (this.#buffer.availableBytes === 0) {
         return null;
       }
 
       throw new NativeMessagingFrameError(
         "TRUNCATED_HEADER",
         "Native messaging frame ended before the 4-byte length header was complete.",
-        { availableBytes: this.#buffer.byteLength },
+        { availableBytes: this.#buffer.availableBytes },
       );
     }
 
-    const payloadBytes = this.#buffer.readUInt32LE(0);
-    this.#buffer = this.#buffer.subarray(4);
+    const payloadBytes = this.#buffer.read(4).readUInt32LE(0);
 
     if (payloadBytes > this.#maxIncomingBytes) {
       throw new NativeMessagingFrameError(
@@ -79,13 +79,12 @@ export class NativeMessagingFrameReader {
         "Native messaging frame ended before the JSON body was complete.",
         {
           expectedBytes: payloadBytes,
-          availableBytes: this.#buffer.byteLength,
+          availableBytes: this.#buffer.availableBytes,
         },
       );
     }
 
-    const payload = this.#buffer.subarray(0, payloadBytes);
-    this.#buffer = this.#buffer.subarray(payloadBytes);
+    const payload = this.#buffer.read(payloadBytes);
     const text = payload.toString("utf8");
 
     try {
@@ -103,17 +102,17 @@ export class NativeMessagingFrameReader {
   }
 
   async #fill(requiredBytes: number): Promise<boolean> {
-    while (this.#buffer.byteLength < requiredBytes && !this.#ended) {
+    while (this.#buffer.availableBytes < requiredBytes && !this.#ended) {
       const next = await this.#iterator.next();
       if (next.done === true) {
         this.#ended = true;
         break;
       }
 
-      this.#buffer = Buffer.concat([this.#buffer, Buffer.from(next.value)]);
+      this.#buffer.append(next.value);
     }
 
-    return this.#buffer.byteLength >= requiredBytes;
+    return this.#buffer.availableBytes >= requiredBytes;
   }
 }
 

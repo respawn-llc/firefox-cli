@@ -30,6 +30,30 @@ describe("native messaging frames", () => {
     await expect(reader.read()).resolves.toEqual({ command: "noop" });
   });
 
+  it("reads a frame split across one-byte chunks", async () => {
+    const input = new PassThrough();
+    const reader = new NativeMessagingFrameReader(input);
+    writeOneByteChunks(input, encodeNativeMessageFrame({ command: "chunked", value: 42 }));
+    input.end();
+
+    await expect(reader.read()).resolves.toEqual({ command: "chunked", value: 42 });
+  });
+
+  it("keeps buffered bytes for following frames without copying incomplete reads", async () => {
+    const input = new PassThrough();
+    const reader = new NativeMessagingFrameReader(input);
+    input.end(
+      Buffer.concat([
+        encodeNativeMessageFrame({ index: 1 }),
+        encodeNativeMessageFrame({ index: 2 }),
+      ]),
+    );
+
+    await expect(reader.read()).resolves.toEqual({ index: 1 });
+    await expect(reader.read()).resolves.toEqual({ index: 2 });
+    await expect(reader.read()).resolves.toBeNull();
+  });
+
   it("returns null on clean EOF before a header starts", async () => {
     const input = new PassThrough();
     const reader = new NativeMessagingFrameReader(input);
@@ -121,4 +145,10 @@ describe("native messaging frames", () => {
 
 function uploadData(bytes: number): string {
   return Buffer.alloc(bytes).toString("base64");
+}
+
+function writeOneByteChunks(input: PassThrough, data: Buffer): void {
+  for (const byte of data) {
+    input.write(Buffer.from([byte]));
+  }
 }

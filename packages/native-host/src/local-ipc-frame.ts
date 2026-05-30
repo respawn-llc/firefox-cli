@@ -4,6 +4,7 @@ import {
   type ProtocolError,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
+import { BufferCursor } from "./buffer-cursor.js";
 import { MAX_NATIVE_MESSAGE_OUTGOING_BYTES } from "./native-messaging-frame.js";
 
 export const MAX_LOCAL_IPC_MESSAGE_BYTES = MAX_NATIVE_MESSAGE_OUTGOING_BYTES - 64 * 1024;
@@ -160,8 +161,7 @@ export async function readOneJsonLine(
   } = {},
 ): Promise<unknown> {
   return new Promise<unknown>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let bufferedBytes = 0;
+    const buffer = new BufferCursor();
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = (): void => {
@@ -193,19 +193,17 @@ export async function readOneJsonLine(
       }
     };
     const onData = (chunk: Buffer): void => {
-      const incoming = Buffer.from(chunk);
-      const newlineIndex = incoming.indexOf(0x0a);
+      buffer.append(chunk);
+      const newlineIndex = buffer.indexOf(0x0a);
       if (newlineIndex >= 0) {
-        const lineChunk = incoming.subarray(0, newlineIndex);
-        const lineBytes = bufferedBytes + lineChunk.byteLength;
-        if (lineBytes > MAX_LOCAL_IPC_MESSAGE_BYTES) {
+        if (newlineIndex > MAX_LOCAL_IPC_MESSAGE_BYTES) {
           fail(
             new LocalIpcFrameError(
               "MESSAGE_TOO_LARGE",
-              `Local IPC message is ${lineBytes} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+              `Local IPC message is ${newlineIndex} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
               {
                 details: {
-                  actualBytes: lineBytes,
+                  actualBytes: newlineIndex,
                   maxBytes: MAX_LOCAL_IPC_MESSAGE_BYTES,
                 },
               },
@@ -214,20 +212,20 @@ export async function readOneJsonLine(
           return;
         }
 
-        chunks.push(lineChunk);
-        finish(Buffer.concat(chunks, lineBytes));
+        const line = buffer.read(newlineIndex);
+        buffer.discard(1);
+        finish(line);
         return;
       }
 
-      const nextBufferedBytes = bufferedBytes + incoming.byteLength;
-      if (nextBufferedBytes > MAX_LOCAL_IPC_MESSAGE_BYTES) {
+      if (buffer.availableBytes > MAX_LOCAL_IPC_MESSAGE_BYTES) {
         fail(
           new LocalIpcFrameError(
             "MESSAGE_TOO_LARGE",
             `Local IPC message exceeds the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit before a newline delimiter.`,
             {
               details: {
-                actualBytes: nextBufferedBytes,
+                actualBytes: buffer.availableBytes,
                 maxBytes: MAX_LOCAL_IPC_MESSAGE_BYTES,
               },
             },
@@ -235,9 +233,6 @@ export async function readOneJsonLine(
         );
         return;
       }
-
-      chunks.push(incoming);
-      bufferedBytes = nextBufferedBytes;
     };
     const onEnd = (): void => {
       cleanup();
@@ -245,9 +240,9 @@ export async function readOneJsonLine(
     };
     const failWithMissingNewline = (message: string): void => {
       const error = new LocalIpcFrameError("MISSING_NEWLINE", message, {
-        rawLine: Buffer.concat(chunks, bufferedBytes),
+        rawLine: buffer.snapshot(),
         details: {
-          actualBytes: bufferedBytes,
+          actualBytes: buffer.availableBytes,
           maxBytes: MAX_LOCAL_IPC_MESSAGE_BYTES,
         },
       });
