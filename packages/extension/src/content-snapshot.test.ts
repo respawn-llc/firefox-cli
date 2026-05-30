@@ -1479,51 +1479,6 @@ describe("content snapshot", () => {
     }
   });
 
-  it("normalizes legacy symbol log state while preserving push, spread, and length clear compatibility", () => {
-    const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
-    const global = globalThis as typeof globalThis & {
-      [stateKey]?: unknown;
-    };
-    const savedState = global[stateKey];
-
-    try {
-      global[stateKey] = {
-        installed: true,
-        consoleEntries: [{ level: "log", text: "legacy-console", timestamp: 1 }],
-        errorEntries: [{ level: "error", text: "legacy-error", timestamp: 2 }],
-        capturedWindows: new WeakSet<Window>(),
-      };
-
-      expect(createConsoleResult("list")).toMatchObject({
-        entries: [{ level: "log", text: "legacy-console", timestamp: 1 }],
-      });
-
-      const normalized = (
-        global[stateKey] as {
-          readonly consoleEntries: {
-            push(entry: { level: string; text: string; timestamp: number }): number;
-            length: number;
-            [Symbol.iterator](): Iterator<{ level: string; text: string; timestamp: number }>;
-          };
-        }
-      ).consoleEntries;
-      normalized.push({ level: "log", text: "legacy-push", timestamp: 3 });
-      expect([...normalized].map((entry) => entry.text)).toEqual(["legacy-console", "legacy-push"]);
-      normalized.length = 0;
-      expect(createConsoleResult("list")).toMatchObject({
-        entries: [],
-        truncated: false,
-        droppedEntries: 0,
-      });
-    } finally {
-      if (savedState === undefined) {
-        delete global[stateKey];
-      } else {
-        global[stateKey] = savedState;
-      }
-    }
-  });
-
   it("keeps the content snapshot facade side-effect free across cold imports", async () => {
     const stateKey = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
     const global = globalThis as typeof globalThis & {

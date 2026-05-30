@@ -236,7 +236,7 @@ export class BoundedLogBuffer implements LogEntryStore {
 
 function getLogCaptureState(): LogCaptureState {
   const global = globalThis as typeof globalThis & {
-    [LOG_CAPTURE_STATE_KEY]?: Partial<LogCaptureState>;
+    [LOG_CAPTURE_STATE_KEY]?: LogCaptureState;
   };
   global[LOG_CAPTURE_STATE_KEY] ??= {
     installed: false,
@@ -246,14 +246,7 @@ function getLogCaptureState(): LogCaptureState {
     errorListeners: new WeakMap<object, ErrorListenerRegistration>(),
     globalRefCount: 0,
   };
-  const state = global[LOG_CAPTURE_STATE_KEY];
-  state.consoleEntries = normalizeLogEntryStore("entries", state.consoleEntries);
-  state.errorEntries = normalizeLogEntryStore("errors", state.errorEntries);
-  state.capturedWindows ??= new WeakSet<Window>();
-  state.errorListeners ??= new WeakMap<object, ErrorListenerRegistration>();
-  state.installed ??= false;
-  state.globalRefCount ??= state.installed ? 1 : 0;
-  return state as LogCaptureState;
+  return global[LOG_CAPTURE_STATE_KEY];
 }
 
 export function createContentLogCaptureService(): ContentLogCaptureService {
@@ -446,29 +439,6 @@ export function createErrorsResult(
     errors: [...snapshot.entries],
     ...metadataForProtocolVersion(snapshot, protocolVersion),
   };
-}
-
-function normalizeLogEntryStore(entryKey: LogResultEntryKey, value: unknown): LogEntryStore {
-  if (isLogEntryStore(value)) {
-    return value;
-  }
-  return new BoundedLogBuffer(entryKey, {
-    initialEntries: Array.isArray(value) ? value : [],
-  });
-}
-
-function isLogEntryStore(value: unknown): value is LogEntryStore {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "push" in value &&
-    "clear" in value &&
-    "snapshot" in value &&
-    typeof value.push === "function" &&
-    typeof value.clear === "function" &&
-    typeof value.snapshot === "function" &&
-    Symbol.iterator in value
-  );
 }
 
 function metadataForProtocolVersion(
