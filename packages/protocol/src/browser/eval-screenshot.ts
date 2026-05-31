@@ -9,22 +9,9 @@ export const evalSourceSchema = z.enum(evalSources);
 export type EvalSource = z.infer<typeof evalSourceSchema>;
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)]),
 );
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export const evalParamsSchema = z
   .object({
@@ -38,11 +25,11 @@ export const evalParamsSchema = z
   .superRefine((params, context) => {
     if (encodedByteLength(params.script) > MAX_EVAL_SCRIPT_BYTES) {
       context.addIssue({
-        code: z.ZodIssueCode.too_big,
+        code: "too_big",
         maximum: MAX_EVAL_SCRIPT_BYTES,
         origin: "string",
         inclusive: true,
-        message: `Eval scripts must be at most ${MAX_EVAL_SCRIPT_BYTES} bytes.`,
+        message: `Eval scripts must be at most ${String(MAX_EVAL_SCRIPT_BYTES)} bytes.`,
         path: ["script"],
       });
     }
@@ -82,7 +69,7 @@ export const screenshotParamsSchema = z
   .superRefine((params, context) => {
     if (params.quality !== undefined && params.format !== "jpeg") {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Screenshot quality applies only to JPEG screenshots.",
         path: ["quality"],
       });

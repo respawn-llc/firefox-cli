@@ -1,17 +1,9 @@
 import type { ActionOptions, EditableValueElement } from "../content-action-types.js";
-import {
-  dispatchBeforeInput,
-  dispatchChangeEvent,
-  dispatchInputEvent,
-  dispatchKeyboardEvent,
-} from "./dom-events.js";
+import { dispatchBeforeInput, dispatchChangeEvent, dispatchInputEvent, dispatchKeyboardEvent } from "./dom-events.js";
 
 export function requireFocusedElement(options: ActionOptions): Element {
   const focused = options.document.activeElement;
-  if (
-    focused === null ||
-    (isDocumentShell(options.document, focused) && findEditableHost(options, focused) === undefined)
-  ) {
+  if (focused === null || (isDocumentShell(options.document, focused) && findEditableHost(options, focused) === undefined)) {
     throw options.createError("NO_FOCUSED_ELEMENT", "No focused element is available.");
   }
   return focused;
@@ -38,12 +30,7 @@ export function setEditableText(element: HTMLElement, text: string): void {
   element.textContent = text;
 }
 
-export function insertText(
-  options: ActionOptions,
-  element: HTMLElement,
-  text: string,
-  settings: { readonly keyboardEvents: boolean },
-): void {
+export function insertText(options: ActionOptions, element: HTMLElement, text: string, settings: { readonly keyboardEvents: boolean }): void {
   for (const char of text) {
     if (settings.keyboardEvents) {
       dispatchKeyboardEvent(element, "keydown", char);
@@ -89,18 +76,7 @@ function findEditableHost(options: ActionOptions, element: Element): HTMLElement
 }
 
 function isEditableInputType(type: string | null): boolean {
-  return ![
-    "button",
-    "checkbox",
-    "color",
-    "file",
-    "hidden",
-    "image",
-    "radio",
-    "range",
-    "reset",
-    "submit",
-  ].includes((type ?? "text").toLowerCase());
+  return !["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].includes((type ?? "text").toLowerCase());
 }
 
 function insertTextValue(element: HTMLElement, text: string): void {
@@ -113,7 +89,7 @@ function insertTextValue(element: HTMLElement, text: string): void {
     return;
   }
 
-  element.textContent = `${element.textContent ?? ""}${text}`;
+  element.textContent = `${element.textContent}${text}`;
 }
 
 function setSelection(element: HTMLElement, position: number): void {

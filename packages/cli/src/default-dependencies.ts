@@ -27,10 +27,7 @@ export function createDefaultDependencies(version: string): CliDependencies {
       const stateRoot = getUserStateRoot(process.platform, homeDir, process.env.APPDATA);
       const authToken = await new FileLocalIpcAuthTokenStore({ stateRoot }).read();
       if (process.platform === "win32" && authToken === null) {
-        throw new LocalIpcError(
-          "CONNECTION_FAILED",
-          "Local IPC authentication token is missing; firefox-cli native host is not connected.",
-        );
+        throw new LocalIpcError("CONNECTION_FAILED", "Local IPC authentication token is missing; firefox-cli native host is not connected.");
       }
       const endpoint = planLocalIpcEndpoint({
         platform: process.platform,
@@ -52,26 +49,16 @@ export function createDefaultDependencies(version: string): CliDependencies {
   };
 }
 
-export function getDefaultStateRoot(
-  platform: NodeJS.Platform,
-  homeDir: string,
-  appDataDir: string | undefined,
-): string {
+export function getDefaultStateRoot(platform: NodeJS.Platform, homeDir: string, appDataDir: string | undefined): string {
   return getUserStateRoot(platform, homeDir, appDataDir);
 }
 
-export function getUserStateRoot(
-  platform: NodeJS.Platform,
-  homeDir: string,
-  appDataDir: string | undefined,
-): string {
+export function getUserStateRoot(platform: NodeJS.Platform, homeDir: string, appDataDir: string | undefined): string {
   if (platform === "win32") {
     return appDataDir ?? resolve(homeDir, "AppData", "Roaming");
   }
 
-  return platform === "darwin"
-    ? resolve(homeDir, "Library/Application Support/firefox-cli")
-    : resolve(homeDir, ".config/firefox-cli");
+  return platform === "darwin" ? resolve(homeDir, "Library/Application Support/firefox-cli") : resolve(homeDir, ".config/firefox-cli");
 }
 
 export function optionalAppDataDir(appDataDir: string | undefined): {
@@ -80,14 +67,16 @@ export function optionalAppDataDir(appDataDir: string | undefined): {
   return appDataDir === undefined ? {} : { appDataDir };
 }
 
-export function readProcessStdin(): Promise<string> {
+export async function readProcessStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
     let content = "";
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
-      content += chunk;
+      content += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
     });
-    process.stdin.once("end", () => resolve(content));
+    process.stdin.once("end", () => {
+      resolve(content);
+    });
     process.stdin.once("error", reject);
   });
 }

@@ -6,18 +6,10 @@ import { extensionManifestSchema, readJsonManifestFile } from "./manifest-valida
 const sourceDir = resolve("packages/extension/src");
 const outputDir = resolve("dist/extension");
 
-export async function copyExtensionAssets(options: {
-  readonly sourceDir: string;
-  readonly outputDir: string;
-  readonly version: string;
-}): Promise<void> {
+export async function copyExtensionAssets(options: { readonly sourceDir: string; readonly outputDir: string; readonly version: string }): Promise<void> {
   await mkdir(options.outputDir, { recursive: true });
 
-  const manifest = await readJsonManifestFile(
-    resolve(options.sourceDir, "manifest.json"),
-    "source extension manifest",
-    extensionManifestSchema,
-  );
+  const manifest = await readJsonManifestFile(resolve(options.sourceDir, "manifest.json"), "source extension manifest", extensionManifestSchema);
   manifest.version = options.version;
 
   await writeFile(resolve(options.outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

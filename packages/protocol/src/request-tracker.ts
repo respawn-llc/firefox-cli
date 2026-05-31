@@ -1,18 +1,18 @@
-export type PendingRequestKey<TCommand extends string> = {
+export interface PendingRequestKey<TCommand extends string> {
   readonly id: string;
   readonly command: TCommand;
   readonly protocolVersion?: number;
-};
+}
 
 type PendingRequestTimer = ReturnType<typeof setTimeout>;
 
-export type PendingRequestTrackerOptions<TCommand extends string, TValue> = {
+export interface PendingRequestTrackerOptions<TCommand extends string, TValue> {
   readonly timeoutMs: number;
   onDuplicate(request: PendingRequestKey<TCommand>): TValue;
   onTimeout(request: PendingRequestKey<TCommand>): TValue;
   readonly setTimer?: (callback: () => void, delayMs: number) => PendingRequestTimer;
   readonly clearTimer?: (timer: PendingRequestTimer) => void;
-};
+}
 
 export type PendingRequestRegistration<TValue> =
   | {
@@ -33,11 +33,11 @@ export type PendingRequestSettlement<TCommand extends string> =
       readonly ok: false;
     };
 
-type PendingRequestEntry<TCommand extends string, TValue> = {
+interface PendingRequestEntry<TCommand extends string, TValue> {
   readonly request: PendingRequestKey<TCommand>;
   readonly resolve: (value: TValue) => void;
   timeout: PendingRequestTimer | undefined;
-};
+}
 
 export class PendingRequestTracker<TCommand extends string, TValue> {
   readonly #pending = new Map<string, PendingRequestEntry<TCommand, TValue>>();
@@ -49,10 +49,14 @@ export class PendingRequestTracker<TCommand extends string, TValue> {
 
   constructor(options: PendingRequestTrackerOptions<TCommand, TValue>) {
     this.#timeoutMs = options.timeoutMs;
-    this.#onDuplicate = options.onDuplicate;
-    this.#onTimeout = options.onTimeout;
-    this.#setTimer = options.setTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
-    this.#clearTimer = options.clearTimer ?? ((timer) => clearTimeout(timer));
+    this.#onDuplicate = (request) => options.onDuplicate(request);
+    this.#onTimeout = (request) => options.onTimeout(request);
+    this.#setTimer = options.setTimer ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
+    this.#clearTimer =
+      options.clearTimer ??
+      ((timer) => {
+        globalThis.clearTimeout(timer);
+      });
   }
 
   get size(): number {

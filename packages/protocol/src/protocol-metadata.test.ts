@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  commandRequiresExtensionHostAccess,
-  getCommandFrameScopeMetadata,
-  getCommandSecurityMetadata,
-  getExtensionPermissionRequirements,
-} from "./index.js";
+import { commandRequiresExtensionHostAccess, getCommandFrameScopeMetadata, getCommandSecurityMetadata, getExtensionPermissionRequirements } from "./index.js";
 
 describe("protocol command metadata", () => {
   it("documents frame-scope support in command metadata", () => {

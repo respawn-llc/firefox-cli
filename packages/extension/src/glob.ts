@@ -1,24 +1,10 @@
 export type GlobQuestionMarkMode = "literal" | "wildcard";
 
-export type GlobOptions = {
+export interface GlobOptions {
   readonly questionMark?: GlobQuestionMarkMode;
-};
+}
 
-const REG_EXP_SPECIAL_CHARACTERS = new Set([
-  "|",
-  "\\",
-  "{",
-  "}",
-  "(",
-  ")",
-  "[",
-  "]",
-  "^",
-  "$",
-  "+",
-  ".",
-  "?",
-]);
+const REG_EXP_SPECIAL_CHARACTERS = new Set(["|", "\\", "{", "}", "(", ")", "[", "]", "^", "$", "+", ".", "?"]);
 
 export function compileGlob(glob: string, options: GlobOptions = {}): RegExp {
   const questionMarkMode = options.questionMark ?? "literal";

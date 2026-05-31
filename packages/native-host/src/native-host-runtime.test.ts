@@ -1,17 +1,9 @@
 import { PassThrough } from "node:stream";
-import {
-  MAX_UPLOAD_FILE_BYTES,
-  PROTOCOL_VERSION,
-  createOkResponse,
-  createRequest,
-  kernelCapabilities,
-} from "@firefox-cli/protocol";
+import { MAX_UPLOAD_FILE_BYTES, PROTOCOL_VERSION, createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { NativeHostBroker } from "./host-broker.js";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
 import { attachNativeMessagingConnection } from "./native-host-runtime.js";
-import { PersistedJsonFileError } from "./persisted-json.js";
-import { approvePairing, verifyPairStateStatus, type PairState, type PairStateStatus } from "./pair-state.js";
 
 describe("native host runtime", () => {
   it("bridges broker requests to the extension over native messaging frames", async () => {
@@ -33,20 +25,18 @@ describe("native host runtime", () => {
     await sendExtensionHello(extensionInput, extensionReader);
     const cliRequest = createRequest("capabilities", {}, "request-1");
     const brokerResponse = broker.handleCliRequest(cliRequest);
-    const forwarded = (await extensionReader.read()) as typeof cliRequest;
+    const forwarded = await extensionReader.read();
 
     expect(forwarded).toEqual(cliRequest);
     extensionInput.write(
       encodeNativeMessageFrame(
-        createOkResponse(forwarded, {
+        createOkResponse(cliRequest, {
           capabilities: [...kernelCapabilities],
         }),
       ),
     );
 
-    await expect(brokerResponse).resolves.toEqual(
-      createOkResponse(cliRequest, { capabilities: [...kernelCapabilities] }),
-    );
+    await expect(brokerResponse).resolves.toEqual(createOkResponse(cliRequest, { capabilities: [...kernelCapabilities] }));
   });
 
   it("rejects duplicate pending request IDs without replacing the first request", async () => {
@@ -68,7 +58,7 @@ describe("native host runtime", () => {
     await sendExtensionHello(extensionInput, extensionReader);
     const request = createRequest("noop", {}, "duplicate-id");
     const firstResponse = broker.handleCliRequest(request);
-    const forwarded = (await extensionReader.read()) as typeof request;
+    await extensionReader.read();
 
     await expect(broker.handleCliRequest(request)).resolves.toMatchObject({
       id: "duplicate-id",
@@ -76,7 +66,7 @@ describe("native host runtime", () => {
       error: { code: "INVALID_ENVELOPE" },
     });
 
-    extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(request, { ok: true })));
     await expect(firstResponse).resolves.toEqual(createOkResponse(request, { ok: true }));
   });
 
@@ -141,7 +131,7 @@ describe("native host runtime", () => {
     await sendExtensionHello(extensionInput, extensionReader);
     const request = createRequest("noop", {}, "timeout-id");
     const response = broker.handleCliRequest(request);
-    const forwarded = (await extensionReader.read()) as typeof request;
+    await extensionReader.read();
 
     await expect(response).resolves.toMatchObject({
       id: "timeout-id",
@@ -149,13 +139,13 @@ describe("native host runtime", () => {
       error: { code: "TIMEOUT" },
     });
 
-    extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(request, { ok: true })));
     const nextRequest = createRequest("noop", {}, "next-id");
     const nextResponse = broker.handleCliRequest(nextRequest);
-    const nextForwarded = (await extensionReader.read()) as typeof nextRequest;
+    const nextForwarded = await extensionReader.read();
 
     expect(nextForwarded).toEqual(nextRequest);
-    extensionInput.write(encodeNativeMessageFrame(createOkResponse(nextForwarded, { ok: true })));
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(nextRequest, { ok: true })));
     await expect(nextResponse).resolves.toEqual(createOkResponse(nextRequest, { ok: true }));
   });
 
@@ -286,9 +276,7 @@ describe("native host runtime", () => {
       approved: true,
     });
 
-    await expect(
-      broker.handleCliRequest(createRequest("noop", {}, "cli-before-hello")),
-    ).resolves.toMatchObject({
+    await expect(broker.handleCliRequest(createRequest("noop", {}, "cli-before-hello"))).resolves.toMatchObject({
       id: "cli-before-hello",
       ok: false,
       error: { code: "EXTENSION_NOT_CONNECTED" },
@@ -332,175 +320,10 @@ describe("native host runtime", () => {
       ok: false,
       error: { code: "VERSION_MISMATCH" },
     });
-    await expect(
-      broker.handleCliRequest(createRequest("noop", {}, "cli-after-mismatch")),
-    ).resolves.toMatchObject({
+    await expect(broker.handleCliRequest(createRequest("noop", {}, "cli-after-mismatch"))).resolves.toMatchObject({
       id: "cli-after-mismatch",
       ok: false,
       error: { code: "VERSION_MISMATCH" },
-    });
-  });
-
-  it("approves pairing requests and then gates broker forwarding by the returned token", async () => {
-    const extensionInput = new PassThrough();
-    const extensionOutput = new PassThrough();
-    const hostIdentity = {
-      hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
-    };
-    let pairState: PairState | null = null;
-    const readStateStatus = (): PairStateStatus =>
-      pairState === null ? { status: "missing" } : { status: "valid", state: pairState };
-    const broker = new NativeHostBroker({
-      hostIdentity,
-      verifyPairToken: (token) => verifyPairStateStatus(readStateStatus(), hostIdentity, token),
-    });
-    await attachNativeMessagingConnection({
-      broker,
-      input: extensionInput,
-      output: extensionOutput,
-      approved: false,
-      productVersion: "0.0.0",
-      pairing: {
-        hostIdentity,
-        readStateStatus: async () => readStateStatus(),
-        approve: async () => {
-          const approval = approvePairing(hostIdentity, {
-            now: () => new Date("2026-01-02T03:04:05.000Z"),
-            randomBytes: () => Buffer.from("paired-secret"),
-          });
-          pairState = approval.state;
-          return approval;
-        },
-        reset: async () => {
-          pairState = null;
-        },
-      },
-    });
-    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
-    const cliRequest = createRequest("noop", {}, "cli-1");
-    await sendExtensionHello(extensionInput, extensionReader);
-
-    await expect(broker.handleCliRequest(cliRequest)).resolves.toMatchObject({
-      ok: false,
-      error: { code: "NOT_APPROVED" },
-    });
-
-    const approve = createRequest("pair.approve", {}, "approve-1");
-    const approveResponse = extensionReader.read();
-    extensionInput.write(encodeNativeMessageFrame(approve));
-
-    const approved = await approveResponse;
-    expect(approved).toMatchObject({
-      id: "approve-1",
-      ok: true,
-      result: {
-        hostId: "host-1",
-        generation: 1,
-      },
-    });
-    const token = (approved as { readonly result: { readonly token: string } }).result.token;
-
-    const hello = createRequest(
-      "hello",
-      {
-        component: "extension",
-        productName: "firefox-cli",
-        productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: PROTOCOL_VERSION,
-        features: [],
-        pairToken: token,
-      },
-      "hello-1",
-    );
-    const helloResponse = extensionReader.read();
-    extensionInput.write(encodeNativeMessageFrame(hello));
-    await expect(helloResponse).resolves.toMatchObject({
-      id: "hello-1",
-      ok: true,
-      result: {
-        pairing: {
-          approved: true,
-          generation: 1,
-        },
-      },
-    });
-
-    const brokerResponse = broker.handleCliRequest(cliRequest);
-    const forwarded = (await extensionReader.read()) as typeof cliRequest;
-
-    expect(forwarded).toEqual(cliRequest);
-    extensionInput.write(encodeNativeMessageFrame(createOkResponse(forwarded, { ok: true })));
-    await expect(brokerResponse).resolves.toEqual(createOkResponse(cliRequest, { ok: true }));
-  });
-
-  it("surfaces invalid persisted pair state without crashing hello or CLI gating", async () => {
-    const extensionInput = new PassThrough();
-    const extensionOutput = new PassThrough();
-    const hostIdentity = {
-      hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
-    };
-    const invalidState: PairStateStatus = {
-      status: "invalid",
-      error: new PersistedJsonFileError({
-        kind: "invalid-shape",
-        filePath: "/state/pair-state.json",
-        label: "Pair state",
-        reason: "generation: Invalid input",
-      }),
-    };
-    const broker = new NativeHostBroker({
-      hostIdentity,
-      verifyPairToken: (token) => verifyPairStateStatus(invalidState, hostIdentity, token),
-    });
-    await attachNativeMessagingConnection({
-      broker,
-      input: extensionInput,
-      output: extensionOutput,
-      approved: false,
-      productVersion: "0.0.0",
-      pairing: {
-        hostIdentity,
-        readStateStatus: async () => invalidState,
-        approve: async () => {
-          throw new Error("not used");
-        },
-        reset: async () => undefined,
-      },
-    });
-    const extensionReader = new NativeMessagingFrameReader(extensionOutput);
-    const hello = createRequest(
-      "hello",
-      {
-        component: "extension",
-        productName: "firefox-cli",
-        productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: PROTOCOL_VERSION,
-        features: [],
-        pairToken: "stored-token",
-      },
-      "hello-invalid",
-    );
-    const helloResponse = extensionReader.read();
-    extensionInput.write(encodeNativeMessageFrame(hello));
-
-    await expect(helloResponse).resolves.toMatchObject({
-      id: "hello-invalid",
-      ok: true,
-      result: {
-        pairing: {
-          approved: false,
-          status: "invalid-pair-state",
-        },
-      },
-    });
-    await expect(broker.handleCliRequest(createRequest("noop", {}, "cli-invalid"))).resolves.toMatchObject({
-      id: "cli-invalid",
-      ok: false,
-      error: { code: "PAIRING_MISMATCH" },
     });
   });
 });

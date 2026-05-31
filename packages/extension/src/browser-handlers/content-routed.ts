@@ -22,19 +22,7 @@ import { BrowserCommandError } from "../browser-command/errors.js";
 import type { BackgroundBrowserAdapter } from "../browser-command/types.js";
 import type { BrowserHandlerContext, BrowserHandlerMap } from "./types.js";
 
-type ContentRoutedCommand =
-  | "snapshot"
-  | "ref.resolve"
-  | "get"
-  | "is"
-  | "find"
-  | "frame"
-  | "dialog"
-  | "storage"
-  | "console"
-  | "errors"
-  | "highlight"
-  | "diff";
+type ContentRoutedCommand = "snapshot" | "ref.resolve" | "get" | "is" | "find" | "frame" | "dialog" | "storage" | "console" | "errors" | "highlight" | "diff";
 
 export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
   snapshot: async (request, adapter, context) => {
@@ -161,11 +149,7 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
   },
 };
 
-export async function handleActionCommand(
-  command: RequestEnvelope<ActionKind>,
-  adapter: BackgroundBrowserAdapter,
-  context: BrowserHandlerContext,
-) {
+export async function handleActionCommand(command: RequestEnvelope<ActionKind>, adapter: BackgroundBrowserAdapter, context: BrowserHandlerContext) {
   const resolved = await context.targetContext.resolveTarget(command.params.target);
   const actionResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!actionResponse.ok) {
@@ -179,38 +163,47 @@ export async function handleActionCommand(
   return createOkResponse(command, result);
 }
 
-async function handleLogCommand(
-  command: RequestEnvelope<"console" | "errors">,
-  adapter: BackgroundBrowserAdapter,
-  context: BrowserHandlerContext,
-) {
+async function handleLogCommand(command: RequestEnvelope<"console" | "errors">, adapter: BackgroundBrowserAdapter, context: BrowserHandlerContext) {
   const resolved = await context.targetContext.resolveTarget(command.params.target);
   const logResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!logResponse.ok) {
     return createErrorResponseForRequest(command, logResponse.error);
   }
-  return createOkResponse(
-    command,
-    logResultForProtocolVersion(logResponse.result as ConsoleResult | ErrorsResult, command.protocolVersion),
-  );
+  return createOkResponse(command, logResultForProtocolVersion(logResponse.result, command.protocolVersion));
 }
 
-function logResultForProtocolVersion<T extends ConsoleResult | ErrorsResult>(
-  result: T,
-  protocolVersion: number,
-): T {
+function logResultForProtocolVersion(result: ConsoleResult, protocolVersion: number): ConsoleResult;
+function logResultForProtocolVersion(result: ErrorsResult, protocolVersion: number): ErrorsResult;
+function logResultForProtocolVersion(result: ConsoleResult | ErrorsResult, protocolVersion: number): ConsoleResult | ErrorsResult {
   if (protocolVersion >= LOG_RESULT_METADATA_PROTOCOL_VERSION) {
     return result;
   }
-  const { truncated: _truncated, droppedEntries: _droppedEntries, ...compatibleResult } = result;
-  return compatibleResult as T;
+  return withoutLogMetadata(result);
 }
 
-async function snapshotTextForDiff(
-  adapter: BackgroundBrowserAdapter,
-  tabId: number,
-  command: RequestEnvelope<"diff">,
-): Promise<string> {
+function withoutLogMetadata(result: ConsoleResult): ConsoleResult;
+function withoutLogMetadata(result: ErrorsResult): ErrorsResult;
+function withoutLogMetadata(result: ConsoleResult | ErrorsResult): ConsoleResult | ErrorsResult {
+  return "errors" in result ? legacyErrorsResult(result) : legacyConsoleResult(result);
+}
+
+function legacyConsoleResult(result: ConsoleResult): ConsoleResult {
+  return {
+    action: result.action,
+    ok: result.ok,
+    ...(result.entries === undefined ? {} : { entries: result.entries }),
+  };
+}
+
+function legacyErrorsResult(result: ErrorsResult): ErrorsResult {
+  return {
+    action: result.action,
+    ok: result.ok,
+    ...(result.errors === undefined ? {} : { errors: result.errors }),
+  };
+}
+
+async function snapshotTextForDiff(adapter: BackgroundBrowserAdapter, tabId: number, command: RequestEnvelope<"diff">): Promise<string> {
   const snapshotRequest: RequestEnvelope<"snapshot"> = {
     protocolVersion: command.protocolVersion,
     id: `${command.id}:snapshot`,
@@ -222,10 +215,25 @@ async function snapshotTextForDiff(
   };
   const snapshotResponse = await sendContentCommand(adapter, tabId, snapshotRequest);
   if (!snapshotResponse.ok) {
-    throw new BrowserCommandError(
-      snapshotResponse.error.code as BrowserCommandError["code"],
-      snapshotResponse.error.message,
-    );
+    throw new BrowserCommandError(toBrowserCommandErrorCode(snapshotResponse.error.code), snapshotResponse.error.message);
   }
   return snapshotResponse.result.text;
+}
+
+function toBrowserCommandErrorCode(code: string): BrowserCommandError["code"] {
+  switch (code) {
+    case "NO_ACTIVE_TAB":
+    case "INVALID_TARGET":
+    case "UNSUPPORTED_CAPABILITY":
+    case "PERMISSION_DENIED":
+    case "NAVIGATION_FAILED":
+    case "SCRIPT_INJECTION_FAILED":
+    case "TIMEOUT":
+    case "CAPTURE_FAILED":
+    case "OUTPUT_TOO_LARGE":
+    case "RESULT_TOO_LARGE":
+      return code;
+    default:
+      return "INVALID_TARGET";
+  }
 }

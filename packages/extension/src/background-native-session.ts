@@ -46,10 +46,7 @@ export class NativeSessionService {
           },
         })
       : parseBoundaryResponse("host-to-extension", command, message, {
-          protocolVersion:
-            this.#state.state === "negotiated"
-              ? this.#state.session.protocolVersion
-              : localProtocolVersionRange.protocolMax,
+          protocolVersion: this.#state.state === "negotiated" ? this.#state.session.protocolVersion : localProtocolVersionRange.protocolMax,
         });
   }
 
@@ -88,9 +85,7 @@ export class NativeSessionService {
 
   prepareRequest(
     request: RequestEnvelope,
-  ):
-    | { readonly ok: true; readonly protocolSession: ProtocolSession }
-    | { readonly ok: false; readonly response: ResponseEnvelope } {
+  ): { readonly ok: true; readonly protocolSession: ProtocolSession } | { readonly ok: false; readonly response: ResponseEnvelope } {
     const protocolSession = createProtocolSession(request.protocolVersion);
     if (request.command === "hello") {
       this.#state = { state: "negotiated", session: protocolSession };

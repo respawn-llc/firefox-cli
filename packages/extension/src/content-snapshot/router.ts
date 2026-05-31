@@ -21,16 +21,16 @@ import { applyElementHighlight, type HighlightScheduler } from "./highlight.js";
 import { createConsoleResult, createErrorsResult, type ContentLogCaptureService } from "./log-capture.js";
 import { createSnapshotResult } from "./snapshot-render.js";
 
-type ContentScriptRequestContext = {
+interface ContentScriptRequestContext {
   readonly document: Document;
   readonly registry: ElementRefRegistry<Element>;
   readonly now?: number;
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
   readonly highlightScheduler?: HighlightScheduler;
-  readonly logCapture: ContentLogCaptureService;
+  readonly logCapture?: ContentLogCaptureService;
   readonly elementResolver?: ContentElementResolver;
-};
+}
 
 type DirectContentCommand =
   | "snapshot"
@@ -50,10 +50,7 @@ type DirectContentCommand =
 const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScriptRequestContext]> = {
   snapshot: (request, options) => {
     try {
-      return createOkResponse(
-        request,
-        createSnapshotResult(options.document, request.params, options.registry, options.now),
-      );
+      return createOkResponse(request, createSnapshotResult(options.document, request.params, options.registry, options.now));
     } catch (error) {
       return createContentErrorResponseForRequest(request, error);
     }
@@ -76,25 +73,19 @@ const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScr
   },
   get: (request, options) => {
     try {
-      return createOkResponse(
-        request,
-        createGetResult(options.document, request.params, options.registry, options.now),
-      );
+      return createOkResponse(request, createGetResult(options.document, request.params, options.registry, options.now));
     } catch (error) {
       return createContentErrorResponseForRequest(request, error);
     }
   },
   is: (request, options) => {
     try {
-      return createOkResponse(
-        request,
-        createIsResult(options.document, request.params, options.registry, options.now),
-      );
+      return createOkResponse(request, createIsResult(options.document, request.params, options.registry, options.now));
     } catch (error) {
       return createContentErrorResponseForRequest(request, error);
     }
   },
-  wait: (request, options) =>
+  wait: async (request, options) =>
     createWaitResult({
       document: options.document,
       params: request.params,
@@ -127,13 +118,10 @@ const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScr
           {
             ...(request.params.selector === undefined ? {} : { selector: request.params.selector }),
             ...(request.params.ref === undefined ? {} : { ref: request.params.ref }),
-            ...(request.params.generationId === undefined
-              ? {}
-              : { generationId: request.params.generationId }),
+            ...(request.params.generationId === undefined ? {} : { generationId: request.params.generationId }),
             ...(request.params.text === undefined ? {} : { text: request.params.text }),
           },
-          options.registry,
-          options.now,
+          { registry: options.registry, ...(options.now === undefined ? {} : { now: options.now }) },
         ),
       );
     } catch (error) {
@@ -150,10 +138,8 @@ const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScr
         ...(request.params.value === undefined ? {} : { value: request.params.value }),
       }),
     ),
-  console: (request) =>
-    createOkResponse(request, createConsoleResult(request.params.action, request.protocolVersion)),
-  errors: (request) =>
-    createOkResponse(request, createErrorsResult(request.params.action, request.protocolVersion)),
+  console: (request) => createOkResponse(request, createConsoleResult(request.params.action, request.protocolVersion)),
+  errors: (request) => createOkResponse(request, createErrorsResult(request.params.action, request.protocolVersion)),
   highlight: (request, options) => {
     try {
       const params = request.params;
@@ -185,10 +171,7 @@ const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScr
   },
 };
 
-export function handleContentScriptRequest(
-  request: RequestEnvelope,
-  options: ContentScriptRequestContext,
-): ResponseEnvelope | Promise<ResponseEnvelope> {
+export function handleContentScriptRequest(request: RequestEnvelope, options: ContentScriptRequestContext): ResponseEnvelope | Promise<ResponseEnvelope> {
   const logCapture = getRequiredLogCapture(options);
   const elementResolver = options.elementResolver ?? getElementResolver(options);
 
@@ -211,17 +194,14 @@ export function handleContentScriptRequest(
 }
 
 function getRequiredLogCapture(options: ContentScriptRequestContext): ContentLogCaptureService {
-  const logCapture = (options as { readonly logCapture?: ContentLogCaptureService }).logCapture;
+  const logCapture = options.logCapture;
   if (logCapture === undefined) {
     throw new Error("ContentLogCaptureService is required at the content runtime boundary.");
   }
   return logCapture;
 }
 
-function handleActionCommand(
-  request: RequestEnvelope<ActionKind>,
-  options: ContentScriptRequestContext,
-): ResponseEnvelope<ActionKind> {
+function handleActionCommand(request: RequestEnvelope<ActionKind>, options: ContentScriptRequestContext): ResponseEnvelope<ActionKind> {
   try {
     return createOkResponse(
       request,

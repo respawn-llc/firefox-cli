@@ -1,31 +1,7 @@
-import {
-  LOG_RESULT_METADATA_PROTOCOL_VERSION,
-  MAX_LOG_ENTRIES,
-  MAX_LOG_RESULT_BYTES,
-  PROTOCOL_VERSION,
-  type ConsoleResult,
-  type ErrorsResult,
-} from "@firefox-cli/protocol";
+import { LOG_RESULT_METADATA_PROTOCOL_VERSION, PROTOCOL_VERSION, type ConsoleResult, type ErrorsResult } from "@firefox-cli/protocol";
+import { BoundedLogBuffer, type LogBufferSnapshot, type LogEntryStore } from "./log-buffer.js";
 
-export type CapturedLogEntry = { level: string; text: string; timestamp: number };
-
-type LogResultEntryKey = "entries" | "errors";
-
-type LogBufferSnapshot = {
-  readonly entries: readonly CapturedLogEntry[];
-  readonly truncated: boolean;
-  readonly droppedEntries: number;
-};
-
-type LogEntryStore = {
-  push(entry: CapturedLogEntry): number;
-  clear(): void;
-  snapshot(): LogBufferSnapshot;
-  readonly [Symbol.iterator]: () => Iterator<CapturedLogEntry>;
-  length: number;
-};
-
-type LogCaptureState = {
+interface LogCaptureState {
   installed: boolean;
   globalRefCount: number;
   consoleEntries: LogEntryStore;
@@ -33,210 +9,42 @@ type LogCaptureState = {
   capturedWindows: WeakSet<Window>;
   consolePatch?: ConsolePatch;
   errorListeners: WeakMap<object, ErrorListenerRegistration>;
-};
+}
 
-const LOG_CAPTURE_STATE_KEY = Symbol.for("firefox-cli.contentSnapshot.logCaptureState");
-const TRUNCATED_TEXT_SUFFIX = "... [truncated]";
 const CONSOLE_LEVELS = ["log", "info", "warn", "error"] as const;
+const LOG_CAPTURE_STATE_GLOBAL_KEY = "__firefoxCliContentSnapshotLogCaptureState";
 
-type ConsolePatch = {
+declare global {
+  var __firefoxCliContentSnapshotLogCaptureState: LogCaptureState | undefined;
+}
+
+interface ConsolePatch {
   restore(): void;
-};
+}
 
-type ErrorListenerTarget = {
-  readonly addEventListener?: (
-    type: string,
-    listener: EventListener,
-    options?: boolean | AddEventListenerOptions,
-  ) => void;
-  readonly removeEventListener?: (
-    type: string,
-    listener: EventListener,
-    options?: boolean | EventListenerOptions,
-  ) => void;
-};
+interface ErrorListenerTarget {
+  readonly addEventListener?: (type: string, listener: EventListener, options?: boolean | AddEventListenerOptions) => void;
+  readonly removeEventListener?: (type: string, listener: EventListener, options?: boolean | EventListenerOptions) => void;
+}
 
-type ErrorListenerRegistration = {
+interface ErrorListenerRegistration {
   refCount: number;
   restore(target: ErrorListenerTarget): void;
-};
+}
 
-export type LogCaptureHandle = {
+export interface LogCaptureHandle {
   dispose(): void;
-};
+}
 
-export type ContentLogCaptureService = {
+export interface ContentLogCaptureService {
   installGlobal(): LogCaptureHandle;
   installWindow(view: Window | null): LogCaptureHandle;
   createConsoleResult(action: ConsoleResult["action"], protocolVersion?: number): ConsoleResult;
   createErrorsResult(action: ErrorsResult["action"], protocolVersion?: number): ErrorsResult;
-};
-
-export class BoundedLogBuffer implements LogEntryStore {
-  readonly #entryKey: LogResultEntryKey;
-  readonly #maxEntries: number;
-  readonly #maxResultBytes: number;
-  readonly #entries: CapturedLogEntry[] = [];
-  #truncated = false;
-  #droppedEntries = 0;
-
-  constructor(
-    entryKey: LogResultEntryKey,
-    options: {
-      readonly maxEntries?: number;
-      readonly maxResultBytes?: number;
-      readonly initialEntries?: readonly CapturedLogEntry[];
-    } = {},
-  ) {
-    this.#entryKey = entryKey;
-    this.#maxEntries = options.maxEntries ?? MAX_LOG_ENTRIES;
-    this.#maxResultBytes = options.maxResultBytes ?? MAX_LOG_RESULT_BYTES;
-    for (const entry of options.initialEntries ?? []) {
-      this.push(entry);
-    }
-  }
-
-  get length(): number {
-    return this.#entries.length;
-  }
-
-  set length(nextLength: number) {
-    if (nextLength === 0) {
-      this.clear();
-      return;
-    }
-
-    if (Number.isInteger(nextLength) && nextLength >= 0 && nextLength < this.#entries.length) {
-      const removed = this.#entries.length - nextLength;
-      this.#entries.splice(nextLength);
-      this.#droppedEntries += removed;
-      this.#truncated = true;
-    }
-  }
-
-  [Symbol.iterator](): Iterator<CapturedLogEntry> {
-    return this.#entries[Symbol.iterator]();
-  }
-
-  push(entry: CapturedLogEntry): number {
-    this.#entries.push({ ...entry });
-    this.#enforceEntryCount();
-    this.#enforceResultBytes();
-    return this.length;
-  }
-
-  clear(): void {
-    this.#entries.length = 0;
-    this.#truncated = false;
-    this.#droppedEntries = 0;
-  }
-
-  snapshot(): LogBufferSnapshot {
-    return {
-      entries: this.#entries.map((entry) => ({ ...entry })),
-      truncated: this.#truncated,
-      droppedEntries: this.#droppedEntries,
-    };
-  }
-
-  encodedResultBytes(entries: readonly CapturedLogEntry[] = this.#entries): number {
-    return this.#encodedResultBytes(entries, {
-      truncated: this.#truncated,
-      droppedEntries: this.#droppedEntries,
-    });
-  }
-
-  #enforceEntryCount(): void {
-    while (this.#entries.length > this.#maxEntries) {
-      this.#dropOldestEntry();
-    }
-  }
-
-  #enforceResultBytes(): void {
-    while (this.#entries.length > 0 && this.encodedResultBytes() > this.#maxResultBytes) {
-      if (this.#entries.length > 1) {
-        this.#dropOldestEntry();
-        continue;
-      }
-
-      if (!this.#truncateSingleEntryToFit()) {
-        this.#dropOldestEntry();
-      }
-      return;
-    }
-  }
-
-  #dropOldestEntry(): void {
-    this.#entries.shift();
-    this.#droppedEntries += 1;
-    this.#truncated = true;
-  }
-
-  #truncateSingleEntryToFit(): boolean {
-    const entry = this.#entries[0];
-    if (entry === undefined) {
-      return true;
-    }
-
-    const chars = Array.from(entry.text);
-    if (chars.length === 0) {
-      return false;
-    }
-
-    const truncatedMetadata = {
-      truncated: true,
-      droppedEntries: this.#droppedEntries,
-    };
-    const suffixOnly = { ...entry, text: TRUNCATED_TEXT_SUFFIX };
-    if (this.#encodedResultBytes([suffixOnly], truncatedMetadata) > this.#maxResultBytes) {
-      return false;
-    }
-
-    let low = 0;
-    let high = chars.length;
-    let bestText = TRUNCATED_TEXT_SUFFIX;
-    while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-      const text = `${chars.slice(0, middle).join("")}${TRUNCATED_TEXT_SUFFIX}`;
-      if (this.#encodedResultBytes([{ ...entry, text }], truncatedMetadata) <= this.#maxResultBytes) {
-        bestText = text;
-        low = middle + 1;
-      } else {
-        high = middle - 1;
-      }
-    }
-
-    this.#entries[0] = { ...entry, text: bestText };
-    this.#truncated = true;
-    return true;
-  }
-
-  #encodedResultBytes(
-    entries: readonly CapturedLogEntry[],
-    metadata: { readonly truncated: boolean; readonly droppedEntries: number },
-  ): number {
-    return encodedByteLength(JSON.stringify(this.#listResult(entries, metadata)));
-  }
-
-  #listResult(
-    entries: readonly CapturedLogEntry[],
-    metadata: { readonly truncated: boolean; readonly droppedEntries: number },
-  ) {
-    return {
-      action: "list",
-      ok: true,
-      [this.#entryKey]: entries,
-      truncated: metadata.truncated,
-      droppedEntries: metadata.droppedEntries,
-    };
-  }
 }
 
 function getLogCaptureState(): LogCaptureState {
-  const global = globalThis as typeof globalThis & {
-    [LOG_CAPTURE_STATE_KEY]?: LogCaptureState;
-  };
-  global[LOG_CAPTURE_STATE_KEY] ??= {
+  globalThis[LOG_CAPTURE_STATE_GLOBAL_KEY] ??= {
     installed: false,
     consoleEntries: new BoundedLogBuffer("entries"),
     errorEntries: new BoundedLogBuffer("errors"),
@@ -244,7 +52,7 @@ function getLogCaptureState(): LogCaptureState {
     errorListeners: new WeakMap<object, ErrorListenerRegistration>(),
     globalRefCount: 0,
   };
-  return global[LOG_CAPTURE_STATE_KEY];
+  return globalThis[LOG_CAPTURE_STATE_GLOBAL_KEY];
 }
 
 export function createContentLogCaptureService(): ContentLogCaptureService {
@@ -258,14 +66,11 @@ export function createContentLogCaptureService(): ContentLogCaptureService {
 
 export function installLogCapture(): LogCaptureHandle {
   const state = getLogCaptureState();
-  const global = globalThis as typeof globalThis & {
-    readonly addEventListener?: typeof addEventListener;
-  };
   state.globalRefCount += 1;
   if (!state.installed) {
     state.installed = true;
     state.consolePatch ??= installConsolePatch(state);
-    installErrorListeners(global, state);
+    installErrorListeners(globalThis, state);
   }
   return createScopedHandle(() => {
     state.globalRefCount = Math.max(0, state.globalRefCount - 1);
@@ -298,10 +103,9 @@ export function restoreLogCapture(): void {
 }
 
 function restoreGlobalLogCapture(state: LogCaptureState): void {
-  const global = globalThis as typeof globalThis & ErrorListenerTarget;
   state.consolePatch?.restore();
   delete state.consolePatch;
-  restoreErrorListeners(global, state);
+  restoreErrorListeners(globalThis, state);
   state.installed = false;
 }
 
@@ -316,36 +120,34 @@ export function restoreWindowLogCapture(view: Window | null): void {
 }
 
 function installConsolePatch(state: LogCaptureState): ConsolePatch {
+  const targetConsole = globalThis.console;
   const patched = CONSOLE_LEVELS.map((level) => {
-    const original = console[level];
-    const originalCall = original?.bind(console);
+    const original = targetConsole[level];
+    const originalCall = original.bind(targetConsole);
     const wrapper = (...args: unknown[]) => {
       state.consoleEntries.push({
         level,
         text: args.map(String).join(" "),
         timestamp: Date.now(),
       });
-      originalCall?.(...args);
+      originalCall(...args);
     };
-    console[level] = wrapper;
+    targetConsole[level] = wrapper;
     return { level, original, wrapper };
   });
 
   return {
     restore: () => {
       for (const { level, original, wrapper } of patched) {
-        if (console[level] === wrapper) {
-          console[level] = original;
+        if (targetConsole[level] === wrapper) {
+          targetConsole[level] = original;
         }
       }
     },
   };
 }
 
-function installErrorListeners(
-  target: ErrorListenerTarget,
-  state: LogCaptureState,
-): ErrorListenerRegistration {
+function installErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): ErrorListenerRegistration {
   const existing = state.errorListeners.get(target);
   if (existing !== undefined) {
     existing.refCount += 1;
@@ -353,18 +155,16 @@ function installErrorListeners(
   }
 
   const errorListener: EventListener = (event) => {
-    const error = event as ErrorEvent;
     state.errorEntries.push({
       level: "error",
-      text: error.message,
+      text: getErrorEventMessage(event),
       timestamp: Date.now(),
     });
   };
   const rejectionListener: EventListener = (event) => {
-    const rejection = event as PromiseRejectionEvent;
     state.errorEntries.push({
       level: "unhandledrejection",
-      text: String(rejection.reason),
+      text: getPromiseRejectionReason(event),
       timestamp: Date.now(),
     });
   };
@@ -379,6 +179,14 @@ function installErrorListeners(
   };
   state.errorListeners.set(target, registration);
   return registration;
+}
+
+function getErrorEventMessage(event: Event): string {
+  return "message" in event && typeof event.message === "string" ? event.message : "";
+}
+
+function getPromiseRejectionReason(event: Event): string {
+  return "reason" in event ? String(event.reason) : "";
 }
 
 function restoreErrorListeners(target: ErrorListenerTarget, state: LogCaptureState): void {
@@ -403,10 +211,7 @@ function createScopedHandle(dispose: () => void): LogCaptureHandle {
   };
 }
 
-export function createConsoleResult(
-  action: ConsoleResult["action"],
-  protocolVersion: number = PROTOCOL_VERSION,
-): ConsoleResult {
+export function createConsoleResult(action: ConsoleResult["action"], protocolVersion: number = PROTOCOL_VERSION): ConsoleResult {
   const { consoleEntries } = getLogCaptureState();
   if (action === "clear") {
     consoleEntries.clear();
@@ -421,10 +226,7 @@ export function createConsoleResult(
   };
 }
 
-export function createErrorsResult(
-  action: ErrorsResult["action"],
-  protocolVersion: number = PROTOCOL_VERSION,
-): ErrorsResult {
+export function createErrorsResult(action: ErrorsResult["action"], protocolVersion: number = PROTOCOL_VERSION): ErrorsResult {
   const { errorEntries } = getLogCaptureState();
   if (action === "clear") {
     errorEntries.clear();
@@ -439,18 +241,11 @@ export function createErrorsResult(
   };
 }
 
-function metadataForProtocolVersion(
-  snapshot: LogBufferSnapshot,
-  protocolVersion: number,
-): Pick<ConsoleResult, "truncated" | "droppedEntries"> {
+function metadataForProtocolVersion(snapshot: LogBufferSnapshot, protocolVersion: number): Pick<ConsoleResult, "truncated" | "droppedEntries"> {
   return protocolVersion >= LOG_RESULT_METADATA_PROTOCOL_VERSION
     ? {
         truncated: snapshot.truncated,
         droppedEntries: snapshot.droppedEntries,
       }
     : {};
-}
-
-function encodedByteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }

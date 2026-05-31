@@ -1,25 +1,11 @@
-import type {
-  DragParams,
-  ElementActionParams,
-  MouseParams,
-  ScrollParams,
-  SelectParams,
-  TextActionParams,
-  UploadParams,
-} from "@firefox-cli/protocol";
+import type { DragParams, ElementActionParams, MouseParams, ScrollParams, SelectParams, TextActionParams, UploadParams } from "@firefox-cli/protocol";
 import type { ActionOptions, ContentActionResult, ElementResolution } from "../content-action-types.js";
 
 type ElementTargetParams = ElementActionParams | TextActionParams | SelectParams | UploadParams;
 
-type OptionalElementTargetParams =
-  | ElementTargetParams
-  | MouseParams
-  | Pick<ScrollParams, "selector" | "ref" | "generationId">;
+type OptionalElementTargetParams = ElementTargetParams | MouseParams | Pick<ScrollParams, "selector" | "ref" | "generationId">;
 
-export function resolveRequiredElement(
-  options: ActionOptions,
-  params: ElementTargetParams,
-): ElementResolution {
+export function resolveRequiredElement(options: ActionOptions, params: ElementTargetParams): ElementResolution {
   if (options.elementResolver !== undefined) {
     return options.elementResolver.resolveRequiredTarget(params, {
       missingMessage: "Element selector or ref is required.",
@@ -34,10 +20,7 @@ export function resolveRequiredElement(
   return resolution;
 }
 
-export function resolveOptionalElement(
-  options: ActionOptions,
-  params: OptionalElementTargetParams,
-): ElementResolution | undefined {
+export function resolveOptionalElement(options: ActionOptions, params: OptionalElementTargetParams): ElementResolution | undefined {
   if (options.elementResolver !== undefined) {
     return options.elementResolver.resolveOptionalTarget(params, options.now);
   }
@@ -61,11 +44,7 @@ export function resolveOptionalElement(
   return { element };
 }
 
-export function resolveRequiredDragElement(
-  options: ActionOptions,
-  params: DragParams,
-  role: "source" | "target",
-): ElementResolution {
+export function resolveRequiredDragElement(options: ActionOptions, params: DragParams, role: "source" | "target"): ElementResolution {
   if (options.elementResolver !== undefined) {
     return options.elementResolver.resolveRequiredDragTarget(params, role, options.now);
   }
@@ -84,18 +63,13 @@ export function resolveRequiredDragElement(
   return resolution;
 }
 
-export function elementActionResult(
-  options: ActionOptions,
-  resolution: ElementResolution,
-): ContentActionResult {
+export function elementActionResult(options: ActionOptions, resolution: ElementResolution): ContentActionResult {
   return {
     action: options.command,
     ok: true,
     element: options.summarizeElement(
       resolution.element,
-      resolution.ref === undefined || resolution.generationId === undefined
-        ? undefined
-        : { ref: resolution.ref, generationId: resolution.generationId },
+      resolution.ref === undefined || resolution.generationId === undefined ? undefined : { ref: resolution.ref, generationId: resolution.generationId },
     ),
   };
 }

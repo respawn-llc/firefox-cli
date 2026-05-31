@@ -11,11 +11,11 @@ export function parseDisposableFirefoxProcessIds(
     .filter((pid) => pid !== currentPid);
 }
 
-export type DisposableFirefoxProcess = {
+export interface DisposableFirefoxProcess {
   readonly pid: number;
   readonly command: string;
   readonly args: string;
-};
+}
 
 export function parseDisposableFirefoxProcesses(
   psOutput: string,
@@ -35,13 +35,11 @@ export function isFirefoxExecutableCommand(command: string): boolean {
   return basename === "firefox" || basename === "firefox-bin" || basename === "firefox-esr";
 }
 
-function parseProcessRows(
-  psOutput: string,
-): readonly { readonly pid: number; readonly command: string; readonly args: string }[] {
+function parseProcessRows(psOutput: string): readonly { readonly pid: number; readonly command: string; readonly args: string }[] {
   return psOutput
     .split("\n")
-    .map((line) => line.trim().match(/^(\d+)\s+(\S+)(?:\s+(.*))?$/u))
-    .filter((match): match is RegExpMatchArray => match !== null)
+    .map((line) => /^(\d+)\s+(\S+)(?:\s+(.*))?$/u.exec(line.trim()))
+    .filter((match): match is RegExpExecArray => match !== null)
     .map((match) => ({
       pid: Number(match[1]),
       command: match[2] ?? "",
@@ -72,58 +70,82 @@ function executableBasename(command: string): string {
 }
 
 function tokenizeCommandLine(commandLine: string): readonly string[] {
-  const tokens: string[] = [];
-  let current = "";
-  let quote: "'" | '"' | undefined;
-  let escaping = false;
+  const state: CommandLineTokenState = {
+    tokens: [],
+    current: "",
+    quote: undefined,
+    escaping: false,
+  };
 
   for (let index = 0; index < commandLine.length; index += 1) {
-    const char = commandLine[index];
-    if (char === undefined) {
-      continue;
-    }
-    if (escaping) {
-      current += char;
-      escaping = false;
-      continue;
-    }
-    if (char === "\\") {
-      const next = commandLine[index + 1];
-      if (next !== undefined && (/\s/u.test(next) || next === "\\" || next === "'" || next === '"')) {
-        escaping = true;
-      } else {
-        current += char;
-      }
-      continue;
-    }
-    if (quote !== undefined) {
-      if (char === quote) {
-        quote = undefined;
-      } else {
-        current += char;
-      }
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      continue;
-    }
-    if (/\s/u.test(char)) {
-      if (current.length > 0) {
-        tokens.push(current);
-        current = "";
-      }
-      continue;
-    }
-    current += char;
+    appendCommandLineCharacter(state, commandLine[index], commandLine[index + 1]);
   }
 
-  if (escaping) {
-    current += "\\";
+  if (state.escaping) {
+    state.current += "\\";
   }
-  if (current.length > 0) {
-    tokens.push(current);
+  if (state.current.length > 0) {
+    state.tokens.push(state.current);
   }
 
-  return tokens;
+  return state.tokens;
+}
+
+interface CommandLineTokenState {
+  readonly tokens: string[];
+  current: string;
+  quote: "'" | '"' | undefined;
+  escaping: boolean;
+}
+
+function appendCommandLineCharacter(state: CommandLineTokenState, char: string | undefined, next: string | undefined): void {
+  if (char === undefined) {
+    return;
+  }
+  if (state.escaping) {
+    state.current += char;
+    state.escaping = false;
+    return;
+  }
+  if (char === "\\") {
+    appendCommandLineBackslash(state, next);
+    return;
+  }
+  if (state.quote !== undefined) {
+    appendQuotedCommandLineCharacter(state, char);
+    return;
+  }
+  if (char === "'" || char === '"') {
+    state.quote = char;
+    return;
+  }
+  if (/\s/u.test(char)) {
+    flushCommandLineToken(state);
+    return;
+  }
+  state.current += char;
+}
+
+function appendCommandLineBackslash(state: CommandLineTokenState, next: string | undefined): void {
+  if (next !== undefined && (/\s/u.test(next) || next === "\\" || next === "'" || next === '"')) {
+    state.escaping = true;
+    return;
+  }
+  state.current += "\\";
+}
+
+function appendQuotedCommandLineCharacter(state: CommandLineTokenState, char: string): void {
+  if (char === state.quote) {
+    state.quote = undefined;
+    return;
+  }
+  state.current += char;
+}
+
+function flushCommandLineToken(state: CommandLineTokenState): void {
+  if (state.current.length === 0) {
+    return;
+  }
+  state.tokens.push(state.current);
+  state.current = "";
 }

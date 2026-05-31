@@ -1,22 +1,9 @@
 import { createOkResponse } from "@firefox-cli/protocol";
 import { BrowserCommandError } from "../browser-command/errors.js";
-import {
-  assertMutableWindow,
-  toOrderedWindows,
-  toResolvedTarget,
-  toWindowSummary,
-} from "../browser-command/targets.js";
+import { assertMutableWindow, toOrderedWindows, toResolvedTarget, toWindowSummary } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
-type TabsWindowsCommand =
-  | "tabs.list"
-  | "windows.list"
-  | "tab.new"
-  | "tab.select"
-  | "tab.close"
-  | "window.new"
-  | "window.select"
-  | "window.close";
+type TabsWindowsCommand = "tabs.list" | "windows.list" | "tab.new" | "tab.select" | "tab.close" | "window.new" | "window.select" | "window.close";
 
 export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
   "tabs.list": async (request, _adapter, context) => {
@@ -63,9 +50,7 @@ export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
     const nextWindow = await context.targetContext.findWindowById(resolved.window.id);
     return createOkResponse(request, {
       closedTabId: resolved.tab.id,
-      ...(nextWindow?.tabs.find((tab) => tab.active)?.id === undefined
-        ? {}
-        : { nextActiveTabId: nextWindow.tabs.find((tab) => tab.active)?.id }),
+      ...(nextWindow?.tabs.find((tab) => tab.active)?.id === undefined ? {} : { nextActiveTabId: nextWindow.tabs.find((tab) => tab.active)?.id }),
     });
   },
   "window.new": async (request, adapter, context) => {

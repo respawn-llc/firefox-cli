@@ -1,14 +1,7 @@
-import type {
-  DownloadResult,
-  NetworkResult,
-  CookieResult,
-  RequestEnvelope,
-  ResolvedTarget,
-  TabSummary,
-} from "@firefox-cli/protocol";
+import type { DownloadResult, NetworkResult, CookieResult, RequestEnvelope, ResolvedTarget, TabSummary } from "@firefox-cli/protocol";
 import type { EvalExecutorPayload, EvalExecutorResult } from "../eval-executor.js";
 
-export type BrowserWindowSnapshot = {
+export interface BrowserWindowSnapshot {
   readonly id: number;
   readonly focused: boolean;
   readonly private?: boolean;
@@ -17,9 +10,9 @@ export type BrowserWindowSnapshot = {
   readonly width?: number;
   readonly height?: number;
   readonly tabs: readonly TabSummary[];
-};
+}
 
-export type BackgroundBrowserAdapter = {
+export interface BackgroundBrowserAdapter {
   hasRequiredHostAccess(): Promise<boolean>;
   listWindows(): Promise<readonly BrowserWindowSnapshot[]>;
   createTab(options: { readonly url?: string; readonly windowId?: number }): Promise<TabSummary>;
@@ -34,15 +27,8 @@ export type BackgroundBrowserAdapter = {
   reload(tabId: number): Promise<TabSummary>;
   sendContentRequest(tabId: number, request: RequestEnvelope): Promise<unknown>;
   executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult>;
-  captureVisibleTab(
-    windowId: number,
-    options: { readonly format: "png" | "jpeg"; readonly quality?: number },
-  ): Promise<string>;
-  download(options: {
-    readonly url: string;
-    readonly filename?: string;
-    readonly saveAs?: boolean;
-  }): Promise<DownloadResult>;
+  captureVisibleTab(windowId: number, options: { readonly format: "png" | "jpeg"; readonly quality?: number }): Promise<string>;
+  download(options: { readonly url: string; readonly filename?: string; readonly saveAs?: boolean }): Promise<DownloadResult>;
   waitForDownload(options: {
     readonly downloadId?: number;
     readonly filenameGlob?: string;
@@ -60,29 +46,19 @@ export type BackgroundBrowserAdapter = {
     readonly path?: string;
   }): Promise<NonNullable<CookieResult["cookie"]>>;
   removeCookie(options: { readonly url: string; readonly name: string }): Promise<void>;
-  listNetworkRequests(options: {
-    readonly tabId: number;
-    readonly urlGlob?: string;
-  }): Promise<NonNullable<NetworkResult["requests"]>>;
+  listNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<NonNullable<NetworkResult["requests"]>>;
   clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void>;
-  waitForNetworkIdle(options: {
-    readonly tabId: number;
-    readonly timeoutMs: number;
-    readonly idleMs: number;
-  }): Promise<void>;
-  resizeWindow(
-    windowId: number,
-    size: { readonly width: number; readonly height: number },
-  ): Promise<BrowserWindowSnapshot>;
-};
+  waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void>;
+  resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot>;
+}
 
 export type OrderedWindow = BrowserWindowSnapshot & {
   readonly index: number;
   readonly tabs: readonly TabSummary[];
 };
 
-export type ResolvedBrowserTarget = {
+export interface ResolvedBrowserTarget {
   readonly window: OrderedWindow;
   readonly tab: TabSummary;
   readonly target: ResolvedTarget;
-};
+}

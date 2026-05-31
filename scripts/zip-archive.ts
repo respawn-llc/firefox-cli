@@ -20,24 +20,24 @@ const crcTable = Array.from({ length: 256 }, (_, index) => {
   return value >>> 0;
 });
 
-export type ZipEntry = {
+export interface ZipEntry {
   readonly name: string;
   readonly compressedSize: number;
   readonly uncompressedSize: number;
   readonly compressionMethod: number;
   readonly crc32: number;
   readonly isDirectory: boolean;
-};
+}
 
 type ParsedZipEntry = ZipEntry & {
   readonly dataOffset: number;
 };
 
-export type ZipArchive = {
+export interface ZipArchive {
   readonly entries: readonly ZipEntry[];
   readonly getEntry: (name: string) => ZipEntry | undefined;
   readonly readEntry: (entryOrName: ZipEntry | string) => Buffer;
-};
+}
 
 export class ZipArchiveError extends Error {
   constructor(message: string) {
@@ -58,11 +58,7 @@ export function readZipArchive(data: Buffer): ZipArchive {
   if (diskNumber !== 0 || centralDirectoryDisk !== 0 || diskEntryCount !== totalEntryCount) {
     throw new ZipArchiveError("Unsupported multi-disk ZIP archive.");
   }
-  if (
-    totalEntryCount === UINT16_MAX ||
-    centralDirectorySize === UINT32_MAX ||
-    centralDirectoryOffset === UINT32_MAX
-  ) {
+  if (totalEntryCount === UINT16_MAX || centralDirectorySize === UINT32_MAX || centralDirectoryOffset === UINT32_MAX) {
     throw new ZipArchiveError("Unsupported ZIP64 archive.");
   }
   ensureRange(data, centralDirectoryOffset, centralDirectorySize, "central directory");
@@ -81,14 +77,9 @@ export function readZipArchive(data: Buffer): ZipArchive {
     entries: parsedEntries,
     getEntry: (name) => entriesByName.get(name),
     readEntry: (entryOrName) => {
-      const entry =
-        typeof entryOrName === "string"
-          ? entriesByName.get(entryOrName)
-          : entriesByName.get(entryOrName.name);
+      const entry = typeof entryOrName === "string" ? entriesByName.get(entryOrName) : entriesByName.get(entryOrName.name);
       if (entry === undefined) {
-        throw new ZipArchiveError(
-          `ZIP entry not found: ${typeof entryOrName === "string" ? entryOrName : entryOrName.name}`,
-        );
+        throw new ZipArchiveError(`ZIP entry not found: ${typeof entryOrName === "string" ? entryOrName : entryOrName.name}`);
       }
       if (entry.isDirectory) {
         throw new ZipArchiveError(`ZIP entry is a directory: ${entry.name}`);
@@ -157,26 +148,15 @@ function parseCentralDirectory(
     const variableStart = offset + 46;
     const variableLength = fileNameLength + extraFieldLength + fileCommentLength;
     ensureRange(data, variableStart, variableLength, "central directory entry fields");
-
-    if (versionNeeded >= ZIP64_VERSION_NEEDED) {
-      throw new ZipArchiveError("Unsupported ZIP64 archive.");
-    }
-    if (diskStart !== 0) {
-      throw new ZipArchiveError("Unsupported multi-disk ZIP archive.");
-    }
-    if ((flags & ZIP_ENTRY_FLAG_ENCRYPTED) !== 0) {
-      throw new ZipArchiveError("Unsupported encrypted ZIP entry.");
-    }
-    if (
-      compressedSize === UINT32_MAX ||
-      uncompressedSize === UINT32_MAX ||
-      localHeaderOffset === UINT32_MAX
-    ) {
-      throw new ZipArchiveError("Unsupported ZIP64 archive.");
-    }
-    if (compressionMethod !== ZIP_COMPRESSION_STORED && compressionMethod !== ZIP_COMPRESSION_DEFLATE) {
-      throw new ZipArchiveError(`Unsupported ZIP compression method: ${compressionMethod}.`);
-    }
+    validateCentralDirectoryEntry({
+      compressedSize,
+      compressionMethod,
+      diskStart,
+      flags,
+      localHeaderOffset,
+      uncompressedSize,
+      versionNeeded,
+    });
 
     const name = data.subarray(variableStart, variableStart + fileNameLength).toString("utf8");
     validateEntryName(name);
@@ -213,6 +193,32 @@ function parseCentralDirectory(
   }
 
   return entries;
+}
+
+function validateCentralDirectoryEntry(input: {
+  readonly compressedSize: number;
+  readonly compressionMethod: number;
+  readonly diskStart: number;
+  readonly flags: number;
+  readonly localHeaderOffset: number;
+  readonly uncompressedSize: number;
+  readonly versionNeeded: number;
+}): void {
+  if (input.versionNeeded >= ZIP64_VERSION_NEEDED) {
+    throw new ZipArchiveError("Unsupported ZIP64 archive.");
+  }
+  if (input.diskStart !== 0) {
+    throw new ZipArchiveError("Unsupported multi-disk ZIP archive.");
+  }
+  if ((input.flags & ZIP_ENTRY_FLAG_ENCRYPTED) !== 0) {
+    throw new ZipArchiveError("Unsupported encrypted ZIP entry.");
+  }
+  if (input.compressedSize === UINT32_MAX || input.uncompressedSize === UINT32_MAX || input.localHeaderOffset === UINT32_MAX) {
+    throw new ZipArchiveError("Unsupported ZIP64 archive.");
+  }
+  if (input.compressionMethod !== ZIP_COMPRESSION_STORED && input.compressionMethod !== ZIP_COMPRESSION_DEFLATE) {
+    throw new ZipArchiveError(`Unsupported ZIP compression method: ${String(input.compressionMethod)}.`);
+  }
 }
 
 function readLocalDataOffset(
@@ -263,11 +269,7 @@ function readLocalDataOffset(
   }
 
   if ((localFlags & ZIP_ENTRY_FLAG_DATA_DESCRIPTOR) === 0) {
-    if (
-      localCrc32 !== input.crc32 ||
-      localCompressedSize !== input.compressedSize ||
-      localUncompressedSize !== input.uncompressedSize
-    ) {
+    if (localCrc32 !== input.crc32 || localCompressedSize !== input.compressedSize || localUncompressedSize !== input.uncompressedSize) {
       throw new ZipArchiveError("Malformed ZIP archive: local entry metadata mismatch.");
     }
   }
@@ -279,14 +281,9 @@ function readEntryData(data: Buffer, entry: ParsedZipEntry): Buffer {
   const compressedData = data.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize);
   let output: Buffer;
   try {
-    output =
-      entry.compressionMethod === ZIP_COMPRESSION_STORED
-        ? Buffer.from(compressedData)
-        : inflateRawSync(compressedData);
+    output = entry.compressionMethod === ZIP_COMPRESSION_STORED ? Buffer.from(compressedData) : inflateRawSync(compressedData);
   } catch (error) {
-    throw new ZipArchiveError(
-      `Failed to decompress ZIP entry ${entry.name}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new ZipArchiveError(`Failed to decompress ZIP entry ${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (output.length !== entry.uncompressedSize) {
@@ -323,13 +320,7 @@ function normalizeEntryName(name: string): string {
 }
 
 function ensureRange(data: Buffer, offset: number, length: number, context: string): void {
-  if (
-    offset < 0 ||
-    length < 0 ||
-    !Number.isSafeInteger(offset) ||
-    !Number.isSafeInteger(length) ||
-    offset + length > data.length
-  ) {
+  if (offset < 0 || length < 0 || !Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset + length > data.length) {
     throw new ZipArchiveError(`Malformed ZIP archive: ${context} is out of range.`);
   }
 }

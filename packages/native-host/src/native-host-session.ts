@@ -23,7 +23,7 @@ import {
   type PairStateStore,
 } from "./pair-state.js";
 
-export type NativeHostSessionOptions = {
+export interface NativeHostSessionOptions {
   readonly input: Readable;
   readonly output: Writable;
   readonly stateRoot: string;
@@ -36,17 +36,16 @@ export type NativeHostSessionOptions = {
   readonly hostIdentityStore?: HostIdentityStore;
   readonly pairStateStore?: PairStateStore;
   readonly ipcAuthTokenStore?: LocalIpcAuthTokenStore;
-};
+}
 
-export type NativeHostSession = {
+export interface NativeHostSession {
   readonly endpoint: LocalIpcEndpoint;
   readonly closed: Promise<void>;
   stop(): Promise<void>;
-};
+}
 
 export async function startNativeHostSession(options: NativeHostSessionOptions): Promise<NativeHostSession> {
-  const ipcAuthTokenStore =
-    options.ipcAuthTokenStore ?? new FileLocalIpcAuthTokenStore({ stateRoot: options.stateRoot });
+  const ipcAuthTokenStore = options.ipcAuthTokenStore ?? new FileLocalIpcAuthTokenStore({ stateRoot: options.stateRoot });
   const ipcAuthToken = await getOrCreateLocalIpcAuthToken(ipcAuthTokenStore);
   const endpoint = planLocalIpcEndpoint({
     platform: options.platform,
@@ -77,8 +76,7 @@ export async function startNativeHostSession(options: NativeHostSessionOptions):
   const broker = new NativeHostBroker({
     hostIdentity,
     productVersion: options.productVersion,
-    verifyPairToken: async (token) =>
-      verifyPairStateStatus(await readPairStateStatus(pairStateStore), hostIdentity, token),
+    verifyPairToken: async (token) => verifyPairStateStatus(await readPairStateStatus(pairStateStore), hostIdentity, token),
   });
   const nativeConnection = await attachNativeMessagingConnection({
     broker,
@@ -88,20 +86,20 @@ export async function startNativeHostSession(options: NativeHostSessionOptions):
     productVersion: options.productVersion,
     pairing: {
       hostIdentity,
-      readStateStatus: () => readPairStateStatus(pairStateStore),
+      readStateStatus: async () => readPairStateStatus(pairStateStore),
       approve: async () => {
         const approval = approvePairing(hostIdentity);
         await pairStateStore.write(approval.state);
         return approval;
       },
-      reset: () => pairStateStore.clear(),
+      reset: async () => pairStateStore.clear(),
     },
   });
   const ipcServer = new LocalIpcServer({
     endpoint,
     authToken: ipcAuthToken,
     enableProtocolNegotiation: true,
-    handleMessage: (message, context) => broker.handleCliRequest(message, context),
+    handleMessage: async (message, context) => broker.handleCliRequest(message, context),
   });
   await ipcServer.start();
 

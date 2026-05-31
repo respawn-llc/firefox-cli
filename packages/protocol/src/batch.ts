@@ -5,13 +5,22 @@ import { protocolErrorSchema } from "./core.js";
 import { addUploadTotalIssue, uploadParamsSchema } from "./browser.js";
 import { targetSelectorSchema } from "./target.js";
 
-export type BatchRegistryLookup = {
+export interface BatchRegistryLookup {
   readonly hasCommand: (command: string) => boolean;
   readonly isBatchable: (command: string) => boolean;
   readonly paramsFor: (command: string) => z.ZodType | undefined;
   readonly resultFor: (command: string) => z.ZodType | undefined;
-  readonly paramsWithDefaultTarget: (command: string, params: unknown) => unknown | undefined;
-};
+  readonly paramsWithDefaultTarget: (command: string, params: unknown) => BatchDefaultTargetParams;
+}
+
+type BatchDefaultTargetParams =
+  | {
+      readonly found: true;
+      readonly params: unknown;
+    }
+  | {
+      readonly found: false;
+    };
 
 export function createBatchSchemas(registry: BatchRegistryLookup) {
   const batchStepSchema = z
@@ -23,7 +32,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
     .superRefine((step, context) => {
       if (!registry.hasCommand(step.command)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Unknown batch command: ${step.command}`,
           path: ["command"],
         });
@@ -32,7 +41,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
       if (!registry.isBatchable(step.command)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Command cannot run inside batch: ${step.command}`,
           path: ["command"],
         });
@@ -42,7 +51,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
       const paramsSchema = registry.paramsFor(step.command);
       if (paramsSchema === undefined) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Unknown batch command: ${step.command}`,
           path: ["command"],
         });
@@ -51,13 +60,10 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
       const params = paramsSchema.safeParse(step.params);
       const paramsWithDefaultTarget = registry.paramsWithDefaultTarget(step.command, step.params);
-      const fallbackParams =
-        params.success || paramsWithDefaultTarget === undefined
-          ? params
-          : paramsSchema.safeParse(paramsWithDefaultTarget);
+      const fallbackParams = params.success || !paramsWithDefaultTarget.found ? params : paramsSchema.safeParse(paramsWithDefaultTarget.params);
       if (!fallbackParams.success) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "Batch step params are invalid.",
           path: ["params"],
           params: {
@@ -115,7 +121,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
     .superRefine((step, context) => {
       if (!registry.hasCommand(step.command)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Unknown batch result command: ${step.command}`,
           path: ["command"],
         });
@@ -124,7 +130,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
       if (!registry.isBatchable(step.command)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Command cannot appear in batch results: ${step.command}`,
           path: ["command"],
         });
@@ -135,7 +141,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
         const resultSchema = registry.resultFor(step.command);
         if (resultSchema === undefined) {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: `Unknown batch result command: ${step.command}`,
             path: ["command"],
           });
@@ -145,7 +151,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
         const result = resultSchema.safeParse(step.result);
         if (!result.success) {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Batch step result is invalid.",
             path: ["result"],
             params: {
@@ -170,7 +176,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
       if (result.ok) {
         if (firstFailedIndex !== undefined) {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Successful batch results cannot contain failed steps.",
             path: ["ok"],
           });
@@ -178,7 +184,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
         if (result.firstFailedIndex !== undefined) {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Successful batch results cannot include firstFailedIndex.",
             path: ["firstFailedIndex"],
           });
@@ -188,7 +194,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
       if (firstFailedIndex === undefined) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "Failed batch results must contain a failed step.",
           path: ["ok"],
         });
@@ -197,7 +203,7 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
 
       if (result.firstFailedIndex !== firstFailedIndex) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "Batch firstFailedIndex must match the first failed step.",
           path: ["firstFailedIndex"],
         });

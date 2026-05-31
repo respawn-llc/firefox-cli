@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  commandLineUsesProfileDir,
-  isFirefoxExecutableCommand,
-  parseDisposableFirefoxProcessIds,
-} from "../e2e-firefox-cleanup.js";
-import {
-  createFirefoxProcessAdapterWithScanner,
-  parseWindowsFirefoxProcesses,
-} from "../firefox-process-adapter.js";
+import { commandLineUsesProfileDir, isFirefoxExecutableCommand, parseDisposableFirefoxProcessIds } from "../e2e-firefox-cleanup.js";
+import { createFirefoxProcessAdapterWithScanner, parseWindowsFirefoxProcesses } from "../firefox-process-adapter.js";
 
 describe("disposable Firefox process cleanup parsing", () => {
   it("keeps only Firefox processes for the disposable profile", () => {
@@ -38,18 +31,10 @@ describe("disposable Firefox process cleanup parsing", () => {
   });
 
   it("matches quoted profile arguments without matching web-ext profile flags", () => {
-    expect(commandLineUsesProfileDir('/usr/bin/firefox --profile "/tmp/fc profile"', "/tmp/fc profile")).toBe(
-      true,
-    );
-    expect(commandLineUsesProfileDir("/usr/bin/firefox --profile='/tmp/fc profile'", "/tmp/fc profile")).toBe(
-      true,
-    );
-    expect(commandLineUsesProfileDir("/usr/bin/firefox -profile=/tmp/fc-profile", "/tmp/fc-profile")).toBe(
-      true,
-    );
-    expect(
-      commandLineUsesProfileDir("/usr/bin/firefox --firefox-profile /tmp/fc-profile", "/tmp/fc-profile"),
-    ).toBe(false);
+    expect(commandLineUsesProfileDir('/usr/bin/firefox --profile "/tmp/fc profile"', "/tmp/fc profile")).toBe(true);
+    expect(commandLineUsesProfileDir("/usr/bin/firefox --profile='/tmp/fc profile'", "/tmp/fc profile")).toBe(true);
+    expect(commandLineUsesProfileDir("/usr/bin/firefox -profile=/tmp/fc-profile", "/tmp/fc-profile")).toBe(true);
+    expect(commandLineUsesProfileDir("/usr/bin/firefox --firefox-profile /tmp/fc-profile", "/tmp/fc-profile")).toBe(false);
   });
 
   it("parses Windows Firefox process scanner output", () => {
@@ -76,10 +61,7 @@ describe("disposable Firefox process cleanup parsing", () => {
 
   it("stops only scanner-confirmed profile processes", async () => {
     const stopped: number[] = [];
-    const scans = [
-      [{ pid: 301, command: "/usr/bin/firefox", args: "/usr/bin/firefox --profile /tmp/fc" }],
-      [],
-    ];
+    const scans = [[{ pid: 301, command: "/usr/bin/firefox", args: "/usr/bin/firefox --profile /tmp/fc" }], []];
     const adapter = createFirefoxProcessAdapterWithScanner(async () => scans.shift() ?? [], {
       pollIntervalMs: 1,
       stop: async (pid) => {

@@ -2,12 +2,12 @@ const DEFAULT_REF_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_GENERATIONS = 5;
 const DEFAULT_MAX_REFS = 1000;
 
-type SnapshotGeneration<TElement> = {
+interface SnapshotGeneration<TElement> {
   readonly id: string;
   readonly createdAt: number;
   readonly expiresAt: number;
   readonly refs: ReadonlyMap<string, TElement>;
-};
+}
 
 export class ElementRefRegistry<TElement> {
   readonly #ttlMs: number;
@@ -43,7 +43,7 @@ export class ElementRefRegistry<TElement> {
     const refs = new Map<string, TElement>();
     const refsByElement = new Map<TElement, string>();
     for (const [index, element] of elements.slice(0, this.#maxRefs).entries()) {
-      const ref = `@e${index + 1}`;
+      const ref = `@e${String(index + 1)}`;
       refs.set(ref, element);
       refsByElement.set(element, ref);
     }
@@ -92,9 +92,7 @@ export class ElementRefRegistry<TElement> {
     }
 
     if (this.#latestGenerationId !== undefined && !this.#generations.has(this.#latestGenerationId)) {
-      this.#latestGenerationId = [...this.#generations.values()]
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .at(0)?.id;
+      this.#latestGenerationId = [...this.#generations.values()].sort((a, b) => b.createdAt - a.createdAt).at(0)?.id;
     }
   }
 

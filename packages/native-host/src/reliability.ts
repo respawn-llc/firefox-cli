@@ -5,33 +5,22 @@ import { basename, dirname, join } from "node:path";
 export class NativeHostReliabilityError extends Error {
   readonly code: "ATOMIC_WRITE_FAILED" | "LOCK_TIMEOUT" | "LOCK_INVALID" | "TRANSPORT_TIMEOUT";
 
-  constructor(
-    code: NativeHostReliabilityError["code"],
-    message: string,
-    options?: { readonly cause?: unknown },
-  ) {
+  constructor(code: NativeHostReliabilityError["code"], message: string, options?: { readonly cause?: unknown }) {
     super(message, options);
     this.name = "NativeHostReliabilityError";
     this.code = code;
   }
 }
 
-export type AtomicWriteOptions = {
+export interface AtomicWriteOptions {
   readonly mode?: number;
   readonly beforeRename?: (tempPath: string) => Promise<void> | void;
-};
+}
 
-export async function writeFileAtomically(
-  filePath: string,
-  data: string | Buffer,
-  options: AtomicWriteOptions = {},
-): Promise<void> {
+export async function writeFileAtomically(filePath: string, data: string | Buffer, options: AtomicWriteOptions = {}): Promise<void> {
   const directory = dirname(filePath);
   await mkdir(directory, { recursive: true });
-  const tempPath = join(
-    directory,
-    `.${basename(filePath)}.${process.pid}.${Date.now()}.${randomBytes(8).toString("hex")}.tmp`,
-  );
+  const tempPath = join(directory, `.${basename(filePath)}.${String(process.pid)}.${String(Date.now())}.${randomBytes(8).toString("hex")}.tmp`);
   let tempCreated = false;
 
   try {
@@ -63,7 +52,7 @@ export async function writeFileAtomically(
   }
 }
 
-export type FileLockOptions = {
+export interface FileLockOptions {
   readonly timeoutMs?: number;
   readonly retryDelayMs?: number;
   readonly now?: () => number;
@@ -71,23 +60,19 @@ export type FileLockOptions = {
   readonly uid?: number;
   readonly isProcessAlive?: (pid: number) => boolean;
   readonly sleep?: (durationMs: number) => Promise<void>;
-};
+}
 
-type LockOwner = {
+interface LockOwner {
   readonly pid: number;
   readonly uid?: number;
   readonly createdAt: string;
-};
+}
 
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const DEFAULT_LOCK_RETRY_DELAY_MS = 25;
 const LOCK_OWNER_FILE = "owner.json";
 
-export async function withFileLock<T>(
-  lockPath: string,
-  callback: () => Promise<T> | T,
-  options: FileLockOptions = {},
-): Promise<T> {
+export async function withFileLock<T>(lockPath: string, callback: () => Promise<T> | T, options: FileLockOptions = {}): Promise<T> {
   await mkdir(dirname(lockPath), { recursive: true });
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_LOCK_RETRY_DELAY_MS;
@@ -95,32 +80,26 @@ export async function withFileLock<T>(
   const deadline = now() + timeoutMs;
   const sleep = options.sleep ?? delay;
   const isProcessAlive = options.isProcessAlive ?? isPidAlive;
+  const owner = createLockOwner(options, now);
+
+  for (;;) {
+    const acquired = await tryAcquireLock(lockPath, owner);
+    if (acquired) {
+      return runWithLock(lockPath, callback);
+    }
+
+    await recoverDeadOwnerLock(lockPath, isProcessAlive);
+    await waitForLockRetry(lockPath, { now, deadline, retryDelayMs, sleep });
+  }
+}
+
+function createLockOwner(options: FileLockOptions, now: () => number): LockOwner {
   const ownerUid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : undefined);
-  const owner: LockOwner = {
+  return {
     pid: options.pid ?? process.pid,
     ...(ownerUid === undefined ? {} : { uid: ownerUid }),
     createdAt: new Date(now()).toISOString(),
   };
-
-  while (true) {
-    const acquired = await tryAcquireLock(lockPath, owner);
-    if (acquired) {
-      try {
-        return await callback();
-      } finally {
-        await releaseLock(lockPath);
-      }
-    }
-
-    await recoverDeadOwnerLock(lockPath, isProcessAlive);
-    if (now() >= deadline) {
-      throw new NativeHostReliabilityError(
-        "LOCK_TIMEOUT",
-        `Timed out waiting for native-host lock: ${lockPath}`,
-      );
-    }
-    await sleep(Math.min(retryDelayMs, Math.max(0, deadline - now())));
-  }
 }
 
 export function createLocalIpcEndpointScope(token: string): string {
@@ -173,10 +152,30 @@ async function tryAcquireLock(lockPath: string, owner: LockOwner): Promise<boole
   }
 }
 
-async function recoverDeadOwnerLock(
+async function runWithLock<T>(lockPath: string, callback: () => Promise<T> | T): Promise<T> {
+  try {
+    return await callback();
+  } finally {
+    await releaseLock(lockPath);
+  }
+}
+
+async function waitForLockRetry(
   lockPath: string,
-  isProcessAlive: (pid: number) => boolean,
+  options: {
+    readonly now: () => number;
+    readonly deadline: number;
+    readonly retryDelayMs: number;
+    readonly sleep: (durationMs: number) => Promise<void>;
+  },
 ): Promise<void> {
+  if (options.now() >= options.deadline) {
+    throw new NativeHostReliabilityError("LOCK_TIMEOUT", `Timed out waiting for native-host lock: ${lockPath}`);
+  }
+  await options.sleep(Math.min(options.retryDelayMs, Math.max(0, options.deadline - options.now())));
+}
+
+async function recoverDeadOwnerLock(lockPath: string, isProcessAlive: (pid: number) => boolean): Promise<void> {
   const owner = await readLockOwner(lockPath);
   if (owner === null || isProcessAlive(owner.pid)) {
     return;
@@ -188,7 +187,7 @@ async function recoverDeadOwnerLock(
 
 async function readLockOwner(lockPath: string): Promise<LockOwner | null> {
   try {
-    const parsed = JSON.parse(await readFile(join(lockPath, LOCK_OWNER_FILE), "utf8")) as unknown;
+    const parsed = parseJsonUnknown(await readFile(join(lockPath, LOCK_OWNER_FILE), "utf8"));
     if (
       typeof parsed === "object" &&
       parsed !== null &&
@@ -209,6 +208,10 @@ async function readLockOwner(lockPath: string): Promise<LockOwner | null> {
   } catch {
     return null;
   }
+}
+
+function parseJsonUnknown(content: string): unknown {
+  return JSON.parse(content);
 }
 
 async function releaseLock(lockPath: string): Promise<void> {

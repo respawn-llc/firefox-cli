@@ -12,10 +12,7 @@ export function parseImageDataUrl(
 } {
   const prefix = `data:image/${format};base64,`;
   if (!dataUrl.startsWith(prefix)) {
-    throw new BrowserCommandError(
-      "CAPTURE_FAILED",
-      `Firefox did not return a ${format.toUpperCase()} screenshot.`,
-    );
+    throw new BrowserCommandError("CAPTURE_FAILED", `Firefox did not return a ${format.toUpperCase()} screenshot.`);
   }
 
   const base64 = dataUrl.slice(prefix.length);
@@ -24,10 +21,7 @@ export function parseImageDataUrl(
     throw new BrowserCommandError("CAPTURE_FAILED", "Firefox returned an empty screenshot.");
   }
   if (bytes > maxImageBytes) {
-    throw new BrowserCommandError(
-      "OUTPUT_TOO_LARGE",
-      `Screenshot is ${bytes} bytes, exceeding the ${maxImageBytes} byte limit.`,
-    );
+    throw new BrowserCommandError("OUTPUT_TOO_LARGE", `Screenshot is ${String(bytes)} bytes, exceeding the ${String(maxImageBytes)} byte limit.`);
   }
 
   return {
@@ -57,18 +51,10 @@ function parsePngDimensions(base64: string): { readonly width?: number; readonly
       height: readUint32(bytes, 20),
     };
   } catch (error) {
-    throw new BrowserCommandError(
-      "CAPTURE_FAILED",
-      `Firefox returned invalid PNG data: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new BrowserCommandError("CAPTURE_FAILED", `Firefox returned invalid PNG data: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {
-  return (
-    (bytes[offset] ?? 0) * 0x1000000 +
-    ((bytes[offset + 1] ?? 0) << 16) +
-    ((bytes[offset + 2] ?? 0) << 8) +
-    (bytes[offset + 3] ?? 0)
-  );
+  return (bytes[offset] ?? 0) * 0x1000000 + ((bytes[offset + 1] ?? 0) << 16) + ((bytes[offset + 2] ?? 0) << 8) + (bytes[offset + 3] ?? 0);
 }

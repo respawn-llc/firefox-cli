@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createOkResponse, createRequest } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, parseBoundaryRequest } from "@firefox-cli/protocol";
 import { z } from "zod";
 import {
   FIREFOX_CLI_EXTENSION_ID,
@@ -26,15 +26,11 @@ const e2ePlan = planPhase2E2e({
   platform: process.platform,
   baseEnv: process.env,
 });
-const nativeHost = startManagedProcess(
-  binaryPath,
-  [e2ePlan.manifestPlan.manifestPath, FIREFOX_CLI_EXTENSION_ID],
-  {
-    env: e2ePlan.env,
-    stdin: "pipe",
-    label: "phase2 native host",
-  },
-);
+const nativeHost = startManagedProcess(binaryPath, [e2ePlan.manifestPlan.manifestPath, FIREFOX_CLI_EXTENSION_ID], {
+  env: e2ePlan.env,
+  stdin: "pipe",
+  label: "phase2 native host",
+});
 
 try {
   if (nativeHost.child.stdout === null || nativeHost.child.stdin === null) {
@@ -44,14 +40,16 @@ try {
   await raceWithProcessFailure(nativeHost, waitForEndpoint(e2ePlan.endpoint), "phase2 native host endpoint");
   const approve = createRequest("pair.approve", {}, "approve-1");
   nativeHost.child.stdin.write(encodeNativeMessageFrame(approve));
-  const approval = (await withTimeout(reader.read(), {
+  const approval = await withTimeout(reader.read(), {
     timeoutMs: 5000,
     timeoutMessage: () => "Native host did not answer pair approval.",
-  })) as ReturnType<typeof createOkResponse<"pair.approve">>;
-  if (!approval.ok) {
-    throw new Error(`Pair approval failed: ${JSON.stringify(approval)}`);
-  }
-
+  });
+  const approved = parseJsonWithSchema(
+    JSON.stringify(approval),
+    "pair approval",
+    "native host pair approval",
+    z.object({ ok: z.literal(true), result: z.object({ token: z.string().min(1) }) }).loose(),
+  );
   const hello = createRequest(
     "hello",
     {
@@ -61,7 +59,7 @@ try {
       protocolMin: 1,
       protocolMax: 1,
       features: [],
-      pairToken: approval.result.token,
+      pairToken: approved.result.token,
     },
     "hello-1",
   );
@@ -76,17 +74,18 @@ try {
     timeoutMs: 5000,
     label: "phase2 firefox-cli tab",
   });
-  const request = (await withTimeout(reader.read(), {
+  const request = await withTimeout(reader.read(), {
     timeoutMs: 5000,
     timeoutMessage: () => "Native host did not forward the CLI request to the extension.",
-  })) as ReturnType<typeof createRequest<"tabs.list">>;
-  if (request.command !== "tabs.list") {
+  });
+  const parsedRequest = parseBoundaryRequest("host-to-extension", request);
+  if (!parsedRequest.ok) {
     throw new Error(`Expected tabs.list request, received ${JSON.stringify(request)}`);
   }
 
   nativeHost.child.stdin.write(
     encodeNativeMessageFrame(
-      createOkResponse(request, {
+      createOkResponse(parsedRequest.value, {
         tabs: [
           {
             id: 42,
@@ -103,12 +102,7 @@ try {
   );
 
   const { stdout } = await cli;
-  const parsed = parseJsonWithSchema(
-    stdout,
-    "phase2 tab output",
-    "phase2 firefox-cli tab stdout",
-    z.object({ tabs: z.array(z.unknown()).optional() }).passthrough(),
-  );
+  const parsed = parseJsonWithSchema(stdout, "phase2 tab output", "phase2 firefox-cli tab stdout", z.object({ tabs: z.array(z.unknown()).optional() }).loose());
   if (!Array.isArray(parsed.tabs) || parsed.tabs.length !== 1) {
     throw new Error(`Unexpected tab output: ${stdout}`);
   }

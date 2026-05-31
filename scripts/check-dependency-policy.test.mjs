@@ -23,10 +23,7 @@ test("dependency policy rejects unreviewed direct dependencies", async () => {
 
 test("dependency policy rejects absent allowlisted dependencies", async () => {
   const root = await createWorkspace({ policyDependencies: ["left-pad"], packageDependencies: {} });
-  assert.match(
-    (await checkDependencyPolicy(root)).join("\n"),
-    /allowlists absent dependencies dependency left-pad/,
-  );
+  assert.match((await checkDependencyPolicy(root)).join("\n"), /allowlists absent dependencies dependency left-pad/);
 });
 
 test("dependency policy enforces Bun package manager ownership", async () => {
@@ -44,10 +41,7 @@ test("dependency policy rejects workspace package versions that drift from root"
     packageDependencies: {},
     workspacePackages: [{ name: "fixture-child", version: "9.9.9" }],
   });
-  assert.match(
-    (await checkDependencyPolicy(root)).join("\n"),
-    /packages\/fixture-child\/package\.json version must match root package\.json version 0\.1\.0/,
-  );
+  assert.match((await checkDependencyPolicy(root)).join("\n"), /packages\/fixture-child\/package\.json version must match root package\.json version 0\.1\.0/);
 });
 
 async function createWorkspace(options) {

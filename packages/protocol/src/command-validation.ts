@@ -1,11 +1,7 @@
 import type { z } from "zod";
 
 import type { CommandParams, CommandResult } from "./envelopes.js";
-import {
-  commandAcceptsProtocolBatchDefaultTarget,
-  commandSchemas,
-  type CommandId,
-} from "./registry/index.js";
+import { commandAcceptsProtocolBatchDefaultTarget, commandSchemas, type CommandId } from "./registry/index.js";
 import { targetSelectorSchema } from "./target.js";
 
 export type CommandSafeParse<T> =
@@ -18,17 +14,13 @@ export type CommandSafeParse<T> =
       readonly error: z.ZodError;
     };
 
-export function safeParseStrictCommandParams<C extends CommandId>(
-  command: C,
-  params: unknown,
-): CommandSafeParse<CommandParams<C>> {
-  return commandSchemas[command].params.safeParse(params) as CommandSafeParse<CommandParams<C>>;
+export function safeParseStrictCommandParams<C extends CommandId>(command: C, params: unknown): CommandSafeParse<CommandParams<C>>;
+export function safeParseStrictCommandParams(command: CommandId, params: unknown): CommandSafeParse<unknown> {
+  return commandSchemas[command].params.safeParse(params);
 }
 
-export function safeParseBatchStepCommandParams<C extends CommandId>(
-  command: C,
-  params: unknown,
-): CommandSafeParse<CommandParams<C>> {
+export function safeParseBatchStepCommandParams<C extends CommandId>(command: C, params: unknown): CommandSafeParse<CommandParams<C>>;
+export function safeParseBatchStepCommandParams(command: CommandId, params: unknown): CommandSafeParse<unknown> {
   const parsed = safeParseStrictCommandParams(command, params);
   if (parsed.success || !commandAcceptsProtocolBatchDefaultTarget(command)) {
     return parsed;
@@ -38,14 +30,12 @@ export function safeParseBatchStepCommandParams<C extends CommandId>(
   return fallbackParams === undefined ? parsed : safeParseStrictCommandParams(command, fallbackParams);
 }
 
-export function safeParseCommandResult<C extends CommandId>(
-  command: C,
-  result: unknown,
-): CommandSafeParse<CommandResult<C>> {
-  return commandSchemas[command].result.safeParse(result) as CommandSafeParse<CommandResult<C>>;
+export function safeParseCommandResult<C extends CommandId>(command: C, result: unknown): CommandSafeParse<CommandResult<C>>;
+export function safeParseCommandResult(command: CommandId, result: unknown): CommandSafeParse<unknown> {
+  return commandSchemas[command].result.safeParse(result);
 }
 
-function paramsWithDefaultTarget(params: unknown): unknown | undefined {
+function paramsWithDefaultTarget(params: unknown): (Record<string, unknown> & { readonly target: unknown }) | undefined {
   if (!isRecord(params)) {
     return undefined;
   }

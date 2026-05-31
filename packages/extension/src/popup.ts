@@ -1,11 +1,11 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 
-type Status = {
+interface Status {
   readonly connected: boolean;
   readonly approved: boolean;
   readonly lastError?: string;
   readonly diagnostics: string;
-};
+}
 
 const statusElement = document.querySelector<HTMLParagraphElement>("#status");
 const approvalElement = document.querySelector<HTMLParagraphElement>("#approval");
@@ -26,9 +26,7 @@ function renderStatus(status: Status): void {
   }
 
   if (approvalElement) {
-    approvalElement.textContent = status.approved
-      ? "Approved for CLI control."
-      : "Not approved. Approve before running CLI commands.";
+    approvalElement.textContent = status.approved ? "Approved for CLI control." : "Not approved. Approve before running CLI commands.";
   }
 
   if (errorElement) {
@@ -42,7 +40,8 @@ function renderStatus(status: Status): void {
 }
 
 async function sendMessage<T>(type: string): Promise<T> {
-  return (await browser.runtime.sendMessage({ type })) as T;
+  const response: T = await browser.runtime.sendMessage({ type });
+  return response;
 }
 
 approveButton?.addEventListener("click", () => {
@@ -56,7 +55,10 @@ resetButton?.addEventListener("click", () => {
 diagnosticsButton?.addEventListener("click", () => {
   if (diagnosticsElement) {
     diagnosticsElement.select();
-    document.execCommand("copy");
+    const execCommand: unknown = Reflect.get(document, "execCommand");
+    if (typeof execCommand === "function") {
+      Reflect.apply(execCommand, document, ["copy"]);
+    }
   }
 });
 

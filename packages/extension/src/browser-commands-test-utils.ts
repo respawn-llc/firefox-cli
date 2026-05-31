@@ -1,16 +1,25 @@
-import {
-  PROTOCOL_VERSION,
-  createOkResponse,
-  isActionCommand,
-  type ActionKind,
-  type RequestEnvelope,
-} from "@firefox-cli/protocol";
+import { parseBoundaryRequest, type RequestEnvelope } from "@firefox-cli/protocol";
 import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
+import { actionParamsFor, fakeContentResponse } from "./browser-commands-test-responses.js";
 import type { EvalExecutorPayload, EvalExecutorResult } from "./eval-executor.js";
 
-export const ONE_BY_ONE_PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+export { actionParamsFor };
+
+export const ONE_BY_ONE_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 const ONE_BY_ONE_PNG_DATA_URL = `data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`;
+
+export function parseTestBrowserRequest(raw: {
+  readonly protocolVersion: number;
+  readonly id: string;
+  readonly command: string;
+  readonly params: unknown;
+}): RequestEnvelope {
+  const parsed = parseBoundaryRequest("host-to-extension", raw, { protocolVersion: raw.protocolVersion });
+  if (!parsed.ok) {
+    throw new Error(parsed.error.message);
+  }
+  return parsed.value;
+}
 
 export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   readonly selectedTabs: number[] = [];
@@ -45,7 +54,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
   listWindowCalls = 0;
   contentFailure: Error | undefined;
-  contentResponse: unknown | undefined;
+  contentResponse: unknown = undefined;
   evalFailure: Error | undefined;
   evalResult: EvalExecutorResult | undefined;
   captureFailure: Error | undefined;
@@ -69,10 +78,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return this.#windows;
   }
 
-  async createTab(options: {
-    readonly url?: string;
-    readonly windowId?: number;
-  }): Promise<BrowserWindowSnapshot["tabs"][number]> {
+  async createTab(options: { readonly url?: string; readonly windowId?: number }): Promise<BrowserWindowSnapshot["tabs"][number]> {
     const window = this.#windows.find((candidate) => candidate.id === options.windowId);
     if (window === undefined) {
       throw new Error("window not found");
@@ -173,133 +179,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       return this.contentResponse;
     }
 
-    if (request.command === "ref.resolve") {
-      return createOkResponse(request as RequestEnvelope<"ref.resolve">, {
-        element: {
-          ref: "@e1",
-          generationId: "g1",
-          tagName: "button",
-          role: "button",
-          name: "Submit",
-          text: "Submit",
-          visible: true,
-        },
-      });
-    }
-
-    if (request.command === "get") {
-      const getRequest = request as RequestEnvelope<"get">;
-      return createOkResponse(getRequest, {
-        kind: "text",
-        value: "Submit",
-        truncated: false,
-      });
-    }
-
-    if (request.command === "is") {
-      return createOkResponse(request as RequestEnvelope<"is">, {
-        kind: "visible",
-        value: true,
-      });
-    }
-
-    if (request.command === "wait") {
-      return createOkResponse(request as RequestEnvelope<"wait">, {
-        kind: "text",
-        matched: true,
-        elapsedMs: 5,
-        value: "Ready",
-      });
-    }
-
-    if (request.command === "find") {
-      return createOkResponse(request as RequestEnvelope<"find">, {
-        elements: [
-          {
-            tagName: "button",
-            role: "button",
-            visible: true,
-            name: "Submit",
-          },
-        ],
-      });
-    }
-
-    if (request.command === "frame") {
-      return createOkResponse(request as RequestEnvelope<"frame">, {
-        frames: [{ index: 0, title: "Frame", url: "https://frame.test/" }],
-      });
-    }
-
-    if (request.command === "dialog") {
-      const dialog = request as RequestEnvelope<"dialog">;
-      return createOkResponse(dialog, {
-        action: dialog.params.action,
-        handled: false,
-      });
-    }
-
-    if (request.command === "clipboard") {
-      const clipboard = request as RequestEnvelope<"clipboard">;
-      return createOkResponse(clipboard, {
-        action: clipboard.params.action,
-        ok: true,
-        ...(clipboard.params.action === "copy" ? { text: "Copied" } : {}),
-      });
-    }
-
-    if (request.command === "storage") {
-      const storage = request as RequestEnvelope<"storage">;
-      return createOkResponse(storage, {
-        area: storage.params.area,
-        action: storage.params.action,
-        ok: true,
-      });
-    }
-
-    if (request.command === "console") {
-      const consoleRequest = request as RequestEnvelope<"console">;
-      return createOkResponse(consoleRequest, {
-        action: consoleRequest.params.action,
-        ok: true,
-        ...(consoleRequest.params.action === "list"
-          ? { entries: [], truncated: true, droppedEntries: 2 }
-          : {}),
-      });
-    }
-
-    if (request.command === "errors") {
-      const errorsRequest = request as RequestEnvelope<"errors">;
-      return createOkResponse(errorsRequest, {
-        action: errorsRequest.params.action,
-        ok: true,
-        ...(errorsRequest.params.action === "list" ? { errors: [], truncated: true, droppedEntries: 2 } : {}),
-      });
-    }
-
-    if (request.command === "highlight") {
-      return createOkResponse(request as RequestEnvelope<"highlight">, {
-        ok: true,
-        element: {
-          tagName: "button",
-          role: "button",
-          visible: true,
-          name: "Submit",
-        },
-      });
-    }
-
-    if (isActionCommand(request.command)) {
-      return fakeActionResponse(request.command, request.id);
-    }
-
-    return createOkResponse(request as RequestEnvelope<"snapshot">, {
-      generationId: "g1",
-      text: '@e1 button "Submit"',
-      refs: 1,
-      truncated: false,
-      frames: [],
-    });
+    return fakeContentResponse(request);
   }
 
   async executeEval(tabId: number, payload: EvalExecutorPayload): Promise<EvalExecutorResult> {
@@ -320,10 +200,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     );
   }
 
-  async captureVisibleTab(
-    windowId: number,
-    options: { readonly format: "png" | "jpeg"; readonly quality?: number },
-  ): Promise<string> {
+  async captureVisibleTab(windowId: number, options: { readonly format: "png" | "jpeg"; readonly quality?: number }): Promise<string> {
     this.captureRequests.push({ windowId, options });
     if (this.captureFailure !== undefined) {
       throw this.captureFailure;
@@ -340,12 +217,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return { id: this.downloads.length, filename: options.filename, state: "complete" };
   }
 
-  async waitForDownload(options: {
-    readonly downloadId?: number;
-    readonly filenameGlob?: string;
-    readonly timeoutMs: number;
-    readonly intervalMs: number;
-  }) {
+  async waitForDownload(options: { readonly downloadId?: number; readonly filenameGlob?: string; readonly timeoutMs: number; readonly intervalMs: number }) {
     this.downloadWaits.push(options);
     return {
       id: options.downloadId ?? 1,
@@ -377,7 +249,9 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return { name: options.name, value: options.value, path: "/" };
   }
 
-  async removeCookie(): Promise<void> {}
+  async removeCookie(): Promise<void> {
+    await Promise.resolve();
+  }
 
   async listNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }) {
     this.networkListRequests.push(options);
@@ -389,24 +263,15 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   async clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void> {
     this.networkClearRequests.push(options);
     this.networkRequests = this.networkRequests.filter(
-      (request) =>
-        request.tabId !== options.tabId ||
-        (options.urlGlob !== undefined && !request.url.includes(options.urlGlob)),
+      (request) => request.tabId !== options.tabId || (options.urlGlob !== undefined && !request.url.includes(options.urlGlob)),
     );
   }
 
-  async waitForNetworkIdle(options: {
-    readonly tabId: number;
-    readonly timeoutMs: number;
-    readonly idleMs: number;
-  }): Promise<void> {
+  async waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void> {
     this.networkIdleWaits.push(options);
   }
 
-  async resizeWindow(
-    windowId: number,
-    size: { readonly width: number; readonly height: number },
-  ): Promise<BrowserWindowSnapshot> {
+  async resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot> {
     const window = this.#windows.find((candidate) => candidate.id === windowId);
     if (window === undefined) {
       throw new Error("window not found");
@@ -425,30 +290,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   }
 }
 
-export function actionParamsFor(command: string): Record<string, unknown> {
-  if (command === "fill" || command === "type") {
-    return { selector: "input", text: "hello" };
-  }
-  if (command === "keyboard.type" || command === "keyboard.inserttext") {
-    return { text: "hello" };
-  }
-  if (command === "press") {
-    return { key: "Enter" };
-  }
-  if (command === "select") {
-    return { selector: "select", values: ["pro"] };
-  }
-  if (command === "scroll" || command === "swipe") {
-    return { direction: "down" };
-  }
-  return { selector: "button" };
-}
-
-export function windowSnapshot(
-  id: number,
-  focused: boolean,
-  tabs: readonly BrowserWindowSnapshot["tabs"][number][],
-): BrowserWindowSnapshot {
+export function windowSnapshot(id: number, focused: boolean, tabs: readonly BrowserWindowSnapshot["tabs"][number][]): BrowserWindowSnapshot {
   return {
     id,
     focused,
@@ -457,47 +299,23 @@ export function windowSnapshot(
   };
 }
 
-export function tabSummary(
+type TabSummaryArgs = readonly [
   id: number,
   index: number,
   active: boolean,
   windowId: number,
-  options: { readonly title?: string; readonly url?: string; readonly private?: boolean } = {},
-): BrowserWindowSnapshot["tabs"][number] {
+  options?: { readonly title?: string; readonly url?: string; readonly private?: boolean },
+];
+
+export function tabSummary(...[id, index, active, windowId, options = {}]: TabSummaryArgs): BrowserWindowSnapshot["tabs"][number] {
   return {
     id,
     index,
     active,
-    title: options.title ?? `Tab ${id}`,
-    url: options.url ?? `https://example.com/${id}`,
+    title: options.title ?? `Tab ${String(id)}`,
+    url: options.url ?? `https://example.com/${String(id)}`,
     windowId,
     private: options.private ?? false,
-  };
-}
-
-function fakeActionResponse(command: ActionKind, id: string): unknown {
-  const element = {
-    tagName: "button",
-    role: "button",
-    visible: true,
-    name: "Submit",
-  };
-  const base = { action: command, ok: true, element };
-  return {
-    protocolVersion: PROTOCOL_VERSION,
-    id,
-    ok: true,
-    result:
-      command === "scroll" || command === "swipe"
-        ? { action: command, ok: true, scroll: { x: 0, y: 10 } }
-        : command === "select"
-          ? { ...base, selectedValues: ["Submit"] }
-          : command === "fill" ||
-              command === "type" ||
-              command === "keyboard.type" ||
-              command === "keyboard.inserttext"
-            ? { ...base, valueLength: 6 }
-            : base,
   };
 }
 

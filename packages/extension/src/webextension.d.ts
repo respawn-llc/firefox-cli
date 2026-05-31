@@ -1,4 +1,4 @@
-type BrowserTab = {
+interface BrowserTab {
   readonly id: number;
   readonly index: number;
   readonly active: boolean;
@@ -7,9 +7,9 @@ type BrowserTab = {
   readonly windowId: number;
   readonly incognito?: boolean;
   readonly cookieStoreId?: string;
-};
+}
 
-type BrowserWindow = {
+interface BrowserWindow {
   readonly id?: number;
   readonly focused?: boolean;
   readonly incognito?: boolean;
@@ -18,13 +18,13 @@ type BrowserWindow = {
   readonly width?: number;
   readonly height?: number;
   readonly tabs?: readonly BrowserTab[];
-};
+}
 
 declare const browser: {
   readonly runtime: {
     readonly onMessage: {
-      addListener(listener: (message: { readonly type?: string }) => Promise<unknown> | unknown): void;
-      removeListener(listener: (message: { readonly type?: string }) => Promise<unknown> | unknown): void;
+      addListener(listener: (message: { readonly type?: string }) => unknown): void;
+      removeListener(listener: (message: { readonly type?: string }) => unknown): void;
     };
     connectNative(name: string): {
       readonly onMessage: {
@@ -35,24 +35,17 @@ declare const browser: {
       };
       postMessage(message: unknown): void;
     };
-    sendMessage(message: unknown): Promise<unknown>;
+    sendMessage<T = unknown>(message: unknown): Promise<T>;
     reload(): void;
   };
   readonly windows: {
     getAll(options: { readonly populate: true }): Promise<readonly BrowserWindow[]>;
     create(options: { readonly url?: string }): Promise<BrowserWindow>;
-    update(
-      windowId: number,
-      options: { readonly focused?: boolean; readonly width?: number; readonly height?: number },
-    ): Promise<BrowserWindow>;
+    update(windowId: number, options: { readonly focused?: boolean; readonly width?: number; readonly height?: number }): Promise<BrowserWindow>;
     remove(windowId: number): Promise<void>;
   };
   readonly tabs: {
-    create(options: {
-      readonly active?: boolean;
-      readonly url?: string;
-      readonly windowId?: number;
-    }): Promise<BrowserTab>;
+    create(options: { readonly active?: boolean; readonly url?: string; readonly windowId?: number }): Promise<BrowserTab>;
     update(tabId: number, options: { readonly active?: boolean; readonly url?: string }): Promise<BrowserTab>;
     get(tabId: number): Promise<BrowserTab>;
     remove(tabId: number): Promise<void>;
@@ -60,10 +53,7 @@ declare const browser: {
     goForward(tabId: number): Promise<void>;
     reload(tabId: number): Promise<void>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
-    captureVisibleTab(
-      windowId: number,
-      options: { readonly format?: "png" | "jpeg"; readonly quality?: number },
-    ): Promise<string>;
+    captureVisibleTab(windowId: number, options: { readonly format?: "png" | "jpeg"; readonly quality?: number }): Promise<string>;
     readonly onRemoved?: {
       addListener(listener: (tabId: number) => void): void;
       removeListener(listener: (tabId: number) => void): void;
@@ -103,14 +93,8 @@ declare const browser: {
     request(permissions: { readonly origins: readonly string[] }): Promise<boolean>;
   };
   readonly downloads: {
-    download(options: {
-      readonly url: string;
-      readonly filename?: string;
-      readonly saveAs?: boolean;
-    }): Promise<number>;
-    search(options: {
-      readonly id?: number;
-    }): Promise<readonly { readonly id?: number; readonly filename?: string; readonly state?: string }[]>;
+    download(options: { readonly url: string; readonly filename?: string; readonly saveAs?: boolean }): Promise<number>;
+    search(options: { readonly id?: number }): Promise<readonly { readonly id?: number; readonly filename?: string; readonly state?: string }[]>;
   };
   readonly cookies: {
     getAll(options: { readonly url: string; readonly name?: string }): Promise<readonly BrowserCookie[]>;
@@ -130,14 +114,14 @@ declare const browser: {
   };
 };
 
-type BrowserCookie = {
+interface BrowserCookie {
   readonly name: string;
   readonly value: string;
   readonly domain?: string;
   readonly path?: string;
-};
+}
 
-type BrowserWebRequestEvent = {
+interface BrowserWebRequestEvent {
   addListener(
     listener: (details: {
       readonly requestId: string | number;
@@ -159,4 +143,4 @@ type BrowserWebRequestEvent = {
       readonly tabId?: number;
     }) => void,
   ): void;
-};
+}

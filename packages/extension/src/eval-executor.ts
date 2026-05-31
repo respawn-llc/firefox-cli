@@ -1,10 +1,10 @@
 import type { EvalSerializedValue, JsonValue, ProtocolError } from "@firefox-cli/protocol";
 
-export type EvalExecutorPayload = {
+export interface EvalExecutorPayload {
   readonly script: string;
   readonly timeoutMs: number;
   readonly maxResultBytes: number;
-};
+}
 
 export type EvalExecutorResult =
   | {
@@ -32,11 +32,10 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
     };
     const resultBytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
     if (resultBytes > payload.maxResultBytes) {
-      throw executorError(
-        "RESULT_TOO_LARGE",
-        `Eval result is ${resultBytes} bytes, exceeding the ${payload.maxResultBytes} byte limit.`,
-        { resultBytes, maxResultBytes: payload.maxResultBytes },
-      );
+      throw executorError("RESULT_TOO_LARGE", `Eval result is ${String(resultBytes)} bytes, exceeding the ${String(payload.maxResultBytes)} byte limit.`, {
+        resultBytes,
+        maxResultBytes: payload.maxResultBytes,
+      });
     }
 
     return { ok: true, ...result };
@@ -63,9 +62,10 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
   }
 
   function evaluateUserScript(script: string): unknown {
+    const { Function: createFunction } = globalThis;
     let expressionEvaluator: (() => unknown) | undefined;
     try {
-      const compiledExpression = new Function(`"use strict"; return (${script}\n);`) as () => unknown;
+      const compiledExpression = createFunction(`"use strict"; return (${script}\n);`);
       expressionEvaluator = () => compiledExpression.call(globalThis);
     } catch (error) {
       if (!isSyntaxError(error)) {
@@ -77,7 +77,7 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
       return expressionEvaluator();
     }
 
-    const statementEvaluator = new Function(`"use strict"; return (async () => {${script}\n})();`);
+    const statementEvaluator = createFunction(`"use strict"; return (async () => {${script}\n})();`);
     return statementEvaluator.call(globalThis);
   }
 
@@ -88,7 +88,7 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
         operation,
         new Promise<T>((_, reject) => {
           timeoutId = setTimeout(() => {
-            reject(executorError("TIMEOUT", `Timed out after ${timeoutMs}ms running eval.`));
+            reject(executorError("TIMEOUT", `Timed out after ${String(timeoutMs)}ms running eval.`));
           }, timeoutMs);
         }),
       ]);
@@ -108,30 +108,16 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
   }
 
   function normalizeJsonValue(value: unknown, seen: readonly object[]): JsonValue {
-    if (value === null || typeof value === "string" || typeof value === "boolean") {
-      return value;
+    const scalar = normalizeJsonScalar(value);
+    if (scalar.ok) {
+      return scalar.value;
     }
 
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) {
-        throw executorError("SERIALIZATION_FAILED", "Eval result contains a non-finite number.");
-      }
-      return value;
-    }
-
-    if (typeof value === "undefined") {
-      throw executorError("SERIALIZATION_FAILED", "Eval result contains undefined.");
-    }
-
-    if (typeof value === "bigint") {
-      throw executorError("SERIALIZATION_FAILED", "Eval result contains a BigInt.");
-    }
-
-    if (typeof value === "function" || typeof value === "symbol") {
+    if (isNonJsonType(value)) {
       throw executorError("SERIALIZATION_FAILED", `Eval result contains a non-serializable ${typeof value}.`);
     }
 
-    if (typeof value !== "object") {
+    if (value === null || typeof value !== "object") {
       throw executorError("SERIALIZATION_FAILED", "Eval result is not JSON-serializable.");
     }
 
@@ -139,27 +125,52 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
       throw executorError("SERIALIZATION_FAILED", "Eval result contains a circular reference.");
     }
 
+    return normalizeJsonObject(value, seen);
+  }
+
+  function normalizeJsonScalar(value: unknown): { readonly ok: true; readonly value: JsonValue } | { readonly ok: false } {
+    if (value === null || typeof value === "string" || typeof value === "boolean") {
+      return { ok: true, value };
+    }
+
+    if (typeof value !== "number") {
+      return { ok: false };
+    }
+
+    if (!Number.isFinite(value)) {
+      throw executorError("SERIALIZATION_FAILED", "Eval result contains a non-finite number.");
+    }
+
+    return { ok: true, value };
+  }
+
+  function isNonJsonType(value: unknown): boolean {
+    return typeof value === "undefined" || typeof value === "bigint" || typeof value === "function" || typeof value === "symbol";
+  }
+
+  function normalizeJsonObject(value: object, seen: readonly object[]): JsonValue {
     const nextSeen = [...seen, value];
     if (Array.isArray(value)) {
       return value.map((entry) => normalizeJsonValue(entry, nextSeen));
     }
 
-    const toJson = (value as { readonly toJSON?: unknown }).toJSON;
-    if (typeof toJson === "function") {
-      return normalizeJsonValue(toJson.call(value), nextSeen);
+    if (hasToJson(value)) {
+      return normalizeJsonValue(value.toJSON(), nextSeen);
     }
 
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw executorError(
-        "SERIALIZATION_FAILED",
-        `Eval result contains a non-plain object: ${value.constructor?.name ?? "unknown"}.`,
-      );
+    if (!isPlainJsonObject(value)) {
+      throw executorError("SERIALIZATION_FAILED", `Eval result contains a non-plain object: ${value.constructor.name}.`);
     }
 
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, normalizeJsonValue(entry, nextSeen)]),
-    );
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeJsonValue(entry, nextSeen)]));
+  }
+
+  function hasToJson(value: object): value is { readonly toJSON: () => unknown } {
+    return "toJSON" in value && typeof value.toJSON === "function";
+  }
+
+  function isPlainJsonObject(value: object): boolean {
+    return Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null;
   }
 
   function executorError(
@@ -167,31 +178,22 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
     message: string,
     details?: Record<string, unknown>,
   ): Error & { readonly code: ProtocolError["code"]; readonly details?: Record<string, unknown> } {
-    const error = new Error(message) as Error & {
-      code: ProtocolError["code"];
-      details?: Record<string, unknown>;
-    };
-    error.name = "EvalExecutorError";
-    error.code = code;
-    if (details !== undefined) {
-      error.details = details;
-    }
-    return error;
+    return Object.assign(new Error(message), {
+      name: "EvalExecutorError",
+      code,
+      ...(details === undefined ? {} : { details }),
+    });
   }
 
   function isExecutorError(error: unknown): error is Error & {
     readonly code: ProtocolError["code"];
     readonly details?: Record<string, unknown>;
   } {
-    return (
-      error instanceof Error &&
-      error.name === "EvalExecutorError" &&
-      typeof (error as { readonly code?: unknown }).code === "string"
-    );
+    return error instanceof Error && error.name === "EvalExecutorError" && "code" in error && typeof error.code === "string";
   }
 
   function isSyntaxError(error: unknown): boolean {
-    return error instanceof SyntaxError || (error as { readonly name?: unknown })?.name === "SyntaxError";
+    return error instanceof SyntaxError || (typeof error === "object" && error !== null && "name" in error && error.name === "SyntaxError");
   }
 
   function errorDetails(error: unknown): Record<string, unknown> {

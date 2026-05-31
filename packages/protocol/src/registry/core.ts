@@ -1,11 +1,4 @@
-import {
-  capabilitiesParamsSchema,
-  capabilitiesResultSchema,
-  helloParamsSchema,
-  helloResultSchema,
-  noOpParamsSchema,
-  noOpResultSchema,
-} from "../core.js";
+import { capabilitiesParamsSchema, capabilitiesResultSchema, helloParamsSchema, helloResultSchema, noOpParamsSchema, noOpResultSchema } from "../core.js";
 import { defineCommandEntries } from "./define.js";
 
 export const coreCommandEntries = defineCommandEntries({

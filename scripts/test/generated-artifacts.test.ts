@@ -21,9 +21,7 @@ describe("generated artifact reset", () => {
   it("refuses to reset paths outside dist or the dist root itself", async () => {
     const repoRoot = await createTempDir("firefox-cli-generated-artifacts");
 
-    await expect(resetGeneratedArtifact(join(repoRoot, "README.md"), { repoRoot })).rejects.toThrow(
-      "outside",
-    );
+    await expect(resetGeneratedArtifact(join(repoRoot, "README.md"), { repoRoot })).rejects.toThrow("outside");
     await expect(resetGeneratedArtifact(join(repoRoot, "dist"), { repoRoot })).rejects.toThrow("dist root");
   });
 

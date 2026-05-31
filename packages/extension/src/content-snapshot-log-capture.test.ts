@@ -1,18 +1,18 @@
 import { MAX_LOG_ENTRIES, MAX_LOG_RESULT_BYTES } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
-import { BoundedLogBuffer } from "./content-snapshot/log-capture.js";
+import { BoundedLogBuffer } from "./content-snapshot/log-buffer.js";
 
 describe("content log capture buffers", () => {
   it("bounds console capture by retained entry count and preserves newest order", () => {
     const buffer = new BoundedLogBuffer("entries");
     for (let index = 0; index < MAX_LOG_ENTRIES + 3; index += 1) {
-      buffer.push({ level: "log", text: `bounded-log-${index}`, timestamp: index });
+      buffer.push({ level: "log", text: `bounded-log-${String(index)}`, timestamp: index });
     }
     const snapshot = buffer.snapshot();
 
     expect(snapshot.entries).toHaveLength(MAX_LOG_ENTRIES);
     expect(snapshot.entries[0]?.text).toBe("bounded-log-3");
-    expect(snapshot.entries.at(-1)?.text).toBe(`bounded-log-${MAX_LOG_ENTRIES + 2}`);
+    expect(snapshot.entries.at(-1)?.text).toBe(`bounded-log-${String(MAX_LOG_ENTRIES + 2)}`);
     expect(snapshot.truncated).toBe(true);
     expect(snapshot.droppedEntries).toBe(3);
   });
@@ -34,7 +34,7 @@ describe("content log capture buffers", () => {
     const buffer = new BoundedLogBuffer("entries");
 
     for (let index = 0; index < MAX_LOG_ENTRIES + 1; index += 1) {
-      buffer.push({ level: "log", text: `clear-reset-${index}`, timestamp: index });
+      buffer.push({ level: "log", text: `clear-reset-${String(index)}`, timestamp: index });
     }
     buffer.clear();
 

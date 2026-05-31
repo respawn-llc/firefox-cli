@@ -114,37 +114,42 @@ export const routeParserSpecs = {
 export type CliRouteParserSpecById = typeof routeParserSpecs;
 export type CliRouteParserRouteId = keyof CliRouteParserSpecById;
 
-export type ParsedCliRouteArgs = {
+export interface ParsedCliRouteArgs {
   readonly positionals: readonly string[];
   readonly optionArgs: readonly string[];
   readonly json: boolean;
-};
+}
 
 export const cliArgumentOptionInventory = buildOptionInventory(routeParserSpecs);
 
-export function parseCliRouteArgsForRoute<RouteId extends CliRouteParserRouteId>(
-  routeId: RouteId,
-  args: readonly string[],
-): ParsedCliRouteArgs {
+interface CliRouteArgParserState {
+  readonly positionals: string[];
+  readonly optionArgs: string[];
+  json: boolean;
+}
+
+interface CliRouteArgContext {
+  readonly parserSpec: CliRouteParserSpec;
+  readonly routeId: string;
+  readonly args: readonly string[];
+  readonly state: CliRouteArgParserState;
+}
+
+export function parseCliRouteArgsForRoute(routeId: CliRouteParserRouteId, args: readonly string[]): ParsedCliRouteArgs {
   return parseCliRouteArgs(routeParserSpecs[routeId], routeId, args);
 }
 
-export function parseCliRouteArgv(
-  parserSpec: CliRouteParserSpec,
-  routeId: string,
-  argv: readonly string[],
-): ParsedCliRouteArgs {
+export function parseCliRouteArgv(parserSpec: CliRouteParserSpec, routeId: string, argv: readonly string[]): ParsedCliRouteArgs {
   return parseCliRouteArgs(parserSpec, routeId, argv.slice(1));
 }
 
-function parseCliRouteArgs(
-  parserSpec: CliRouteParserSpec,
-  routeId: string,
-  args: readonly string[],
-): ParsedCliRouteArgs {
-  const positionals: string[] = [];
-  const optionArgs: string[] = [];
-  let json = false;
+function parseCliRouteArgs(parserSpec: CliRouteParserSpec, routeId: string, args: readonly string[]): ParsedCliRouteArgs {
+  const state: CliRouteArgParserState = {
+    positionals: [],
+    optionArgs: [],
+    json: false,
+  };
+  const context: CliRouteArgContext = { parserSpec, routeId, args, state };
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -153,70 +158,89 @@ function parseCliRouteArgs(
     }
 
     if (arg === "--" && parserSpec.allowDashDashPayload === true) {
-      positionals.push(...args.slice(index + 1));
+      state.positionals.push(...args.slice(index + 1));
       break;
     }
 
     if (parserSpec.flags.includes(arg)) {
-      if (shouldTreatKnownOptionAsPayload(parserSpec, args, index, 1, positionals.length)) {
-        positionals.push(arg);
-      } else {
-        optionArgs.push(arg);
-        if (arg === "--json") {
-          json = true;
-        }
-      }
+      handleKnownFlag(context, arg, index);
       continue;
     }
 
     if (parserSpec.valueOptions.includes(arg)) {
-      const value = args[index + 1];
-      if (
-        routeId === "select" &&
-        arg === "--generation" &&
-        value === undefined &&
-        canTreatUnknownOptionAsPayload(parserSpec, positionals.length)
-      ) {
-        positionals.push(arg);
-        continue;
+      const consumedValue = handleKnownValueOption(context, arg, index);
+      if (consumedValue) {
+        index += 1;
       }
-
-      if (shouldTreatKnownOptionAsPayload(parserSpec, args, index, 2, positionals.length)) {
-        positionals.push(arg);
-        continue;
-      }
-
-      if (value === undefined || value.startsWith("-")) {
-        throw new CliUsageError(`Missing value for ${arg}.`);
-      }
-      optionArgs.push(arg, value);
-      index += 1;
       continue;
     }
 
-    if (parserSpec.optionalValueOptions?.includes(arg) === true) {
-      const value = args[index + 1];
-      if (value !== undefined && !value.startsWith("-")) {
-        optionArgs.push(arg, value);
+    if (isOptionalValueOption(parserSpec, arg)) {
+      if (handleOptionalValueOption(context, arg, index)) {
         index += 1;
-      } else {
-        optionArgs.push(arg);
       }
       continue;
     }
 
     if (arg.startsWith("-")) {
-      if (canTreatUnknownOptionAsPayload(parserSpec, positionals.length)) {
-        positionals.push(arg);
+      if (canTreatUnknownOptionAsPayload(parserSpec, state.positionals.length)) {
+        state.positionals.push(arg);
         continue;
       }
       throw new CliUsageError(`Unsupported ${parserSpec.label} option: ${arg}`);
     }
 
-    positionals.push(arg);
+    state.positionals.push(arg);
   }
 
-  return { positionals, optionArgs, json };
+  return { positionals: state.positionals, optionArgs: state.optionArgs, json: state.json };
+}
+
+function handleKnownFlag(context: CliRouteArgContext, arg: string, index: number): void {
+  const { parserSpec, args, state } = context;
+  if (shouldTreatKnownOptionAsPayload({ parserSpec, args, index, width: 1, currentPositionals: state.positionals.length })) {
+    state.positionals.push(arg);
+    return;
+  }
+
+  state.optionArgs.push(arg);
+  if (arg === "--json") {
+    state.json = true;
+  }
+}
+
+function handleKnownValueOption(context: CliRouteArgContext, arg: string, index: number): boolean {
+  const { parserSpec, routeId, args, state } = context;
+  const value = args[index + 1];
+  if (routeId === "select" && arg === "--generation" && value === undefined && canTreatUnknownOptionAsPayload(parserSpec, state.positionals.length)) {
+    state.positionals.push(arg);
+    return false;
+  }
+
+  if (shouldTreatKnownOptionAsPayload({ parserSpec, args, index, width: 2, currentPositionals: state.positionals.length })) {
+    state.positionals.push(arg);
+    return false;
+  }
+
+  if (value === undefined || value.startsWith("-")) {
+    throw new CliUsageError(`Missing value for ${arg}.`);
+  }
+  state.optionArgs.push(arg, value);
+  return true;
+}
+
+function handleOptionalValueOption(context: CliRouteArgContext, arg: string, index: number): boolean {
+  const value = context.args[index + 1];
+  if (value !== undefined && !value.startsWith("-")) {
+    context.state.optionArgs.push(arg, value);
+    return true;
+  }
+  context.state.optionArgs.push(arg);
+  return false;
+}
+
+function isOptionalValueOption(parserSpec: CliRouteParserSpec, arg: string): boolean {
+  return parserSpec.optionalValueOptions?.includes(arg) === true;
 }
 
 function parser(
@@ -233,23 +257,20 @@ function parser(
     label,
     flags: [...jsonFlags, ...(options.flags ?? [])],
     valueOptions: [...targetValueOptions, ...(options.valueOptions ?? [])],
-    ...(options.optionalValueOptions === undefined
-      ? {}
-      : { optionalValueOptions: options.optionalValueOptions }),
+    ...(options.optionalValueOptions === undefined ? {} : { optionalValueOptions: options.optionalValueOptions }),
     ...(options.payload === undefined ? {} : { payload: options.payload }),
-    ...(options.allowDashDashPayload === undefined
-      ? {}
-      : { allowDashDashPayload: options.allowDashDashPayload }),
+    ...(options.allowDashDashPayload === undefined ? {} : { allowDashDashPayload: options.allowDashDashPayload }),
   };
 }
 
-function shouldTreatKnownOptionAsPayload(
-  parserSpec: CliRouteParserSpec,
-  args: readonly string[],
-  index: number,
-  width: number,
-  currentPositionals: number,
-): boolean {
+function shouldTreatKnownOptionAsPayload(context: {
+  readonly parserSpec: CliRouteParserSpec;
+  readonly args: readonly string[];
+  readonly index: number;
+  readonly width: number;
+  readonly currentPositionals: number;
+}): boolean {
+  const { parserSpec, args, index, width, currentPositionals } = context;
   const payload = parserSpec.payload;
   if (payload === undefined || currentPositionals < payload.payloadStartPositionals) {
     return false;

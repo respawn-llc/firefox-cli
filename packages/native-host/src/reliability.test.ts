@@ -25,10 +25,7 @@ describe("native host reliability helpers", () => {
     const rootDir = await createTempDir("fc-lock-dead");
     const lockPath = join(rootDir, "state.lock");
     await mkdir(lockPath);
-    await writeFile(
-      join(lockPath, "owner.json"),
-      JSON.stringify({ pid: 12345, createdAt: new Date(0).toISOString() }),
-    );
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({ pid: 12345, createdAt: new Date(0).toISOString() }));
 
     await expect(
       withFileLock(lockPath, () => "acquired", {
@@ -43,10 +40,7 @@ describe("native host reliability helpers", () => {
     const rootDir = await createTempDir("fc-lock-live");
     const liveLockPath = join(rootDir, "live.lock");
     await mkdir(liveLockPath);
-    await writeFile(
-      join(liveLockPath, "owner.json"),
-      JSON.stringify({ pid: 12345, createdAt: new Date(0).toISOString() }),
-    );
+    await writeFile(join(liveLockPath, "owner.json"), JSON.stringify({ pid: 12345, createdAt: new Date(0).toISOString() }));
 
     await expect(
       withFileLock(liveLockPath, () => "not-used", {

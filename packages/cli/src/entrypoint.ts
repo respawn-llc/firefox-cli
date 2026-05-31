@@ -22,7 +22,7 @@ if (launch.kind === "native-host") {
 }
 
 if (launch.kind === "invalid-native-host") {
-  console.error(`${launch.code}: ${launch.message}`);
+  process.stderr.write(`${launch.code}: ${launch.message}\n`);
   process.exit(1);
 }
 

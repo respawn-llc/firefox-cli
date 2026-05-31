@@ -3,29 +3,29 @@ const HIGHLIGHT_ATTRIBUTE_VALUE = "true";
 const HIGHLIGHT_OUTLINE = "3px solid #ff9500";
 const HIGHLIGHT_OUTLINE_OFFSET = "2px";
 
-export type HighlightScheduler = {
+export interface HighlightScheduler {
   readonly setTimeout: (callback: () => void, delayMs: number) => unknown;
   readonly clearTimeout: (timer: unknown) => void;
-};
+}
 
-type HighlightField = {
+interface HighlightField {
   baseline: string | null;
   readonly applied: string;
   ownedValue?: string | null;
   readonly read: (element: HTMLElement) => string | null;
   readonly write: (element: HTMLElement, value: string | null) => void;
-};
+}
 
-type HighlightRecord = {
+interface HighlightRecord {
   readonly fields: readonly HighlightField[];
   timer?: unknown;
   clearTimer?: (timer: unknown) => void;
-};
+}
 
-type DocumentHighlightState = {
+interface DocumentHighlightState {
   readonly records: WeakMap<HTMLElement, HighlightRecord>;
   currentElement?: HTMLElement;
-};
+}
 
 const documentHighlightStates = new WeakMap<Document, DocumentHighlightState>();
 
@@ -160,12 +160,24 @@ function getDefaultScheduler(element: HTMLElement): HighlightScheduler {
   if (view !== null) {
     return {
       setTimeout: (callback, delayMs) => view.setTimeout(callback, delayMs),
-      clearTimeout: (timer) => view.clearTimeout(timer as number),
+      clearTimeout: (timer) => {
+        if (typeof timer === "number") {
+          view.clearTimeout(timer);
+        }
+      },
     };
   }
 
   return {
     setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-    clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
+    clearTimeout: (timer) => {
+      if (isTimeoutHandle(timer)) {
+        globalThis.clearTimeout(timer);
+      }
+    },
   };
+}
+
+function isTimeoutHandle(timer: unknown): timer is ReturnType<typeof setTimeout> {
+  return typeof timer === "number" || (typeof timer === "object" && timer !== null);
 }

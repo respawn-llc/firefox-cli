@@ -1,17 +1,7 @@
-import {
-  getBase64DecodedByteLength,
-  MAX_UPLOAD_FILE_BYTES,
-  MAX_UPLOAD_TOTAL_BYTES,
-} from "@firefox-cli/protocol";
+import { getBase64DecodedByteLength, MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_TOTAL_BYTES } from "@firefox-cli/protocol";
 import type { ElementActionParams, SelectParams, UploadParams } from "@firefox-cli/protocol";
 import type { ActionOptions, ContentActionResult } from "../content-action-types.js";
-import {
-  assertActionableElement,
-  assertEnabled,
-  assertVisible,
-  elementActionResult,
-  resolveRequiredElement,
-} from "./action-targets.js";
+import { assertActionableElement, assertEnabled, assertVisible, elementActionResult, resolveRequiredElement } from "./action-targets.js";
 import { assignFileInputFiles, createDomDataTransfer, createLocalFileList } from "./dom-compat.js";
 import { dispatchInputEvents, requireElementWindow } from "./dom-events.js";
 
@@ -32,17 +22,11 @@ export function uploadAction(options: ActionOptions, params: UploadParams): Cont
       throw options.createError("ACTION_REJECTED", "Upload file data must be valid base64.");
     }
     if (decodedBytes > MAX_UPLOAD_FILE_BYTES) {
-      throw options.createError(
-        "OUTPUT_TOO_LARGE",
-        `Upload file exceeds the ${MAX_UPLOAD_FILE_BYTES} byte per-file limit.`,
-      );
+      throw options.createError("OUTPUT_TOO_LARGE", `Upload file exceeds the ${String(MAX_UPLOAD_FILE_BYTES)} byte per-file limit.`);
     }
     totalBytes += decodedBytes;
     if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
-      throw options.createError(
-        "OUTPUT_TOO_LARGE",
-        `Upload files exceed the ${MAX_UPLOAD_TOTAL_BYTES} byte total limit.`,
-      );
+      throw options.createError("OUTPUT_TOO_LARGE", `Upload files exceed the ${String(MAX_UPLOAD_TOTAL_BYTES)} byte total limit.`);
     }
 
     const bytes = Uint8Array.from(view.atob(file.dataBase64), (char) => char.charCodeAt(0));
@@ -50,10 +34,7 @@ export function uploadAction(options: ActionOptions, params: UploadParams): Cont
     files.push(uploaded);
     dataTransfer.items.add(uploaded);
   }
-  assignFiles(
-    resolution.element,
-    dataTransfer.files.length > 0 ? dataTransfer.files : createLocalFileList(files),
-  );
+  assignFiles(resolution.element, dataTransfer.files.length > 0 ? dataTransfer.files : createLocalFileList(files));
   dispatchInputEvents(resolution.element);
   return {
     ...elementActionResult(options, resolution),
@@ -62,11 +43,7 @@ export function uploadAction(options: ActionOptions, params: UploadParams): Cont
   };
 }
 
-export function checkAction(
-  options: ActionOptions,
-  params: ElementActionParams,
-  checked: boolean,
-): ContentActionResult {
+export function checkAction(options: ActionOptions, params: ElementActionParams, checked: boolean): ContentActionResult {
   const resolution = resolveRequiredElement(options, params);
   assertActionableElement(options, resolution.element);
   const changed = setCheckedState(options, resolution.element, checked);
@@ -123,13 +100,7 @@ function setCheckedState(options: ActionOptions, element: Element, checked: bool
   }
 
   const role = element.getAttribute("role");
-  if (
-    role === "checkbox" ||
-    role === "switch" ||
-    role === "menuitemcheckbox" ||
-    role === "radio" ||
-    role === "menuitemradio"
-  ) {
+  if (role === "checkbox" || role === "switch" || role === "menuitemcheckbox" || role === "radio" || role === "menuitemradio") {
     const changed = element.getAttribute("aria-checked") !== String(checked);
     element.setAttribute("aria-checked", String(checked));
     return changed;

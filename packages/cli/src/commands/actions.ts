@@ -28,16 +28,9 @@ export function buildDragRequest(argv: readonly string[]): RequestEnvelope {
   });
 }
 
-export async function buildUploadRequest(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<RequestEnvelope> {
+export async function buildUploadRequest(argv: readonly string[], dependencies: CliDependencies, context: CliRequestBuildContext): Promise<RequestEnvelope> {
   const parsed = parseUploadArguments(argv.slice(1));
-  return createValidatedRequest(
-    "upload",
-    await createUploadParams(parsed, dependencies, context.uploadBudget),
-  );
+  return createValidatedRequest("upload", await createUploadParams(parsed, dependencies, context.uploadBudget));
 }
 
 export function buildMouseRequest(argv: readonly string[]): RequestEnvelope {

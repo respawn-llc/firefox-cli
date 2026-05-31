@@ -1,3 +1,5 @@
+const emptyDataTransferItems: readonly DataTransferItem[] = [];
+
 export function createDomDataTransfer(element: Element): DataTransfer {
   const view = requireElementWindow(element);
   const DataTransferConstructor = view.DataTransfer;
@@ -9,12 +11,10 @@ export function createDomDataTransfer(element: Element): DataTransfer {
 }
 
 export function createLocalFileList(files: readonly File[]): FileList {
-  const list = {
+  const list: FileList = {
     length: files.length,
     item: (index: number) => files[index] ?? null,
-    [Symbol.iterator]: function* iterator() {
-      yield* files;
-    },
+    [Symbol.iterator]: () => files.values(),
   };
   for (const [index, file] of files.entries()) {
     Object.defineProperty(list, index, {
@@ -23,7 +23,7 @@ export function createLocalFileList(files: readonly File[]): FileList {
       value: file,
     });
   }
-  return list as unknown as FileList;
+  return list;
 }
 
 export function assignFileInputFiles(input: HTMLInputElement, files: FileList): void {
@@ -38,11 +38,7 @@ export function assignFileInputFiles(input: HTMLInputElement, files: FileList): 
   }
 }
 
-export function dispatchDragEventWithDataTransfer(
-  element: Element,
-  type: string,
-  dataTransfer: DataTransfer,
-): void {
+export function dispatchDragEventWithDataTransfer(element: Element, type: string, dataTransfer: DataTransfer): void {
   const view = requireElementWindow(element);
   const DragEventConstructor = view.DragEvent;
   const event =
@@ -68,16 +64,18 @@ export function dispatchDragEventWithDataTransfer(
 
 function createLocalDataTransfer(): DataTransfer {
   const files: File[] = [];
-  return {
+  const dataTransfer: DataTransfer = {
     dropEffect: "none",
     effectAllowed: "all",
     get files() {
       return createLocalFileList(files);
     },
     items: {
-      add: (file: File) => {
-        files.push(file);
-        return file;
+      add: (data: File | string) => {
+        if (data instanceof File) {
+          files.push(data);
+        }
+        return null;
       },
       clear: () => {
         files.length = 0;
@@ -86,13 +84,15 @@ function createLocalDataTransfer(): DataTransfer {
         return files.length;
       },
       remove: () => undefined,
+      [Symbol.iterator]: () => emptyDataTransferItems.values(),
     },
     types: [],
     clearData: () => undefined,
     getData: () => "",
     setData: () => undefined,
     setDragImage: () => undefined,
-  } as unknown as DataTransfer;
+  };
+  return dataTransfer;
 }
 
 function requireElementWindow(element: Element): NonNullable<Document["defaultView"]> {

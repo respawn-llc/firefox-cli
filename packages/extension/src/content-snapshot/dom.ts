@@ -1,5 +1,5 @@
 import type { ElementRefRegistry } from "../element-ref-registry.js";
-import { createContentElementResolver } from "./element-resolver.js";
+import { createContentElementResolver, type ElementRefStore } from "./element-resolver.js";
 
 export function resolveScope(document: Document, selector: string | undefined): Element {
   return createContentElementResolver({
@@ -53,7 +53,7 @@ export function queryAllElements(document: Document, selector: string): readonly
   }).queryAll(selector);
 }
 
-function createSelectorOnlyRegistry(): ElementRefRegistry<Element> {
+function createSelectorOnlyRegistry(): ElementRefStore<Element> {
   return {
     createGeneration: () => {
       throw new Error("Unexpected ref generation through selector-only resolver.");
@@ -65,5 +65,5 @@ function createSelectorOnlyRegistry(): ElementRefRegistry<Element> {
       throw new Error("Unexpected ref resolution through selector-only resolver.");
     },
     invalidate: () => undefined,
-  } as unknown as ElementRefRegistry<Element>;
+  };
 }

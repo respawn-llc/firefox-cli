@@ -13,6 +13,7 @@ export * from "./registry/index.js";
 export * from "./capabilities.js";
 export * from "./command-validation.js";
 export * from "./envelopes.js";
+export * from "./envelopes-session.js";
 export * from "./protocol-state.js";
 export * from "./typed-dispatch.js";
 export * from "./extension-requirements.js";

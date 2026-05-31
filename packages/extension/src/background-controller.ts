@@ -1,15 +1,17 @@
 import {
-  NATIVE_HOST_NAME,
-  PendingRequestTracker,
-  PROTOCOL_VERSION,
+  type CommandId,
   createErrorResponse,
+  createErrorResponseForRequest,
   createLocalComponentIdentity,
   createRequest,
   localProtocolVersionRange,
-  type CommandId,
+  NATIVE_HOST_NAME,
+  PendingRequestTracker,
+  PROTOCOL_VERSION,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
+import type { BackgroundRuntimeAdapter, BackgroundStorageAdapter, ExtensionStatus } from "./background-controller-types.js";
 import { createUnconfiguredBrowserAdapter } from "./background-default-browser-adapter.js";
 import { NativeConnectionManager } from "./background-native-connection.js";
 import { isResponseLike } from "./background-native-protocol-state.js";
@@ -17,19 +19,14 @@ import { NativeSessionService } from "./background-native-session.js";
 import { PairingStateService } from "./background-pairing-service.js";
 import { BackgroundRequestForwarder } from "./background-request-forwarder.js";
 import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
-import type {
-  BackgroundRuntimeAdapter,
-  BackgroundStorageAdapter,
-  ExtensionStatus,
-} from "./background-controller-types.js";
 
-export type { BackgroundBrowserAdapter, BrowserWindowSnapshot };
 export type {
   BackgroundRuntimeAdapter,
   BackgroundStorageAdapter,
   ExtensionStatus,
   NativePortLike,
 } from "./background-controller-types.js";
+export type { BackgroundBrowserAdapter, BrowserWindowSnapshot };
 
 const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
 
@@ -234,44 +231,33 @@ export class FirefoxCliBackgroundController {
       });
   }
 
-  #sendNativeRequest<C extends CommandId>(request: RequestEnvelope<C>): Promise<ResponseEnvelope<C>> {
+  async #sendNativeRequest(request: RequestEnvelope<"hello">): Promise<ResponseEnvelope<"hello">>;
+  async #sendNativeRequest(request: RequestEnvelope<"pair.approve">): Promise<ResponseEnvelope<"pair.approve">>;
+  async #sendNativeRequest(request: RequestEnvelope<"pair.reset">): Promise<ResponseEnvelope<"pair.reset">>;
+  async #sendNativeRequest(request: RequestEnvelope): Promise<ResponseEnvelope> {
     if (this.#connection.stopped) {
-      return Promise.resolve(
-        createErrorResponse(
-          request.id,
-          {
-            code: "NATIVE_HOST_UNAVAILABLE",
-            message: "Extension background is stopped.",
-          },
-          request.protocolVersion,
-        ),
-      ) as Promise<ResponseEnvelope<C>>;
+      return createErrorResponseForRequest(request, {
+        code: "NATIVE_HOST_UNAVAILABLE",
+        message: "Extension background is stopped.",
+      });
     }
 
     if (!this.#connection.connected) {
-      return Promise.resolve(
-        createErrorResponse(
-          request.id,
-          {
-            code: "EXTENSION_NOT_CONNECTED",
-            message: "Native host is not connected.",
-          },
-          request.protocolVersion,
-        ),
-      ) as Promise<ResponseEnvelope<C>>;
+      return createErrorResponseForRequest(request, {
+        code: "EXTENSION_NOT_CONNECTED",
+        message: "Native host is not connected.",
+      });
     }
 
     const session = request.command === "hello" ? undefined : this.#nativeSession.getNegotiatedSession();
     if (session !== undefined && !session.ok) {
-      return Promise.resolve(
-        createErrorResponse(request.id, session.error, request.protocolVersion),
-      ) as Promise<ResponseEnvelope<C>>;
+      return createErrorResponseForRequest(request, session.error);
     }
 
     const wireRequest = session === undefined ? request : session.value.withRequestVersion(request);
     const tracked = this.#pendingCommands.track(wireRequest);
     if (!tracked.ok) {
-      return Promise.resolve(tracked.value as ResponseEnvelope<C>);
+      return tracked.value;
     }
 
     if (!this.#connection.postMessage(wireRequest)) {
@@ -288,7 +274,7 @@ export class FirefoxCliBackgroundController {
       );
     }
 
-    return tracked.promise as Promise<ResponseEnvelope<C>>;
+    return tracked.promise;
   }
 
   async #handleNativeMessage(message: unknown): Promise<void> {
@@ -312,23 +298,17 @@ export class FirefoxCliBackgroundController {
     if (!response.ok) {
       this.#lastError = response.error.message;
       this.#nativeSession.applyResponseParseFailure(command, response.error);
-      this.#pendingCommands.settle(
-        message.id,
-        createErrorResponse(
-          message.id,
-          response.error,
-          this.#nativeSession.getMessageProtocolVersion(message),
-        ),
-      );
+      this.#pendingCommands.settle(message.id, createErrorResponse(message.id, response.error, this.#nativeSession.getMessageProtocolVersion(message)));
       return;
     }
 
     let helloPairingError: string | undefined;
     if (command === "hello") {
-      const helloResponse = response.value as ResponseEnvelope<"hello">;
-      this.#nativeSession.applyHelloResponse(helloResponse);
-      if (helloResponse.ok) {
-        helloPairingError = await this.#pairing.applyHelloPairing(helloResponse.result.pairing);
+      if (isHelloResponse(command, response.value)) {
+        this.#nativeSession.applyHelloResponse(response.value);
+        if (response.value.ok) {
+          helloPairingError = await this.#pairing.applyHelloPairing(response.value.result.pairing);
+        }
       }
     }
     this.#pendingCommands.settle(message.id, response.value);
@@ -350,9 +330,7 @@ export class FirefoxCliBackgroundController {
       return;
     }
 
-    this.#connection.postMessage(
-      await this.#requestForwarder.forward(request.value, this.#pairing.approved, prepared.protocolSession),
-    );
+    this.#connection.postMessage(await this.#requestForwarder.forward(request.value, this.#pairing.approved, prepared.protocolSession));
   }
 
   #drainPendingOnDisconnect(): void {
@@ -367,4 +345,8 @@ export class FirefoxCliBackgroundController {
       ),
     );
   }
+}
+
+function isHelloResponse(command: CommandId, response: ResponseEnvelope): response is ResponseEnvelope<"hello"> {
+  return command === "hello" && (!response.ok || ("accepted" in response.result && "peer" in response.result));
 }

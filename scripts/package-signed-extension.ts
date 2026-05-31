@@ -1,24 +1,15 @@
 import { extname, resolve } from "node:path";
-import {
-  readSignedExtensionProvenance,
-  type SignedExtensionProvenance,
-} from "./extension-artifact-provenance.js";
-import {
-  normalizeSignedExtensionProvenanceForPackage,
-  verifySignedExtensionSourceProvenance,
-} from "./signed-extension-artifact.js";
-import {
-  verifySignedExtensionSignature,
-  type SignedExtensionSignatureVerifier,
-} from "./signed-extension-signature.js";
+import { readSignedExtensionProvenance, type SignedExtensionProvenance } from "./extension-artifact-provenance.js";
+import { normalizeSignedExtensionProvenanceForPackage, verifySignedExtensionSourceProvenance } from "./signed-extension-artifact.js";
+import { verifySignedExtensionSignature, type SignedExtensionSignatureVerifier } from "./signed-extension-signature.js";
 import { readRegularFile } from "./safe-extension-files.js";
 import { readZipArchive } from "./zip-archive.js";
 
-export type ValidatedSignedExtensionSource = {
+export interface ValidatedSignedExtensionSource {
   readonly sourceXpiPath: string;
   readonly xpiData: Buffer;
   readonly provenance: SignedExtensionProvenance;
-};
+}
 
 export class SignedExtensionSourceNotFoundError extends Error {
   readonly sourceXpiPath: string;
@@ -59,10 +50,7 @@ export async function readValidatedSignedExtensionSource(input: {
   return { sourceXpiPath, xpiData, provenance };
 }
 
-async function verifySignedExtensionSourceSignature(
-  xpiData: Buffer,
-  signatureVerifier: SignedExtensionSignatureVerifier | undefined,
-): Promise<void> {
+async function verifySignedExtensionSourceSignature(xpiData: Buffer, signatureVerifier: SignedExtensionSignatureVerifier | undefined): Promise<void> {
   const archive = readZipArchive(xpiData);
   const signatureEntries = new Map<string, Buffer>();
   for (const entry of archive.entries) {

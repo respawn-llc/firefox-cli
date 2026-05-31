@@ -5,9 +5,9 @@ import { FIREFOX_CLI_EXTENSION_ID } from "@firefox-cli/native-host";
 import { timeoutPolicies } from "@firefox-cli/protocol";
 import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
-export type MarionetteApprovalResult = {
+export interface MarionetteApprovalResult {
   readonly captureVisibleTabAvailableBeforeApproval: boolean;
-};
+}
 
 export async function approveExtensionWithMarionette(profileDir: string): Promise<MarionetteApprovalResult> {
   const port = await waitForMarionettePort(profileDir);
@@ -72,8 +72,7 @@ function marionetteElementId(value: unknown): string {
     throw new Error(`Marionette did not return an element object: ${String(value)}`);
   }
 
-  const record = value as Record<string, unknown>;
-  const elementId = record["element-6066-11e4-a52e-4f735466cecf"] ?? record.ELEMENT;
+  const elementId = getObjectProperty(value, "element-6066-11e4-a52e-4f735466cecf") ?? getObjectProperty(value, "ELEMENT");
   if (typeof elementId !== "string") {
     throw new Error(`Marionette element object did not include an element id: ${JSON.stringify(value)}`);
   }
@@ -82,15 +81,19 @@ function marionetteElementId(value: unknown): string {
 
 function webDriverValue(value: unknown): unknown {
   if (value !== null && typeof value === "object" && "value" in value) {
-    return (value as { readonly value: unknown }).value;
+    return getObjectProperty(value, "value");
   }
   return value;
 }
 
-export type MarionetteClientOptions = {
+function getObjectProperty(value: object, key: string): unknown {
+  return Object.entries(value).find(([entryKey]) => entryKey === key)?.[1];
+}
+
+export interface MarionetteClientOptions {
   readonly commandTimeoutMs?: number;
   readonly maxFrameBytes?: number;
-};
+}
 
 export class MarionetteClient {
   readonly #socket: Socket;
@@ -131,7 +134,9 @@ export class MarionetteClient {
     const socket = createConnection(port, "127.0.0.1");
     const client = new MarionetteClient(socket, options);
     await new Promise<void>((resolveConnect, rejectConnect) => {
-      socket.once("connect", () => resolveConnect());
+      socket.once("connect", () => {
+        resolveConnect();
+      });
       socket.once("error", rejectConnect);
     });
     await sleep(100);
@@ -144,7 +149,7 @@ export class MarionetteClient {
     const response = new Promise<unknown>((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
     });
-    this.#socket.write(`${Buffer.byteLength(payload)}:${payload}`);
+    this.#socket.write(`${String(Buffer.byteLength(payload))}:${payload}`);
     return withTimeout(response, {
       timeoutMs: this.#commandTimeoutMs,
       timeoutMessage: () => `Marionette command timed out: ${command}`,
@@ -159,23 +164,21 @@ export class MarionetteClient {
   }
 
   #parse(): void {
-    while (true) {
+    while (this.#buffer.byteLength > 0) {
       const separatorIndex = this.#buffer.indexOf(":");
       if (separatorIndex < 0) {
         if (this.#buffer.byteLength > this.#maxFrameBytes) {
-          throw new Error(`Marionette frame prefix exceeds ${this.#maxFrameBytes} bytes.`);
+          throw new Error(`Marionette frame prefix exceeds ${String(this.#maxFrameBytes)} bytes.`);
         }
         return;
       }
 
       const byteLength = Number(this.#buffer.subarray(0, separatorIndex).toString("ascii"));
       if (!Number.isInteger(byteLength) || byteLength < 0) {
-        throw new Error(
-          `Invalid Marionette frame length: ${this.#buffer.subarray(0, separatorIndex).toString("ascii")}`,
-        );
+        throw new Error(`Invalid Marionette frame length: ${this.#buffer.subarray(0, separatorIndex).toString("ascii")}`);
       }
       if (byteLength > this.#maxFrameBytes) {
-        throw new Error(`Marionette frame length ${byteLength} exceeds ${this.#maxFrameBytes} bytes.`);
+        throw new Error(`Marionette frame length ${String(byteLength)} exceeds ${String(this.#maxFrameBytes)} bytes.`);
       }
 
       const frameStart = separatorIndex + 1;
@@ -186,26 +189,24 @@ export class MarionetteClient {
 
       const frame = this.#buffer.subarray(frameStart, frameEnd).toString("utf8");
       this.#buffer = this.#buffer.subarray(frameEnd);
-      const message = JSON.parse(frame) as unknown;
-      if (!Array.isArray(message)) {
-        continue;
-      }
+      this.#handleMessage(JSON.parse(frame));
+    }
+  }
 
-      const [, id, error, result] = message;
-      if (typeof id !== "number") {
-        continue;
-      }
-
-      const pending = this.#pending.get(id);
-      if (pending === undefined) {
-        continue;
-      }
-      this.#pending.delete(id);
-      if (error !== null && error !== undefined) {
-        pending.reject(new Error(JSON.stringify(error)));
-      } else {
-        pending.resolve(result);
-      }
+  #handleMessage(message: unknown): void {
+    if (!isMarionetteResponse(message)) {
+      return;
+    }
+    const [, id, error, result] = message;
+    const pending = this.#pending.get(id);
+    if (pending === undefined) {
+      return;
+    }
+    this.#pending.delete(id);
+    if (error !== null && error !== undefined) {
+      pending.reject(new Error(JSON.stringify(error)));
+    } else {
+      pending.resolve(result);
     }
   }
 
@@ -215,4 +216,8 @@ export class MarionetteClient {
     }
     this.#pending.clear();
   }
+}
+
+function isMarionetteResponse(value: unknown): value is readonly [unknown, number, unknown, unknown] {
+  return Array.isArray(value) && typeof value[1] === "number";
 }

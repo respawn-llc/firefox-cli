@@ -1,18 +1,18 @@
 import { PROTOCOL_VERSION } from "./constants.js";
 import type { ProtocolError } from "./core.js";
-import { getRequestProtocolRequirement, isCommandId, type CommandId } from "./registry/index.js";
+import { getRequestProtocolRequirement, isCommandId } from "./registry/index.js";
 
-export type RequestProtocolCompatibility = {
+export interface RequestProtocolCompatibility {
   readonly compatible: boolean;
   readonly requiredProtocolVersion: number;
   readonly reason?: string;
-};
+}
 
-type RequestProtocolSubject = {
+interface RequestProtocolSubject {
   readonly command: string;
   readonly params: unknown;
   readonly protocolVersion?: number;
-};
+}
 
 export function getRequestProtocolCompatibility(
   request: RequestProtocolSubject,
@@ -27,10 +27,7 @@ export function getRequestProtocolCompatibility(
   };
 }
 
-export function createRequestProtocolMismatchError(
-  request: RequestProtocolSubject,
-  protocolVersion: number,
-): ProtocolError {
+export function createRequestProtocolMismatchError(request: RequestProtocolSubject, protocolVersion: number): ProtocolError {
   const compatibility = getRequestProtocolCompatibility(request, protocolVersion);
   return {
     code: "VERSION_MISMATCH",
@@ -52,9 +49,7 @@ function getRequestProtocolRequirementForSubject(
   request: RequestProtocolSubject,
 ): { readonly minProtocolVersion: number; readonly reason: string } | undefined {
   if (request.command === "batch" && hasSteps(request.params)) {
-    const childRequirement = request.params.steps.reduce<
-      { readonly minProtocolVersion: number; readonly reason: string } | undefined
-    >((highest, step) => {
+    const childRequirement = request.params.steps.reduce<{ readonly minProtocolVersion: number; readonly reason: string } | undefined>((highest, step) => {
       const requirement = getRequestProtocolRequirementForSubject({
         command: step.command,
         params: step.params,
@@ -80,7 +75,7 @@ function getRequestProtocolRequirementForSubject(
   }
 
   return getRequestProtocolRequirement({
-    command: request.command as CommandId,
+    command: request.command,
     params: request.params,
   });
 }

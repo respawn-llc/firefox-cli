@@ -7,7 +7,7 @@ export const packageManifestSchema = z
     version: z.string().min(1),
     bin: z.record(z.string(), z.string()).optional(),
   })
-  .passthrough();
+  .loose();
 export type PackageManifest = z.infer<typeof packageManifestSchema>;
 
 export const extensionManifestSchema = z
@@ -19,7 +19,7 @@ export const extensionManifestSchema = z
       .object({
         scripts: z.array(z.string().min(1)).min(1),
       })
-      .passthrough(),
+      .loose(),
     permissions: z.array(z.string().min(1)),
     host_permissions: z.array(z.string().min(1)).optional(),
     action: z
@@ -27,7 +27,7 @@ export const extensionManifestSchema = z
         default_popup: z.string().min(1).optional(),
         default_title: z.string().min(1).optional(),
       })
-      .passthrough(),
+      .loose(),
     browser_specific_settings: z
       .object({
         gecko: z
@@ -41,27 +41,20 @@ export const extensionManifestSchema = z
               })
               .optional(),
           })
-          .passthrough(),
+          .loose(),
       })
-      .passthrough()
+      .loose()
       .optional(),
   })
-  .passthrough();
+  .loose();
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;
 
-export function parseJsonWithSchema<T>(
-  content: string,
-  label: string,
-  location: string,
-  schema: z.ZodType<T>,
-): T {
+export function parseJsonWithSchema<T>(content: string, label: string, location: string, schema: z.ZodType<T>): T {
   let raw: unknown;
   try {
-    raw = JSON.parse(content) as unknown;
+    raw = JSON.parse(content);
   } catch (error) {
-    throw new Error(
-      `Invalid ${label} JSON at ${location}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new Error(`Invalid ${label} JSON at ${location}: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const parsed = schema.safeParse(raw);
@@ -72,29 +65,16 @@ export function parseJsonWithSchema<T>(
   return parsed.data;
 }
 
-export async function runCliJson<T>(
-  run: () => Promise<{ readonly stdout: string }>,
-  label: string,
-  schema: z.ZodType<T>,
-): Promise<T> {
+export async function runCliJson<T>(run: () => Promise<{ readonly stdout: string }>, label: string, schema: z.ZodType<T>): Promise<T> {
   const result = await run();
   return parseJsonWithSchema(result.stdout, label, `${label} stdout`, schema);
 }
 
-export function parseJsonManifestContent<T>(
-  content: string,
-  label: string,
-  location: string,
-  schema: z.ZodType<T>,
-): T {
+export function parseJsonManifestContent<T>(content: string, label: string, location: string, schema: z.ZodType<T>): T {
   return parseJsonWithSchema(content, label, location, schema);
 }
 
-export async function readJsonManifestFile<T>(
-  filePath: string,
-  label: string,
-  schema: z.ZodType<T>,
-): Promise<T> {
+export async function readJsonManifestFile<T>(filePath: string, label: string, schema: z.ZodType<T>): Promise<T> {
   const content = await readFile(filePath, "utf8");
   return parseJsonManifestContent(content, label, filePath, schema);
 }

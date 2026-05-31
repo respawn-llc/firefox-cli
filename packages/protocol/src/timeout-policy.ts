@@ -1,7 +1,7 @@
-export type TimeoutPolicy = {
+export interface TimeoutPolicy {
   readonly name: string;
   readonly timeoutMs: number;
-};
+}
 
 export type PollingTimeoutPolicy = TimeoutPolicy & {
   readonly intervalMs: number;
@@ -11,12 +11,12 @@ export type ByteBoundTimeoutPolicy = TimeoutPolicy & {
   readonly maxBytes: number;
 };
 
-export type ProcessStopTimeoutPolicy = {
+export interface ProcessStopTimeoutPolicy {
   readonly name: string;
   readonly interruptGraceMs: number;
   readonly terminateGraceMs: number;
   readonly forceGraceMs: number;
-};
+}
 
 export const timeoutPolicies = {
   cliHostConnect: {

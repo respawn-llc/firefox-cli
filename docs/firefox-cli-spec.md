@@ -584,4 +584,3 @@ Do not ship packaged `skills get` docs until the command surface is stable.
 - DOM event trust: https://developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted
 - Firefox Extension Workshop `web-ext`: https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/
 - Firefox signing and distribution: https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/
-- Local `agent-browser` command reference: `/Users/nek/.agents/skills/agent-browser/references/commands.md`

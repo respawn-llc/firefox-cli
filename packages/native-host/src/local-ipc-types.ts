@@ -10,18 +10,18 @@ export type LocalIpcEndpoint =
       readonly path: string;
     };
 
-type Win32LocalIpcEndpointOptions = {
+interface Win32LocalIpcEndpointOptions {
   readonly platform: "win32";
   readonly rootDir: string;
   readonly name?: string;
   readonly endpointScope: string;
-};
+}
 
-type UnixLocalIpcEndpointOptions = {
+interface UnixLocalIpcEndpointOptions {
   readonly platform: Exclude<NodeJS.Platform, "win32">;
   readonly rootDir: string;
   readonly name?: string;
-};
+}
 
 export type LocalIpcEndpointOptions =
   | Win32LocalIpcEndpointOptions
@@ -33,23 +33,20 @@ export type LocalIpcEndpointOptions =
       readonly endpointScope: string;
     };
 
-export type LocalIpcServerOptions = {
+export interface LocalIpcServerOptions {
   readonly endpoint: LocalIpcEndpoint;
   readonly authToken?: string;
   readonly enableProtocolNegotiation?: boolean;
   readonly requestLineTimeoutMs?: number;
   readonly startupLockTimeoutMs?: number;
-  handleMessage(
-    message: unknown,
-    context?: { readonly protocolSession?: ProtocolSession },
-  ): Promise<unknown> | unknown;
-};
+  readonly handleMessage: (message: unknown, context?: { readonly protocolSession?: ProtocolSession }) => unknown;
+}
 
-export type LocalIpcAuthTokenStore = {
+export interface LocalIpcAuthTokenStore {
   readonly filePath: string;
   read(): Promise<string | null>;
   write(token: string): Promise<void>;
-};
+}
 
 export class LocalIpcError extends Error {
   readonly code: "INVALID_IPC_RESPONSE" | "CONNECTION_FAILED" | "SOCKET_FAILED" | "REQUEST_FAILED";

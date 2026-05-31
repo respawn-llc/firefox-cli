@@ -40,7 +40,7 @@ export const uploadFileSchema = z
     const decodedBytes = getBase64DecodedByteLength(file.dataBase64);
     if (decodedBytes === null) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Upload file data must be valid base64.",
         path: ["dataBase64"],
       });
@@ -49,8 +49,8 @@ export const uploadFileSchema = z
 
     if (decodedBytes > MAX_UPLOAD_FILE_BYTES) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Upload file exceeds the ${MAX_UPLOAD_FILE_BYTES} byte per-file limit.`,
+        code: "custom",
+        message: `Upload file exceeds the ${String(MAX_UPLOAD_FILE_BYTES)} byte per-file limit.`,
         path: ["dataBase64"],
         params: {
           actualBytes: decodedBytes,
@@ -70,9 +70,7 @@ export const uploadParamsSchema = phase8ElementTargetParamsSchema
   });
 export type UploadParams = z.infer<typeof uploadParamsSchema>;
 
-export function getUploadFilesDecodedByteLength(
-  files: readonly Pick<UploadFile, "dataBase64">[],
-): number | null {
+export function getUploadFilesDecodedByteLength(files: readonly Pick<UploadFile, "dataBase64">[]): number | null {
   let total = 0;
   for (const file of files) {
     const decodedBytes = getBase64DecodedByteLength(file.dataBase64);
@@ -84,19 +82,15 @@ export function getUploadFilesDecodedByteLength(
   return total;
 }
 
-export function addUploadTotalIssue(
-  files: readonly Pick<UploadFile, "dataBase64">[],
-  context: z.RefinementCtx,
-  path: (string | number)[],
-): void {
+export function addUploadTotalIssue(files: readonly Pick<UploadFile, "dataBase64">[], context: z.RefinementCtx, path: (string | number)[]): void {
   const totalBytes = getUploadFilesDecodedByteLength(files);
   if (totalBytes === null || totalBytes <= MAX_UPLOAD_TOTAL_BYTES) {
     return;
   }
 
   context.addIssue({
-    code: z.ZodIssueCode.custom,
-    message: `Upload files exceed the ${MAX_UPLOAD_TOTAL_BYTES} byte total limit.`,
+    code: "custom",
+    message: `Upload files exceed the ${String(MAX_UPLOAD_TOTAL_BYTES)} byte total limit.`,
     path,
     params: {
       actualBytes: totalBytes,
@@ -122,7 +116,7 @@ export const mouseParamsSchema = z
   .superRefine((params, context) => {
     if (params.ref === undefined && params.generationId !== undefined) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Generation IDs apply only to refs.",
         path: ["generationId"],
       });
@@ -142,7 +136,7 @@ export const keyEventParamsSchema = z
   .superRefine((params, context) => {
     if (params.ref === undefined && params.generationId !== undefined) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Generation IDs apply only to refs.",
         path: ["generationId"],
       });

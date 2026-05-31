@@ -12,22 +12,22 @@ import type { RequestEnvelope, ResponseEnvelope } from "./envelopes.js";
 import { failure } from "./parse-failure.js";
 import { commandSchemas } from "./registry/index.js";
 
-export type HelloRequestNegotiationOptions = {
+export interface HelloRequestNegotiationOptions {
   readonly local: ProtocolVersionRange;
   readonly expectedPeerComponent: Component;
-};
+}
 
-export type HelloResponseNegotiationOptions = {
+export interface HelloResponseNegotiationOptions {
   readonly local: ProtocolVersionRange;
   readonly expectedPeerComponent: Component;
-};
+}
 
-export type RawRequestEnvelope = {
+export interface RawRequestEnvelope {
   readonly protocolVersion: number;
   readonly id: string;
   readonly command: string;
   readonly params: unknown;
-};
+}
 
 export type RawResponseEnvelope =
   | {
@@ -43,10 +43,7 @@ export type RawResponseEnvelope =
       readonly error: unknown;
     };
 
-export function parseNegotiatedHelloRequest(
-  envelope: RawRequestEnvelope,
-  options: HelloRequestNegotiationOptions,
-): ParseResult<RequestEnvelope<"hello">> {
+export function parseNegotiatedHelloRequest(envelope: RawRequestEnvelope, options: HelloRequestNegotiationOptions): ParseResult<RequestEnvelope<"hello">> {
   const params = commandSchemas.hello.params.safeParse(envelope.params);
   if (!params.success) {
     return failure("INVALID_ENVELOPE", "Command params are invalid.", {
@@ -78,10 +75,7 @@ export function parseNegotiatedHelloRequest(
   };
 }
 
-export function parseNegotiatedHelloResponse(
-  envelope: RawResponseEnvelope,
-  options: HelloResponseNegotiationOptions,
-): ParseResult<ResponseEnvelope<"hello">> {
+export function parseNegotiatedHelloResponse(envelope: RawResponseEnvelope, options: HelloResponseNegotiationOptions): ParseResult<ResponseEnvelope<"hello">> {
   if (!envelope.ok) {
     const error = protocolErrorSchema.safeParse(envelope.error);
     if (!error.success) {
@@ -90,10 +84,7 @@ export function parseNegotiatedHelloResponse(
       });
     }
 
-    if (
-      !isProtocolVersionInRange(envelope.protocolVersion, options.local) &&
-      error.data.code !== "VERSION_MISMATCH"
-    ) {
+    if (!isProtocolVersionInRange(envelope.protocolVersion, options.local) && error.data.code !== "VERSION_MISMATCH") {
       return {
         ok: false,
         error: createProtocolVersionMismatchError(options.local, {

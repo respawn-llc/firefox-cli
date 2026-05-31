@@ -1,9 +1,4 @@
-import {
-  pairApproveParamsSchema,
-  pairApproveResultSchema,
-  pairResetParamsSchema,
-  pairResetResultSchema,
-} from "../pairing.js";
+import { pairApproveParamsSchema, pairApproveResultSchema, pairResetParamsSchema, pairResetResultSchema } from "../pairing.js";
 import { defineCommandEntries } from "./define.js";
 
 export const pairingCommandEntries = defineCommandEntries({

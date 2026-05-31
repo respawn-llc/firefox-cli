@@ -42,7 +42,7 @@ describe("native host session", () => {
     const approveResponse = extensionReader.read();
     extensionInput.write(encodeNativeMessageFrame(approve));
     const approved = await approveResponse;
-    const token = (approved as { readonly result: { readonly token: string } }).result.token;
+    const token = getPairApproveToken(approved);
     const hello = createRequest(
       "hello",
       {
@@ -69,16 +69,30 @@ describe("native host session", () => {
       authToken: ipcAuthToken,
       productVersion: "0.0.0",
     });
-    const forwarded = (await extensionReader.read()) as typeof request;
+    const forwarded = await extensionReader.read();
 
     expect(forwarded).toEqual(request);
-    extensionInput.write(
-      encodeNativeMessageFrame(createOkResponse(forwarded, { capabilities: [...kernelCapabilities] })),
-    );
+    extensionInput.write(encodeNativeMessageFrame(createOkResponse(request, { capabilities: [...kernelCapabilities] })));
 
-    await expect(response).resolves.toEqual(
-      createOkResponse(request, { capabilities: [...kernelCapabilities] }),
-    );
+    await expect(response).resolves.toEqual(createOkResponse(request, { capabilities: [...kernelCapabilities] }));
     await session.stop();
   });
 });
+
+function getPairApproveToken(response: unknown): string {
+  if (
+    typeof response === "object" &&
+    response !== null &&
+    "ok" in response &&
+    response.ok === true &&
+    "result" in response &&
+    typeof response.result === "object" &&
+    response.result !== null &&
+    "token" in response.result &&
+    typeof response.result.token === "string"
+  ) {
+    return response.result.token;
+  }
+
+  throw new Error("Expected pair.approve response with a token.");
+}

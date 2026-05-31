@@ -42,7 +42,7 @@ export const elementTargetRefinement = (
 ): void => {
   if ((params.selector === undefined) === (params.ref === undefined)) {
     context.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       message: "Element actions require exactly one selector or ref.",
       path: ["selector"],
     });
@@ -50,7 +50,7 @@ export const elementTargetRefinement = (
 
   if (params.ref === undefined && params.generationId !== undefined) {
     context.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       message: "Generation IDs apply only to refs.",
       path: ["generationId"],
     });
@@ -121,7 +121,7 @@ export const scrollParamsSchema = z
   .superRefine((params, context) => {
     if (params.selector !== undefined && params.ref !== undefined) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Scroll actions accept at most one selector or ref.",
         path: ["selector"],
       });
@@ -129,7 +129,7 @@ export const scrollParamsSchema = z
 
     if (params.ref === undefined && params.generationId !== undefined) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Generation IDs apply only to refs.",
         path: ["generationId"],
       });

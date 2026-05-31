@@ -5,13 +5,13 @@ import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
 import { parsePersistedJson } from "./persisted-json.js";
 import { writeFileAtomically } from "./reliability.js";
 
-export type NativeMessagingManifest = {
+export interface NativeMessagingManifest {
   readonly name: string;
   readonly description: string;
   readonly path: string;
   readonly type: "stdio";
   readonly allowed_extensions: readonly string[];
-};
+}
 
 export const nativeMessagingManifestSchema = z
   .object({
@@ -36,17 +36,17 @@ export type NativeMessagingManifestRegistration =
       readonly value: string;
     };
 
-export type NativeMessagingManifestPlan = {
+export interface NativeMessagingManifestPlan {
   readonly manifestPath: string;
   readonly manifest: NativeMessagingManifest;
   readonly registration: NativeMessagingManifestRegistration;
-};
+}
 
-export type NativeMessagingManifestOptions = {
+export interface NativeMessagingManifestOptions {
   readonly binaryPath: string;
   readonly name?: string;
   readonly allowedExtensions?: readonly string[];
-};
+}
 
 export type NativeMessagingManifestPlanOptions =
   | ({
@@ -60,17 +60,15 @@ export type NativeMessagingManifestPlanOptions =
       readonly arch: PlatformInput["arch"];
     } & NativeMessagingManifestPlanBaseOptions);
 
-type NativeMessagingManifestPlanBaseOptions = {
+interface NativeMessagingManifestPlanBaseOptions {
   readonly platform: PlatformInput["platform"];
   readonly homeDir: string;
   readonly appDataDir?: string;
   readonly name?: string;
   readonly allowedExtensions?: readonly string[];
-};
+}
 
-export function createNativeMessagingManifest(
-  options: NativeMessagingManifestOptions,
-): NativeMessagingManifest {
+export function createNativeMessagingManifest(options: NativeMessagingManifestOptions): NativeMessagingManifest {
   return {
     name: options.name ?? NATIVE_HOST_NAME,
     description: "Native messaging host for firefox-cli.",
@@ -83,13 +81,9 @@ export function createNativeMessagingManifest(
 export async function planNativeMessagingManifest(
   options: Extract<NativeMessagingManifestPlanOptions, { readonly packageRoot: string }>,
 ): Promise<NativeMessagingManifestPlan>;
-export function planNativeMessagingManifest(
-  options: Extract<NativeMessagingManifestPlanOptions, { readonly binaryPath: string }>,
-): NativeMessagingManifestPlan;
-export function planNativeMessagingManifest(
-  options: NativeMessagingManifestPlanOptions,
-): NativeMessagingManifestPlan | Promise<NativeMessagingManifestPlan> {
-  if ("packageRoot" in options && options.packageRoot !== undefined) {
+export function planNativeMessagingManifest(options: Extract<NativeMessagingManifestPlanOptions, { readonly binaryPath: string }>): NativeMessagingManifestPlan;
+export function planNativeMessagingManifest(options: NativeMessagingManifestPlanOptions): NativeMessagingManifestPlan | Promise<NativeMessagingManifestPlan> {
+  if (options.packageRoot !== undefined) {
     return resolvePackagedBinary(options.packageRoot, {
       platform: options.platform,
       arch: options.arch,
@@ -110,16 +104,9 @@ export function parseNativeMessagingManifestJson(content: string, filePath: stri
   });
 }
 
-function createManifestPlan(
-  options: NativeMessagingManifestPlanBaseOptions & { readonly binaryPath: string },
-): NativeMessagingManifestPlan {
+function createManifestPlan(options: NativeMessagingManifestPlanBaseOptions & { readonly binaryPath: string }): NativeMessagingManifestPlan {
   const name = options.name ?? NATIVE_HOST_NAME;
-  const manifestPath = getPerUserManifestPath(
-    options.platform,
-    options.homeDir,
-    name,
-    optionalAppDataDir(options.appDataDir),
-  );
+  const manifestPath = getPerUserManifestPath(options.platform, options.homeDir, name, optionalAppDataDir(options.appDataDir));
   const manifest = createNativeMessagingManifest({
     binaryPath: options.binaryPath,
     name,
@@ -143,12 +130,7 @@ function optionalAllowedExtensions(allowedExtensions: readonly string[] | undefi
   return allowedExtensions === undefined ? {} : { allowedExtensions };
 }
 
-function getPerUserManifestPath(
-  platform: PlatformInput["platform"],
-  homeDir: string,
-  name: string,
-  options: { readonly appDataDir?: string },
-): string {
+function getPerUserManifestPath(platform: PlatformInput["platform"], homeDir: string, name: string, options: { readonly appDataDir?: string }): string {
   if (platform === "darwin") {
     return join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${name}.json`);
   }
@@ -165,11 +147,7 @@ function getPerUserManifestPath(
   throw new Error(`Unsupported platform: ${platform}`);
 }
 
-function getRegistrationPlan(
-  platform: PlatformInput["platform"],
-  manifestPath: string,
-  name: string,
-): NativeMessagingManifestRegistration {
+function getRegistrationPlan(platform: PlatformInput["platform"], manifestPath: string, name: string): NativeMessagingManifestRegistration {
   if (platform === "win32") {
     return {
       kind: "windows-registry",

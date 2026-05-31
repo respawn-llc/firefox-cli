@@ -6,10 +6,10 @@ import { withDeadline } from "./reliability.js";
 
 const DEFAULT_STALE_SOCKET_PROBE_TIMEOUT_MS = 100;
 
-export type PathIdentity = {
+export interface PathIdentity {
   readonly dev: number;
   readonly ino: number;
-};
+}
 
 export async function prepareUnixSocketParent(socketPath: string): Promise<void> {
   const directory = dirname(socketPath);
@@ -90,7 +90,7 @@ function validateCurrentUserOwner(uid: number, message: string): void {
   }
 }
 
-function probeUnixSocket(socketPath: string): Promise<"active" | "stale"> {
+async function probeUnixSocket(socketPath: string): Promise<"active" | "stale"> {
   const socket = createConnection(socketPath);
   return withDeadline(
     new Promise<"active" | "stale">((resolve) => {

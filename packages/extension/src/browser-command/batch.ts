@@ -18,10 +18,7 @@ import { BrowserCommandError } from "./errors.js";
 import type { BrowserTargetContext } from "./target-context.js";
 import type { BackgroundBrowserAdapter } from "./types.js";
 
-export type ExecuteBatchStep = (
-  request: RequestEnvelope,
-  adapter: BackgroundBrowserAdapter,
-) => Promise<ResponseEnvelope>;
+export type ExecuteBatchStep = (request: RequestEnvelope, adapter: BackgroundBrowserAdapter) => Promise<ResponseEnvelope>;
 
 export async function executeBatch(
   command: RequestEnvelope<"batch">,
@@ -41,57 +38,17 @@ export async function executeBatch(
   let totalScreenshotBytes = 0;
 
   for (let index = 0; index < command.params.steps.length; index += 1) {
-    const step = command.params.steps[index];
-    if (step === undefined) {
+    const remainingMs = remainingBatchTime(startedAt, timeoutMs);
+    assertBatchHasTimeRemaining(timeoutMs, remainingMs);
+    const stepRequest = createBatchStepRequest(command, index, defaultSelector, remainingMs);
+    if (stepRequest === undefined) {
       continue;
     }
-
-    const remainingMs = remainingBatchTime(startedAt, timeoutMs);
-    if (remainingMs !== undefined && remainingMs <= 0) {
-      throw new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms.`);
-    }
-
-    if (!isCommandId(step.command)) {
-      throw new BrowserCommandError("INVALID_TARGET", `Unknown batch command: ${step.command}`);
-    }
-    const params = parseCommandParamsAs(
-      step.command,
-      applyBatchStepDefaults(step.command, step.params, defaultSelector, remainingMs),
-    );
-    if (!params.ok) {
-      throw new BrowserCommandError("INVALID_TARGET", params.error.message);
-    }
-    const stepRequest = createRequest(
-      step.command,
-      params.value,
-      `${command.id}:${index}`,
-      command.protocolVersion,
-    );
     const response = await executeStep(stepRequest, adapter);
-    const stepResult: BatchStepResult = response.ok
-      ? {
-          index,
-          command: step.command,
-          ok: true,
-          result: response.result,
-        }
-      : {
-          index,
-          command: step.command,
-          ok: false,
-          error: response.error,
-        };
+    const stepResult = toBatchStepResult(index, stepRequest.command, response);
     steps.push(stepResult);
 
-    if (stepResult.ok && stepResult.command === "screenshot") {
-      totalScreenshotBytes += parseScreenshotStepResult(stepResult).bytes;
-      if (totalScreenshotBytes > MAX_SCREENSHOT_BYTES) {
-        throw new BrowserCommandError(
-          "OUTPUT_TOO_LARGE",
-          `Batch screenshots exceed the ${MAX_SCREENSHOT_BYTES} byte native messaging limit.`,
-        );
-      }
-    }
+    totalScreenshotBytes = checkedScreenshotByteTotal(totalScreenshotBytes, stepResult);
 
     assertBatchResultSize(
       {
@@ -119,36 +76,77 @@ export async function executeBatch(
   return result;
 }
 
-export function applyBatchStepDefaults(
-  command: string,
-  rawParams: unknown,
-  defaultTarget: TargetSelector,
+function assertBatchHasTimeRemaining(timeoutMs: number | undefined, remainingMs: number | undefined): void {
+  if (remainingMs !== undefined && remainingMs <= 0) {
+    throw new BrowserCommandError("TIMEOUT", `Timed out after ${String(timeoutMs)}ms.`);
+  }
+}
+
+function createBatchStepRequest(
+  command: RequestEnvelope<"batch">,
+  index: number,
+  defaultSelector: TargetSelector,
   remainingMs: number | undefined,
-): unknown {
+): RequestEnvelope | undefined {
+  const step = command.params.steps[index];
+  if (step === undefined) {
+    return undefined;
+  }
+  if (!isCommandId(step.command)) {
+    throw new BrowserCommandError("INVALID_TARGET", `Unknown batch command: ${step.command}`);
+  }
+  const params = parseCommandParamsAs(step.command, applyBatchStepDefaults(step.command, step.params, defaultSelector, remainingMs));
+  if (!params.ok) {
+    throw new BrowserCommandError("INVALID_TARGET", params.error.message);
+  }
+  return createRequest(step.command, params.value, `${command.id}:${String(index)}`, command.protocolVersion);
+}
+
+function toBatchStepResult(index: number, command: string, response: ResponseEnvelope): BatchStepResult {
+  return response.ok
+    ? {
+        index,
+        command,
+        ok: true,
+        result: response.result,
+      }
+    : {
+        index,
+        command,
+        ok: false,
+        error: response.error,
+      };
+}
+
+function checkedScreenshotByteTotal(currentBytes: number, stepResult: BatchStepResult): number {
+  if (!stepResult.ok || stepResult.command !== "screenshot") {
+    return currentBytes;
+  }
+  const nextBytes = currentBytes + parseScreenshotStepResult(stepResult).bytes;
+  if (nextBytes > MAX_SCREENSHOT_BYTES) {
+    throw new BrowserCommandError("OUTPUT_TOO_LARGE", `Batch screenshots exceed the ${String(MAX_SCREENSHOT_BYTES)} byte native messaging limit.`);
+  }
+  return nextBytes;
+}
+
+export function applyBatchStepDefaults(command: string, rawParams: unknown, defaultTarget: TargetSelector, remainingMs: number | undefined): unknown {
   if (!isRecord(rawParams)) {
     return rawParams;
   }
 
   return {
     ...rawParams,
-    ...(commandAcceptsExtensionBatchDefaultTarget(command) && rawParams.target === undefined
-      ? { target: defaultTarget }
-      : {}),
+    ...(commandAcceptsExtensionBatchDefaultTarget(command) && rawParams.target === undefined ? { target: defaultTarget } : {}),
     ...timeoutOverride(command, rawParams.timeoutMs, remainingMs),
   };
 }
 
-function timeoutOverride(
-  command: string,
-  existingTimeout: unknown,
-  remainingMs: number | undefined,
-): { readonly timeoutMs?: number } {
+function timeoutOverride(command: string, existingTimeout: unknown, remainingMs: number | undefined): { readonly timeoutMs?: number } {
   if (remainingMs === undefined || !commandAcceptsBatchTimeout(command)) {
     return {};
   }
 
-  const boundedTimeout =
-    typeof existingTimeout === "number" ? Math.min(existingTimeout, remainingMs) : remainingMs;
+  const boundedTimeout = typeof existingTimeout === "number" ? Math.min(existingTimeout, remainingMs) : remainingMs;
   return { timeoutMs: Math.max(1, Math.floor(boundedTimeout)) };
 }
 
@@ -160,10 +158,7 @@ function assertBatchResultSize(result: BatchResult, maxResultBytes: number): voi
   const publicResult = publicBatchResult(result);
   const bytes = new TextEncoder().encode(JSON.stringify(publicResult)).byteLength;
   if (bytes > maxResultBytes) {
-    throw new BrowserCommandError(
-      "RESULT_TOO_LARGE",
-      `Batch result is ${bytes} bytes, exceeding the ${maxResultBytes} byte limit.`,
-    );
+    throw new BrowserCommandError("RESULT_TOO_LARGE", `Batch result is ${String(bytes)} bytes, exceeding the ${String(maxResultBytes)} byte limit.`);
   }
 }
 
@@ -190,8 +185,15 @@ function parseScreenshotStepResult(step: BatchStepResult): ScreenshotResult {
 }
 
 function stripScreenshotImageBytes(result: ScreenshotResult): Omit<ScreenshotResult, "imageBase64"> {
-  const { imageBase64: _imageBase64, ...publicResult } = result;
-  return publicResult;
+  return {
+    ...(result.target === undefined ? {} : { target: result.target }),
+    path: result.path,
+    format: result.format,
+    bytes: result.bytes,
+    ...(result.width === undefined ? {} : { width: result.width }),
+    ...(result.height === undefined ? {} : { height: result.height }),
+    activation: result.activation,
+  };
 }
 
 function firstFailedIndex(steps: readonly BatchStepResult[]): number | undefined {

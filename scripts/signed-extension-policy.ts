@@ -3,11 +3,11 @@ export const defaultSignedExtensionChannel = "unlisted";
 
 export type SignedExtensionChannel = "listed" | "unlisted";
 
-export type SignedExtensionSignerExpectation = {
+export interface SignedExtensionSignerExpectation {
   readonly trustRootsPem: string;
   readonly subjectIncludes: readonly string[];
   readonly issuerIncludes: readonly string[];
-};
+}
 
 export const mozillaAmoProductionSignerExpectation: SignedExtensionSignerExpectation = {
   // Mozilla's public AMO production signing root:
@@ -51,9 +51,5 @@ gchMof0tylgn
 -----END CERTIFICATE-----
 `,
   subjectIncludes: [],
-  issuerIncludes: [
-    "O=Mozilla Corporation",
-    "OU=Mozilla AMO Production Signing Service",
-    "CN=signingca1.addons.mozilla.org",
-  ],
+  issuerIncludes: ["O=Mozilla Corporation", "OU=Mozilla AMO Production Signing Service", "CN=signingca1.addons.mozilla.org"],
 };

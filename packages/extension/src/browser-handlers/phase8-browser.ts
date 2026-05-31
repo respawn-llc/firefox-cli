@@ -105,8 +105,7 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
   pdf: async (request) => {
     return createErrorResponseForRequest(request, {
       code: "UNSUPPORTED_CAPABILITY",
-      message:
-        "PDF export is unsupported because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.",
+      message: "PDF export is unsupported because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.",
     });
   },
   "set.viewport": async (request, adapter, context) => {

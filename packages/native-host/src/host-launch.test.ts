@@ -52,8 +52,6 @@ describe("detectNativeHostLaunch", () => {
   });
 
   it("does not treat extra CLI arguments as native-host mode", () => {
-    expect(
-      detectNativeHostLaunch([join("/tmp", `${NATIVE_HOST_NAME}.json`), FIREFOX_CLI_EXTENSION_ID, "doctor"]),
-    ).toEqual({ kind: "cli" });
+    expect(detectNativeHostLaunch([join("/tmp", `${NATIVE_HOST_NAME}.json`), FIREFOX_CLI_EXTENSION_ID, "doctor"])).toEqual({ kind: "cli" });
   });
 });

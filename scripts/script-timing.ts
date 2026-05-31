@@ -1,17 +1,17 @@
-export type PollUntilOptions = {
+export interface PollUntilOptions {
   readonly timeoutMs: number;
   readonly intervalMs: number;
   readonly timeoutMessage: () => string;
   readonly signal?: AbortSignal;
-};
+}
 
-export type WithTimeoutOptions = {
+export interface WithTimeoutOptions {
   readonly timeoutMs: number;
   readonly timeoutMessage: () => string;
   readonly onTimeout?: () => Promise<void> | void;
   readonly createError?: (message: string) => Error;
   readonly signal?: AbortSignal;
-};
+}
 
 export async function pollUntil<T>(check: () => Promise<T | false>, options: PollUntilOptions): Promise<T> {
   const startedAt = Date.now();
@@ -41,7 +41,7 @@ export async function withTimeout<T>(promise: Promise<T>, options: WithTimeoutOp
             const message = options.timeoutMessage();
             reject(options.createError?.(message) ?? new Error(message));
           } catch (error) {
-            reject(error);
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
         };
         timeout = setTimeout(() => {
@@ -68,10 +68,16 @@ export async function withTimeout<T>(promise: Promise<T>, options: WithTimeoutOp
   }
 }
 
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   throwIfAborted(signal);
   return new Promise((resolveSleep, rejectSleep) => {
-    let abortListener: (() => void) | undefined;
+    const abortListener: (() => void) | undefined =
+      signal === undefined
+        ? undefined
+        : () => {
+            cleanup();
+            rejectSleep(createAbortError());
+          };
     const cleanup = (): void => {
       clearTimeout(timeout);
       if (signal !== undefined && abortListener !== undefined) {
@@ -82,14 +88,10 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       cleanup();
       resolveSleep();
     }, ms);
-    if (signal === undefined) {
+    if (signal === undefined || abortListener === undefined) {
       return;
     }
 
-    abortListener = () => {
-      cleanup();
-      rejectSleep(createAbortError());
-    };
     signal.addEventListener("abort", abortListener, { once: true });
   });
 }

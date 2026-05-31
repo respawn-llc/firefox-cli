@@ -4,16 +4,14 @@ import { createTempDir } from "@firefox-cli/test-support";
 import { runProcess } from "../process-runner.js";
 import type { SignedExtensionSignerExpectation } from "../signed-extension-policy.js";
 
-export type TestSigningMaterial = {
+export interface TestSigningMaterial {
   readonly certificatePem: string;
   readonly certificatePath: string;
   readonly keyPath: string;
   readonly expectation: SignedExtensionSignerExpectation;
-};
+}
 
-export async function createTestSigningMaterial(
-  commonName = "firefox-cli test signer",
-): Promise<TestSigningMaterial> {
+export async function createTestSigningMaterial(commonName = "firefox-cli test signer"): Promise<TestSigningMaterial> {
   const root = await createTempDir("firefox-cli-signature-fixture");
   const certificatePath = join(root, "signer.pem");
   const keyPath = join(root, "signer.key");
@@ -49,31 +47,14 @@ export async function createTestSigningMaterial(
   };
 }
 
-export async function createPkcs7Signature(
-  signedContent: Buffer,
-  material: TestSigningMaterial,
-): Promise<Buffer> {
+export async function createPkcs7Signature(signedContent: Buffer, material: TestSigningMaterial): Promise<Buffer> {
   const root = await createTempDir("firefox-cli-pkcs7-fixture");
   const contentPath = join(root, "mozilla.sf");
   const signaturePath = join(root, "mozilla.rsa");
   await writeFile(contentPath, signedContent);
   await runProcess(
     "openssl",
-    [
-      "cms",
-      "-sign",
-      "-binary",
-      "-in",
-      contentPath,
-      "-signer",
-      material.certificatePath,
-      "-inkey",
-      material.keyPath,
-      "-outform",
-      "DER",
-      "-out",
-      signaturePath,
-    ],
+    ["cms", "-sign", "-binary", "-in", contentPath, "-signer", material.certificatePath, "-inkey", material.keyPath, "-outform", "DER", "-out", signaturePath],
     { label: "test PKCS7 signature generation", timeoutMs: 30_000 },
   );
   return readFile(signaturePath);

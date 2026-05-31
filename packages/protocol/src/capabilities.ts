@@ -9,8 +9,7 @@ export const gatedCapabilities: readonly GatedCapabilitySummary[] = [
   {
     command: "screenshot --full",
     status: "unsupported",
-    reason:
-      "full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
+    reason: "full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
   },
   {
     command: "close",
@@ -49,5 +48,5 @@ export const kernelCapabilities: readonly CapabilitySummary[] = [
     command,
     status: schema.status,
   })),
-  ...gatedCapabilities.map(({ cliCommands: _cliCommands, ...capability }) => capability),
+  ...gatedCapabilities.map(({ command, status, reason }) => ({ command, status, reason })),
 ];

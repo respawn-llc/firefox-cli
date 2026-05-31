@@ -63,13 +63,7 @@ export function unwrapAuthorizedMessage(
     return { ok: true, message: raw };
   }
 
-  if (
-    typeof raw === "object" &&
-    raw !== null &&
-    "authToken" in raw &&
-    "message" in raw &&
-    raw.authToken === expectedAuthToken
-  ) {
+  if (typeof raw === "object" && raw !== null && "authToken" in raw && "message" in raw && raw.authToken === expectedAuthToken) {
     return { ok: true, message: raw.message };
   }
 
@@ -103,13 +97,7 @@ export function getRequestId(raw: unknown): string {
     return raw.id;
   }
 
-  if (
-    "message" in raw &&
-    typeof raw.message === "object" &&
-    raw.message !== null &&
-    "id" in raw.message &&
-    typeof raw.message.id === "string"
-  ) {
+  if ("message" in raw && typeof raw.message === "object" && raw.message !== null && "id" in raw.message && typeof raw.message.id === "string") {
     return raw.message.id;
   }
 
@@ -122,7 +110,7 @@ export function getRequestIdFromFrameError(error: LocalIpcFrameError): string {
   }
 
   try {
-    return getRequestId(JSON.parse(error.rawLine.toString("utf8")) as unknown);
+    return getRequestId(JSON.parse(error.rawLine.toString("utf8")));
   } catch {
     return "invalid-request";
   }

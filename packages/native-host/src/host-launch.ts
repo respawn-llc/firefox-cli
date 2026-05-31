@@ -19,15 +19,12 @@ export type NativeHostLaunchDetection =
       readonly details: Record<string, unknown>;
     };
 
-export type NativeHostLaunchDetectionOptions = {
+export interface NativeHostLaunchDetectionOptions {
   readonly expectedExtensionId?: string;
   readonly nativeHostName?: string;
-};
+}
 
-export function detectNativeHostLaunch(
-  args: readonly string[],
-  options: NativeHostLaunchDetectionOptions = {},
-): NativeHostLaunchDetection {
+export function detectNativeHostLaunch(args: readonly string[], options: NativeHostLaunchDetectionOptions = {}): NativeHostLaunchDetection {
   const expectedExtensionId = options.expectedExtensionId ?? FIREFOX_CLI_EXTENSION_ID;
   const nativeHostName = options.nativeHostName ?? NATIVE_HOST_NAME;
 

@@ -4,9 +4,7 @@ import { createBrowserTargetContext } from "./target-context.js";
 
 describe("browser target context", () => {
   it("reuses one ordered window snapshot for repeated request-scoped resolutions", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
     const context = createBrowserTargetContext(adapter);
 
     await expect(context.getWindows()).resolves.toHaveLength(1);
@@ -19,9 +17,7 @@ describe("browser target context", () => {
   });
 
   it("requires explicit invalidation before observing post-mutation target state", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
     const context = createBrowserTargetContext(adapter);
 
     await expect(context.resolveTarget(undefined)).resolves.toMatchObject({ tab: { id: 101 } });

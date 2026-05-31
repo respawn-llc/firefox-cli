@@ -1,12 +1,6 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 
-export type ContentScriptDeliveryCause =
-  | "not-loaded"
-  | "restricted-page"
-  | "permission-denied"
-  | "tab-unavailable"
-  | "tab-discarded"
-  | "unknown";
+export type ContentScriptDeliveryCause = "not-loaded" | "restricted-page" | "permission-denied" | "tab-unavailable" | "tab-discarded" | "unknown";
 
 export type ContentScriptDeliveryStage = "send" | "inject" | "retry";
 
@@ -31,17 +25,17 @@ export class ContentScriptDeliveryError extends Error {
   }
 }
 
-export type ContentScriptDeliveryDependencies = {
+export interface ContentScriptDeliveryDependencies {
   readonly sendMessage: (tabId: number, request: RequestEnvelope) => Promise<unknown>;
   readonly injectContentScript: (tabId: number) => Promise<void>;
   readonly markInjected?: (tabId: number) => void;
-};
+}
 
-export type ContentScriptInjectionState = {
+export interface ContentScriptInjectionState {
   markInjected(tabId: number): void;
   forgetTab(tabId: number): void;
   hasInjected(tabId: number): boolean;
-};
+}
 
 export function createContentScriptInjectionState(): ContentScriptInjectionState {
   const injectedTabs = new Set<number>();
@@ -56,11 +50,7 @@ export function createContentScriptInjectionState(): ContentScriptInjectionState
   };
 }
 
-export async function deliverContentScriptRequest(
-  dependencies: ContentScriptDeliveryDependencies,
-  tabId: number,
-  request: RequestEnvelope,
-): Promise<unknown> {
+export async function deliverContentScriptRequest(dependencies: ContentScriptDeliveryDependencies, tabId: number, request: RequestEnvelope): Promise<unknown> {
   try {
     const response = await dependencies.sendMessage(tabId, request);
     dependencies.markInjected?.(tabId);
@@ -116,9 +106,7 @@ export function classifyContentScriptDeliveryError(error: unknown): ContentScrip
   ) {
     return "not-loaded";
   }
-  if (
-    includesAny(message, ["restricted firefox page", "restricted page", "privileged page", "cannot access"])
-  ) {
+  if (includesAny(message, ["restricted firefox page", "restricted page", "privileged page", "cannot access"])) {
     return "restricted-page";
   }
   if (includesAny(message, ["missing host permission", "permission denied", "not allowed"])) {

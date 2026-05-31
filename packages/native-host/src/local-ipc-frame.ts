@@ -1,4 +1,5 @@
 import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { createErrorResponse, type ProtocolError, type ResponseEnvelope } from "@firefox-cli/protocol";
 import { BufferCursor } from "./buffer-cursor.js";
 import { MAX_NATIVE_MESSAGE_OUTGOING_BYTES } from "./native-messaging-frame.js";
@@ -34,7 +35,7 @@ export function encodeLocalIpcJsonLine(message: unknown): Buffer {
   if (payload.byteLength > MAX_LOCAL_IPC_MESSAGE_BYTES) {
     throw new LocalIpcFrameError(
       "MESSAGE_TOO_LARGE",
-      `Local IPC message is ${payload.byteLength} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+      `Local IPC message is ${String(payload.byteLength)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
       {
         details: {
           actualBytes: payload.byteLength,
@@ -47,11 +48,7 @@ export function encodeLocalIpcJsonLine(message: unknown): Buffer {
   return Buffer.concat([payload, Buffer.from("\n")]);
 }
 
-export async function endSocketWithResponse(
-  socket: Socket,
-  response: unknown,
-  fallbackRequestId: string,
-): Promise<void> {
+export async function endSocketWithResponse(socket: Socket, response: unknown, fallbackRequestId: string): Promise<void> {
   try {
     await endSocketWithJsonLine(socket, response);
     return;
@@ -63,7 +60,7 @@ export async function endSocketWithResponse(
     const oversizedResponse = createLocalIpcErrorResponse(
       fallbackRequestId,
       "OUTPUT_TOO_LARGE",
-      `Local IPC response is ${error.details.actualBytes} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+      `Local IPC response is ${String(error.details.actualBytes)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
       error.details,
     );
     try {
@@ -78,7 +75,7 @@ export async function endSocketWithResponse(
         createLocalIpcErrorResponse(
           "invalid-request",
           "OUTPUT_TOO_LARGE",
-          `Local IPC response is ${error.details.actualBytes} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+          `Local IPC response is ${String(error.details.actualBytes)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
           error.details,
         ),
       );
@@ -108,11 +105,7 @@ export async function writeSocketJsonLine(socket: Socket, message: unknown): Pro
   });
 }
 
-export function endSocketWithResponseSync(
-  socket: Socket,
-  response: unknown,
-  fallbackRequestId: string,
-): void {
+export function endSocketWithResponseSync(socket: Socket, response: unknown, fallbackRequestId: string): void {
   try {
     endSocketWithLineSync(socket, encodeLocalIpcJsonLine(response));
     return;
@@ -124,7 +117,7 @@ export function endSocketWithResponseSync(
     const oversizedResponse = createLocalIpcErrorResponse(
       fallbackRequestId,
       "OUTPUT_TOO_LARGE",
-      `Local IPC response is ${error.details.actualBytes} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+      `Local IPC response is ${String(error.details.actualBytes)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
       error.details,
     );
     try {
@@ -140,7 +133,7 @@ export function endSocketWithResponseSync(
           createLocalIpcErrorResponse(
             "invalid-request",
             "OUTPUT_TOO_LARGE",
-            `Local IPC response is ${error.details.actualBytes} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+            `Local IPC response is ${String(error.details.actualBytes)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
             error.details,
           ),
         ),
@@ -150,7 +143,7 @@ export function endSocketWithResponseSync(
 }
 
 export async function readOneJsonLine(
-  socket: Socket,
+  socket: Duplex,
   options: {
     readonly timeoutMs?: number;
     readonly onFrameError?: (error: LocalIpcFrameError) => void;
@@ -178,7 +171,7 @@ export async function readOneJsonLine(
     const finish = (line: Buffer): void => {
       cleanup();
       try {
-        resolve(JSON.parse(line.toString("utf8")) as unknown);
+        resolve(JSON.parse(line.toString("utf8")));
       } catch (error) {
         fail(
           new LocalIpcFrameError("INVALID_JSON", "IPC message is not valid JSON.", {
@@ -196,7 +189,7 @@ export async function readOneJsonLine(
           fail(
             new LocalIpcFrameError(
               "MESSAGE_TOO_LARGE",
-              `Local IPC message is ${newlineIndex} bytes, exceeding the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit.`,
+              `Local IPC message is ${String(newlineIndex)} bytes, exceeding the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit.`,
               {
                 details: {
                   actualBytes: newlineIndex,
@@ -218,7 +211,7 @@ export async function readOneJsonLine(
         fail(
           new LocalIpcFrameError(
             "MESSAGE_TOO_LARGE",
-            `Local IPC message exceeds the ${MAX_LOCAL_IPC_MESSAGE_BYTES} byte limit before a newline delimiter.`,
+            `Local IPC message exceeds the ${String(MAX_LOCAL_IPC_MESSAGE_BYTES)} byte limit before a newline delimiter.`,
             {
               details: {
                 actualBytes: buffer.availableBytes,
@@ -258,9 +251,7 @@ export async function readOneJsonLine(
       timeout = setTimeout(() => {
         cleanup();
         socket.pause();
-        failWithMissingNewline(
-          `IPC message did not include a newline delimiter within ${options.timeoutMs}ms.`,
-        );
+        failWithMissingNewline(`IPC message did not include a newline delimiter within ${String(options.timeoutMs)}ms.`);
       }, options.timeoutMs);
     }
   });
@@ -282,12 +273,7 @@ export function frameErrorToProtocolError(error: LocalIpcFrameError): ProtocolEr
   };
 }
 
-export function createLocalIpcErrorResponse(
-  id: string,
-  code: ProtocolError["code"],
-  message: string,
-  details?: Record<string, unknown>,
-): ResponseEnvelope {
+export function createLocalIpcErrorResponse(id: string, code: ProtocolError["code"], message: string, details?: Record<string, unknown>): ResponseEnvelope {
   return createErrorResponse(id, {
     code,
     message,
@@ -319,5 +305,5 @@ function endSocketWithLineSync(socket: Socket, line: Buffer): void {
       socket.destroy();
     }
   }, 10);
-  destroyTimer.unref?.();
+  destroyTimer.unref();
 }

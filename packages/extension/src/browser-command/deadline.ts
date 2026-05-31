@@ -1,13 +1,13 @@
 import { BrowserCommandError } from "./errors.js";
 
-export type BrowserCommandDeadline = {
+export interface BrowserCommandDeadline {
   readonly timeoutMs: number;
   readonly elapsedMs: () => number;
   readonly remainingMs: () => number;
   throwIfExpired(message: () => string): void;
   run<T>(operation: Promise<T>, message: () => string): Promise<T>;
   sleep(intervalMs: number, message: () => string): Promise<void>;
-};
+}
 
 export function createBrowserCommandDeadline(timeoutMs: number): BrowserCommandDeadline {
   const startedAt = Date.now();
@@ -24,28 +24,20 @@ export function createBrowserCommandDeadline(timeoutMs: number): BrowserCommandD
     elapsedMs,
     remainingMs,
     throwIfExpired,
-    run: (operation, message) =>
+    run: async (operation, message) =>
       withBrowserCommandDeadline(operation, remainingMs(), () => {
         throwIfExpired(message);
         return message();
       }),
-    sleep: (intervalMs, message) =>
-      withBrowserCommandDeadline(
-        new Promise<void>((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs()))),
-        remainingMs(),
-        () => {
-          throwIfExpired(message);
-          return message();
-        },
-      ),
+    sleep: async (intervalMs, message) =>
+      withBrowserCommandDeadline(new Promise<void>((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs()))), remainingMs(), () => {
+        throwIfExpired(message);
+        return message();
+      }),
   };
 }
 
-export async function withBrowserCommandDeadline<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  message: () => string,
-): Promise<T> {
+export async function withBrowserCommandDeadline<T>(operation: Promise<T>, timeoutMs: number, message: () => string): Promise<T> {
   if (timeoutMs <= 0) {
     throw new BrowserCommandError("TIMEOUT", message());
   }

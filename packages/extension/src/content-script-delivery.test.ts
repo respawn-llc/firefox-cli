@@ -12,7 +12,7 @@ describe("content script delivery", () => {
       {
         sendMessage: async () => {
           sends += 1;
-          events.push(`send:${sends}`);
+          events.push(`send:${String(sends)}`);
           if (sends === 1) {
             throw new Error("Could not establish connection. Receiving end does not exist.");
           }

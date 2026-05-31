@@ -16,9 +16,11 @@ describe("Marionette client timing", () => {
     }
     await Promise.all(
       servers.splice(0).map(
-        (server) =>
+        async (server) =>
           new Promise<void>((resolve) => {
-            server.close(() => resolve());
+            server.close(() => {
+              resolve();
+            });
           }),
       ),
     );
@@ -80,7 +82,9 @@ async function startMarionetteServer(): Promise<{
   });
   servers.push(server);
   await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(0, "127.0.0.1", () => {
+      resolve();
+    });
   });
   const address = server.address();
   if (address === null || typeof address === "string") {
@@ -91,5 +95,5 @@ async function startMarionetteServer(): Promise<{
 
 function marionetteFrame(message: unknown): string {
   const payload = JSON.stringify(message);
-  return `${Buffer.byteLength(payload)}:${payload}`;
+  return `${String(Buffer.byteLength(payload))}:${payload}`;
 }

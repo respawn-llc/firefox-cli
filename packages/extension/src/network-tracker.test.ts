@@ -32,9 +32,7 @@ describe("NetworkRequestTracker", () => {
     tracker.clear({ tabId: 101 });
 
     expect(tracker.list({ tabId: 101 })).toEqual([]);
-    expect(tracker.list({ tabId: 202 })).toEqual([
-      { id: "tab-2", url: "https://other.test/api", statusCode: 204 },
-    ]);
+    expect(tracker.list({ tabId: 202 })).toEqual([{ id: "tab-2", url: "https://other.test/api", statusCode: 204 }]);
   });
 
   it("ignores non-tab and internal browser requests", () => {
@@ -114,18 +112,14 @@ describe("NetworkRequestTracker", () => {
       tracker.recordEnd({ requestId });
     }
 
-    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/api?x=1" })).toEqual([
-      { id: "query", url: "https://example.test/api?x=1" },
-    ]);
+    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/api?x=1" })).toEqual([{ id: "query", url: "https://example.test/api?x=1" }]);
     expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/file+name[1].json" })).toEqual([
       { id: "meta", url: "https://example.test/file+name[1].json" },
     ]);
 
     tracker.clear({ tabId: 101, urlGlob: "https://example.test/api*" });
 
-    expect(tracker.list({ tabId: 101 })).toEqual([
-      { id: "meta", url: "https://example.test/file+name[1].json" },
-    ]);
+    expect(tracker.list({ tabId: 101 })).toEqual([{ id: "meta", url: "https://example.test/file+name[1].json" }]);
   });
 
   it("prunes all network state for removed tabs", () => {

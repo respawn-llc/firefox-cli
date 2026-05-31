@@ -2,32 +2,17 @@ import { createHash } from "node:crypto";
 import { relative, resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
 import { resolvePackagedBinary, type PlatformInput } from "@firefox-cli/native-host";
-import {
-  packagedSignedExtensionProvenanceFile,
-  readSignedExtensionProvenance,
-} from "./extension-artifact-provenance.js";
-import {
-  extensionManifestSchema,
-  parseJsonManifestContent,
-  packageManifestSchema,
-} from "./manifest-validation.js";
+import { packagedSignedExtensionProvenanceFile, readSignedExtensionProvenance } from "./extension-artifact-provenance.js";
+import { extensionManifestSchema, parseJsonManifestContent, packageManifestSchema } from "./manifest-validation.js";
 import { verifyExpectedExtensionManifest } from "./extension-manifest-check.js";
-import {
-  readDevelopmentExtensionPayload,
-  verifyExtensionBundlePayload,
-  verifyPayloadMatchesDevelopmentBundle,
-} from "./extension-payload-check.js";
+import { readDevelopmentExtensionPayload, verifyExtensionBundlePayload, verifyPayloadMatchesDevelopmentBundle } from "./extension-payload-check.js";
 import { readOptionalRegularFileUnder, readRegularFileUnder } from "./safe-extension-files.js";
 import { verifySignedExtensionArtifactTrust } from "./signed-extension-artifact.js";
 import { packagedSignedExtensionXpiFile, type SignedExtensionChannel } from "./signed-extension-policy.js";
 import type { SignedExtensionSignatureVerifier } from "./signed-extension-signature.js";
 import { readZipArchive } from "./zip-archive.js";
 
-const SIGNED_EXTENSION_REQUIRED_METADATA = [
-  "META-INF/manifest.mf",
-  "META-INF/mozilla.sf",
-  "META-INF/mozilla.rsa",
-] as const;
+const SIGNED_EXTENSION_REQUIRED_METADATA = ["META-INF/manifest.mf", "META-INF/mozilla.sf", "META-INF/mozilla.rsa"] as const;
 const SIGNED_EXTENSION_OPTIONAL_COSE_METADATA = ["META-INF/cose.manifest", "META-INF/cose.sig"] as const;
 const SIGNED_EXTENSION_DIGEST_HEADERS = [
   { algorithm: "sha256", headers: ["sha256-digest", "sha-256-digest"] },
@@ -40,27 +25,21 @@ const SIGNED_EXTENSION_MANIFEST_DIGEST_HEADERS = [
   { algorithm: "sha512", headers: ["sha512-digest-manifest", "sha-512-digest-manifest"] },
 ] as const;
 
-export type PackageCheckOptions = {
+export interface PackageCheckOptions {
   readonly packageRoot: string;
   readonly platform?: PlatformInput;
   readonly requireSignedXpi?: boolean;
   readonly signedExtensionChannel?: SignedExtensionChannel;
   readonly signedExtensionSignatureVerifier?: SignedExtensionSignatureVerifier;
-};
+}
 
 export async function verifyPackageLayout(options: PackageCheckOptions): Promise<readonly string[]> {
   const artifacts = ["package.json", "README.md", "LICENSE", "bin/firefox-cli.js", "lib/platform-binary.js"];
 
-  await Promise.all(
-    artifacts.map((artifact) => readRegularFileUnder(options.packageRoot, artifact, artifact)),
-  );
+  await Promise.all(artifacts.map(async (artifact) => readRegularFileUnder(options.packageRoot, artifact, artifact)));
   await verifyPackageJson(options.packageRoot);
   const binaryPath = await resolvePackagedBinary(options.packageRoot, options.platform);
-  await readRegularFileUnder(
-    options.packageRoot,
-    relative(options.packageRoot, binaryPath),
-    "platform binary",
-  );
+  await readRegularFileUnder(options.packageRoot, relative(options.packageRoot, binaryPath), "platform binary");
   await verifyExtensionArtifact(options);
 
   return artifacts;
@@ -75,7 +54,7 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
   );
 
   if (packageJson.name !== "firefox-cli") {
-    throw new Error(`Expected package name firefox-cli, received ${packageJson.name ?? "<missing>"}`);
+    throw new Error(`Expected package name firefox-cli, received ${packageJson.name}`);
   }
   if (packageJson.version !== rootPackage.version) {
     throw new Error(`Expected package version ${rootPackage.version}, received ${packageJson.version}`);
@@ -87,23 +66,15 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
 
 async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<void> {
   const signedXpiPath = resolve(options.packageRoot, `extension/${packagedSignedExtensionXpiFile}`);
-  const signedXpi = await readOptionalRegularFileUnder(
-    options.packageRoot,
-    `extension/${packagedSignedExtensionXpiFile}`,
-    "signed extension XPI",
-  );
+  const signedXpi = await readOptionalRegularFileUnder(options.packageRoot, `extension/${packagedSignedExtensionXpiFile}`, "signed extension XPI");
 
   if (signedXpi !== undefined) {
     await verifySignedExtensionArtifact({
       packageRoot: options.packageRoot,
       artifactPath: signedXpiPath,
       archiveData: signedXpi,
-      ...(options.signedExtensionChannel === undefined
-        ? {}
-        : { expectedChannel: options.signedExtensionChannel }),
-      ...(options.signedExtensionSignatureVerifier === undefined
-        ? {}
-        : { verifySignature: options.signedExtensionSignatureVerifier }),
+      ...(options.signedExtensionChannel === undefined ? {} : { expectedChannel: options.signedExtensionChannel }),
+      ...(options.signedExtensionSignatureVerifier === undefined ? {} : { verifySignature: options.signedExtensionSignatureVerifier }),
     });
     return;
   }
@@ -114,13 +85,7 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
 
   const developmentPayload = await readDevelopmentExtensionPayload(options.packageRoot);
   const manifest = parseJsonManifestContent(
-    (
-      await readRegularFileUnder(
-        options.packageRoot,
-        "extension/development/manifest.json",
-        "development extension manifest",
-      )
-    ).toString("utf8"),
+    (await readRegularFileUnder(options.packageRoot, "extension/development/manifest.json", "development extension manifest")).toString("utf8"),
     "development extension manifest",
     resolve(options.packageRoot, "extension/development/manifest.json"),
     extensionManifestSchema,
@@ -186,10 +151,7 @@ async function verifySignedExtensionArtifact(input: {
 }
 
 function verifySignedExtensionMetadata(entries: ReadonlyMap<string, Buffer>): void {
-  const allowedEntries: ReadonlySet<string> = new Set([
-    ...SIGNED_EXTENSION_REQUIRED_METADATA,
-    ...SIGNED_EXTENSION_OPTIONAL_COSE_METADATA,
-  ]);
+  const allowedEntries: ReadonlySet<string> = new Set([...SIGNED_EXTENSION_REQUIRED_METADATA, ...SIGNED_EXTENSION_OPTIONAL_COSE_METADATA]);
   if (entries.size === 0) {
     throw new Error("Expected signed extension XPI signature metadata under META-INF");
   }
@@ -216,16 +178,13 @@ function verifySignedExtensionMetadata(entries: ReadonlyMap<string, Buffer>): vo
   }
   for (const entry of SIGNED_EXTENSION_OPTIONAL_COSE_METADATA) {
     const data = entries.get(entry);
-    if (data !== undefined && data.length === 0) {
+    if (data?.length === 0) {
       throw new Error(`Expected non-empty signed extension metadata entry: ${entry}`);
     }
   }
 }
 
-function verifySignedExtensionDigests(
-  signatureEntries: ReadonlyMap<string, Buffer>,
-  xpiPayload: ReadonlyMap<string, Buffer>,
-): void {
+function verifySignedExtensionDigests(signatureEntries: ReadonlyMap<string, Buffer>, xpiPayload: ReadonlyMap<string, Buffer>): void {
   const manifestFile = getSignatureEntry(signatureEntries, "META-INF/manifest.mf");
   const signatureFile = getSignatureEntry(signatureEntries, "META-INF/mozilla.sf");
   const rsaSignature = getSignatureEntry(signatureEntries, "META-INF/mozilla.rsa");
@@ -264,29 +223,17 @@ function verifySignedExtensionDigests(
 
   const unexpectedDigestEntries = [...manifestEntries.keys()].filter((file) => !signableEntries.has(file));
   if (unexpectedDigestEntries.length > 0) {
-    throw new Error(
-      `Signed extension metadata contains digest entries outside the package payload: ${unexpectedDigestEntries.join(
-        ", ",
-      )}`,
-    );
+    throw new Error(`Signed extension metadata contains digest entries outside the package payload: ${unexpectedDigestEntries.join(", ")}`);
   }
 
   const signatureMainSection = parseJarManifest(signatureFile, "META-INF/mozilla.sf")[0];
   if (signatureMainSection === undefined) {
     throw new Error("Expected signed extension signature file metadata");
   }
-  verifyDigestHeader(
-    signatureMainSection,
-    manifestFile,
-    "META-INF/manifest.mf",
-    SIGNED_EXTENSION_MANIFEST_DIGEST_HEADERS,
-  );
+  verifyDigestHeader(signatureMainSection, manifestFile, "META-INF/manifest.mf", SIGNED_EXTENSION_MANIFEST_DIGEST_HEADERS);
 }
 
-function getSignatureEntry(
-  entries: ReadonlyMap<string, Buffer>,
-  name: (typeof SIGNED_EXTENSION_REQUIRED_METADATA)[number],
-): Buffer {
+function getSignatureEntry(entries: ReadonlyMap<string, Buffer>, name: (typeof SIGNED_EXTENSION_REQUIRED_METADATA)[number]): Buffer {
   const entry = entries.get(name);
   if (entry === undefined) {
     throw new Error(`Expected signed extension metadata entry: ${name}`);

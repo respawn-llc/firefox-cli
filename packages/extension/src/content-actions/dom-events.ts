@@ -2,7 +2,8 @@ import type { ActionOptions } from "../content-action-types.js";
 import { dispatchDragEventWithDataTransfer } from "./dom-compat.js";
 
 export function clickElement(element: Element): void {
-  if ("click" in element && typeof element.click === "function") {
+  const view = requireElementWindow(element);
+  if (element instanceof view.HTMLElement) {
     element.click();
     return;
   }
@@ -11,7 +12,8 @@ export function clickElement(element: Element): void {
 }
 
 export function focusElement(element: Element): void {
-  if ("focus" in element && typeof element.focus === "function") {
+  const view = requireElementWindow(element);
+  if (element instanceof view.HTMLElement || element instanceof view.SVGElement) {
     element.focus();
   }
 }
@@ -33,16 +35,12 @@ export function dispatchChangeEvent(element: Element): void {
 
 export function dispatchBeforeInput(options: ActionOptions, element: Element, text: string): void {
   const view = requireElementWindow(element);
-  const InputEventConstructor = view.InputEvent;
-  const event =
-    InputEventConstructor === undefined
-      ? new view.Event("beforeinput", { bubbles: true, cancelable: true })
-      : new InputEventConstructor("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          inputType: "insertText",
-          data: text,
-        });
+  const event = new view.InputEvent("beforeinput", {
+    bubbles: true,
+    cancelable: true,
+    inputType: "insertText",
+    data: text,
+  });
   if (!element.dispatchEvent(event)) {
     throw options.createError("ACTION_REJECTED", "Text insertion was rejected by the page.");
   }

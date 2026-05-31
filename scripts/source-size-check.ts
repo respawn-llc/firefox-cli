@@ -4,29 +4,29 @@ import { pathToFileURL } from "node:url";
 
 export type SourceFileKind = "production" | "test-support" | "ignored";
 
-export type SourceSizePolicy = {
+export interface SourceSizePolicy {
   readonly productionMaxLines: number;
   readonly testSupportReviewTargetLines: number;
-};
+}
 
-export type SourceFileSize = {
+export interface SourceFileSize {
   readonly path: string;
   readonly lines: number;
   readonly kind: SourceFileKind;
-};
+}
 
-export type SourceSizeReport = {
+export interface SourceSizeReport {
   readonly checkedFiles: number;
   readonly productionViolations: readonly SourceFileSize[];
   readonly oversizedTestSupport: readonly SourceFileSize[];
-};
+}
 
-export type SourceSizeCheckOptions = {
+export interface SourceSizeCheckOptions {
   readonly rootDir?: string;
   readonly files?: readonly SourceFileSize[];
   readonly policy?: SourceSizePolicy;
   readonly write?: (message: string) => void;
-};
+}
 
 export const sourceSizePolicy: SourceSizePolicy = {
   productionMaxLines: 800,
@@ -47,9 +47,7 @@ export async function runSourceSizeCheck(options: SourceSizeCheckOptions = {}): 
     for (const file of report.productionViolations) {
       write(`- ${file.path}: ${String(file.lines)} lines`);
     }
-    throw new Error(
-      `Production source size check failed for ${String(report.productionViolations.length)} file(s).`,
-    );
+    throw new Error(`Production source size check failed for ${String(report.productionViolations.length)} file(s).`);
   }
 
   write(
@@ -62,19 +60,12 @@ export async function runSourceSizeCheck(options: SourceSizeCheckOptions = {}): 
   return report;
 }
 
-export function evaluateSourceSizes(
-  files: readonly SourceFileSize[],
-  policy: SourceSizePolicy = sourceSizePolicy,
-): SourceSizeReport {
+export function evaluateSourceSizes(files: readonly SourceFileSize[], policy: SourceSizePolicy = sourceSizePolicy): SourceSizeReport {
   const checkedFiles = files.filter((file) => file.kind !== "ignored");
   return {
     checkedFiles: checkedFiles.length,
-    productionViolations: checkedFiles
-      .filter((file) => file.kind === "production" && file.lines > policy.productionMaxLines)
-      .sort(compareFiles),
-    oversizedTestSupport: checkedFiles
-      .filter((file) => file.kind === "test-support" && file.lines > policy.testSupportReviewTargetLines)
-      .sort(compareFiles),
+    productionViolations: checkedFiles.filter((file) => file.kind === "production" && file.lines > policy.productionMaxLines).sort(compareFiles),
+    oversizedTestSupport: checkedFiles.filter((file) => file.kind === "test-support" && file.lines > policy.testSupportReviewTargetLines).sort(compareFiles),
   };
 }
 
@@ -86,11 +77,7 @@ export function classifySourceFile(path: string): SourceFileKind {
   if (!normalized.startsWith("packages/") && !normalized.startsWith("scripts/")) {
     return "ignored";
   }
-  if (
-    normalized.includes("/dist/") ||
-    normalized.includes("/node_modules/") ||
-    normalized.includes("/.git/")
-  ) {
+  if (normalized.includes("/dist/") || normalized.includes("/node_modules/") || normalized.includes("/.git/")) {
     return "ignored";
   }
   if (
@@ -105,7 +92,7 @@ export function classifySourceFile(path: string): SourceFileKind {
 }
 
 async function collectSourceFileSizes(rootDir: string): Promise<readonly SourceFileSize[]> {
-  const files = await Promise.all(sourceRoots.map((sourceRoot) => collectSourceRoot(rootDir, sourceRoot)));
+  const files = await Promise.all(sourceRoots.map(async (sourceRoot) => collectSourceRoot(rootDir, sourceRoot)));
   return files.flat();
 }
 

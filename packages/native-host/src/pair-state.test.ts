@@ -75,13 +75,7 @@ describe("pair state", () => {
       code: "HOST_ID_MISMATCH",
       message: "Native host identity changed after approval.",
     });
-    expect(
-      verifyPairToken(
-        approval.state,
-        { ...hostIdentity, extensionId: "other@example.invalid" },
-        approval.token,
-      ),
-    ).toEqual({
+    expect(verifyPairToken(approval.state, { ...hostIdentity, extensionId: "other@example.invalid" }, approval.token)).toEqual({
       ok: false,
       code: "EXTENSION_ID_MISMATCH",
       message: "Extension identity does not match the approved pair state.",
@@ -123,9 +117,9 @@ describe("pair state", () => {
     await expect(store.read()).resolves.toBeNull();
     await store.write(approval.state);
     await expect(store.read()).resolves.toEqual(approval.state);
-    await expect(
-      readFile(join(rootDir, "Library/Application Support/firefox-cli/pair-state.json"), "utf8"),
-    ).resolves.toBe(`${JSON.stringify(approval.state, null, 2)}\n`);
+    await expect(readFile(join(rootDir, "Library/Application Support/firefox-cli/pair-state.json"), "utf8")).resolves.toBe(
+      `${JSON.stringify(approval.state, null, 2)}\n`,
+    );
 
     if (process.platform !== "win32") {
       const mode = (await stat(store.filePath)).mode & 0o777;
@@ -219,9 +213,9 @@ describe("pair state", () => {
       extensionId: FIREFOX_CLI_EXTENSION_ID,
     });
     expect(second).toEqual(first);
-    await expect(
-      readFile(join(rootDir, "Library/Application Support/firefox-cli/host-identity.json"), "utf8"),
-    ).resolves.toBe(`${JSON.stringify(first, null, 2)}\n`);
+    await expect(readFile(join(rootDir, "Library/Application Support/firefox-cli/host-identity.json"), "utf8")).resolves.toBe(
+      `${JSON.stringify(first, null, 2)}\n`,
+    );
 
     if (process.platform !== "win32") {
       const mode = (await stat(store.filePath)).mode & 0o777;
@@ -241,14 +235,14 @@ describe("pair state", () => {
         extensionId: FIREFOX_CLI_EXTENSION_ID,
         generateId: () => {
           nextId += 1;
-          return `host-${nextId}`;
+          return `host-${String(nextId)}`;
         },
       }),
       getOrCreateHostIdentity(store, {
         extensionId: FIREFOX_CLI_EXTENSION_ID,
         generateId: () => {
           nextId += 1;
-          return `host-${nextId}`;
+          return `host-${String(nextId)}`;
         },
       }),
     ]);

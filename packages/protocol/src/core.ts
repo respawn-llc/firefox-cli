@@ -55,14 +55,12 @@ export const protocolErrorSchema = z.object({
 });
 export type ProtocolError = z.infer<typeof protocolErrorSchema>;
 
-export type ParseResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: ProtocolError };
+export type ParseResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ProtocolError };
 
-export type ProtocolVersionRange = {
+export interface ProtocolVersionRange {
   readonly protocolMin: number;
   readonly protocolMax: number;
-};
+}
 
 export const localProtocolVersionRange: ProtocolVersionRange = {
   protocolMin: PROTOCOL_MIN_VERSION,
@@ -99,7 +97,7 @@ export const componentIdentitySchema = z
   .superRefine((identity, context) => {
     if (identity.protocolMin > identity.protocolMax) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "protocolMin cannot be greater than protocolMax.",
         path: ["protocolMin"],
       });
@@ -128,21 +126,21 @@ export const helloResultSchema = z
       .superRefine((pairing, context) => {
         if (pairing.approved && pairing.status !== undefined && pairing.status !== "approved") {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Approved pairing cannot have an invalid or not-approved status.",
             path: ["status"],
           });
         }
         if (!pairing.approved && pairing.status === "approved") {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Unapproved pairing cannot have approved status.",
             path: ["status"],
           });
         }
         if (pairing.status === "invalid-pair-state" && pairing.message === undefined) {
           context.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: "Invalid pair-state status requires a message.",
             path: ["message"],
           });
@@ -153,7 +151,7 @@ export const helloResultSchema = z
   .superRefine((result, context) => {
     if (!isProtocolVersionInRange(result.negotiatedProtocolVersion, result.peer)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Negotiated protocol version must be within the peer protocol range.",
         path: ["negotiatedProtocolVersion"],
       });
@@ -174,11 +172,7 @@ export function encodedByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-export function createLocalComponentIdentity(
-  component: Component,
-  productVersion: string,
-  features: readonly string[] = [],
-): ComponentIdentity {
+export function createLocalComponentIdentity(component: Component, productVersion: string, features: readonly string[] = []): ComponentIdentity {
   return {
     component,
     productName: PRODUCT_NAME,
@@ -193,10 +187,7 @@ export function isProtocolVersionInRange(protocolVersion: number, range: Protoco
   return protocolVersion >= range.protocolMin && protocolVersion <= range.protocolMax;
 }
 
-export function negotiateProtocolVersion(
-  local: ProtocolVersionRange,
-  peer: ProtocolVersionRange,
-): ParseResult<number> {
+export function negotiateProtocolVersion(local: ProtocolVersionRange, peer: ProtocolVersionRange): ParseResult<number> {
   const protocolMin = Math.max(local.protocolMin, peer.protocolMin);
   const protocolMax = Math.min(local.protocolMax, peer.protocolMax);
 
@@ -210,10 +201,7 @@ export function negotiateProtocolVersion(
   return { ok: true, value: protocolMax };
 }
 
-export function createProtocolVersionMismatchError(
-  local: ProtocolVersionRange,
-  peer: ProtocolVersionRange,
-): ProtocolError {
+export function createProtocolVersionMismatchError(local: ProtocolVersionRange, peer: ProtocolVersionRange): ProtocolError {
   return {
     code: "VERSION_MISMATCH",
     message: "Protocol version ranges do not overlap.",

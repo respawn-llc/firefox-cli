@@ -12,11 +12,11 @@ export type ActionErrorCode =
   | "INVALID_KEY"
   | "OPTION_NOT_FOUND";
 
-export type ElementResolution = {
+export interface ElementResolution {
   readonly element: Element;
   readonly ref?: string;
   readonly generationId?: string;
-};
+}
 
 export type EditableValueElement = HTMLElement & {
   value: string;
@@ -25,7 +25,7 @@ export type EditableValueElement = HTMLElement & {
   setSelectionRange?(start: number, end: number): void;
 };
 
-export type ContentActionServices = {
+export interface ContentActionServices {
   readonly document: Document;
   readonly now: number;
   readonly elementResolver?: ContentElementResolver;
@@ -34,21 +34,18 @@ export type ContentActionServices = {
     options: { readonly generationId?: string; readonly now: number },
   ) => { readonly element: Element; readonly generationId: string };
   readonly queryElement: (selector: string) => Element | null;
-  readonly summarizeElement: (
-    element: Element,
-    options?: { readonly ref: string; readonly generationId: string },
-  ) => WaitElementSummary;
+  readonly summarizeElement: (element: Element, options?: { readonly ref: string; readonly generationId: string }) => WaitElementSummary;
   readonly isVisible: (element: Element) => boolean;
   readonly isDisabled: (element: Element) => boolean;
   readonly createError: (code: ActionErrorCode, message: string) => Error;
-};
+}
 
 export type ActionOptions<C extends ActionKind = ActionKind> = ContentActionServices & {
   readonly command: C;
   readonly params: CommandParams<C>;
 };
 
-export type ContentActionResult = {
+export interface ContentActionResult {
   readonly action: ActionKind;
   readonly ok: true;
   readonly element?: WaitElementSummary;
@@ -58,4 +55,4 @@ export type ContentActionResult = {
     readonly x: number;
     readonly y: number;
   };
-};
+}

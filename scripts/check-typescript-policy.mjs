@@ -16,13 +16,7 @@ export async function checkTypeScriptPolicy(root = rootDefault) {
   return errors;
 }
 function hasExplicitAny(text, file) {
-  const sourceFile = ts.createSourceFile(
-    file,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    extname(file) === ".tsx" ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, extname(file) === ".tsx" ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   let found = false;
   visit(sourceFile);
   return found;

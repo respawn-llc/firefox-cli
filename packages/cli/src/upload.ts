@@ -1,31 +1,20 @@
 import { open as openFile, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import {
-  MAX_UPLOAD_FILE_BYTES,
-  MAX_UPLOAD_FILES,
-  MAX_UPLOAD_TOTAL_BYTES,
-  type UploadParams,
-} from "@firefox-cli/protocol";
-import {
-  optionalStringOption,
-  optionalTarget,
-  parseElementTarget,
-  parsePositionalsAndOptions,
-  parseTargetOptions,
-} from "./parse.js";
+import { MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_FILES, MAX_UPLOAD_TOTAL_BYTES, type UploadParams } from "@firefox-cli/protocol";
+import { optionalStringOption, optionalTarget, parseElementTarget, parsePositionalsAndOptions, parseTargetOptions } from "./parse.js";
 import { CliUsageError, type CliDependencies, type UploadBudget, type UploadReadLimits } from "./types.js";
 
-export type ParsedUploadArguments = {
+export interface ParsedUploadArguments {
   readonly elementTarget: string;
   readonly paths: readonly string[];
   readonly optionArgs: readonly string[];
-};
+}
 
-type UploadFilePlan = {
+interface UploadFilePlan {
   readonly inputPath: string;
   readonly absolutePath: string;
   readonly size: number;
-};
+}
 
 export function parseUploadArguments(args: readonly string[]): ParsedUploadArguments {
   const parsed = parsePositionalsAndOptions(args, { preserveUnknownOptions: true });
@@ -34,7 +23,7 @@ export function parseUploadArguments(args: readonly string[]): ParsedUploadArgum
     throw new CliUsageError("Missing upload selector/ref or file path.");
   }
   if (paths.length > MAX_UPLOAD_FILES) {
-    throw new CliUsageError(`Upload accepts at most ${MAX_UPLOAD_FILES} files.`);
+    throw new CliUsageError(`Upload accepts at most ${String(MAX_UPLOAD_FILES)} files.`);
   }
 
   return {
@@ -44,11 +33,7 @@ export function parseUploadArguments(args: readonly string[]): ParsedUploadArgum
   };
 }
 
-export async function createUploadParams(
-  parsed: ParsedUploadArguments,
-  dependencies: CliDependencies,
-  uploadBudget: UploadBudget,
-): Promise<UploadParams> {
+export async function createUploadParams(parsed: ParsedUploadArguments, dependencies: CliDependencies, uploadBudget: UploadBudget): Promise<UploadParams> {
   const files = await readUploadFiles(parsed.paths, dependencies, uploadBudget);
   return {
     ...parseElementTarget(parsed.elementTarget),
@@ -62,11 +47,7 @@ export function createUploadBudget(): UploadBudget {
   return { bytes: 0 };
 }
 
-async function readUploadFiles(
-  paths: readonly string[],
-  dependencies: CliDependencies,
-  uploadBudget: UploadBudget,
-): Promise<UploadParams["files"]> {
+async function readUploadFiles(paths: readonly string[], dependencies: CliDependencies, uploadBudget: UploadBudget): Promise<UploadParams["files"]> {
   const plans = await statUploadFiles(paths, dependencies);
   assertUploadPlanBudget(plans, uploadBudget.bytes);
 
@@ -93,12 +74,9 @@ async function readUploadFiles(
   return files;
 }
 
-export async function statUploadFiles(
-  paths: readonly string[],
-  dependencies: CliDependencies,
-): Promise<readonly UploadFilePlan[]> {
+export async function statUploadFiles(paths: readonly string[], dependencies: CliDependencies): Promise<readonly UploadFilePlan[]> {
   if (paths.length > MAX_UPLOAD_FILES) {
-    throw new CliUsageError(`Upload accepts at most ${MAX_UPLOAD_FILES} files.`);
+    throw new CliUsageError(`Upload accepts at most ${String(MAX_UPLOAD_FILES)} files.`);
   }
 
   return Promise.all(
@@ -129,10 +107,7 @@ function assertUploadPlanBudget(plans: readonly UploadFilePlan[], existingBytes:
   }
 }
 
-async function statUploadPath(
-  absolutePath: string,
-  dependencies: CliDependencies,
-): Promise<{ readonly size: number; readonly isFile: boolean }> {
+async function statUploadPath(absolutePath: string, dependencies: CliDependencies): Promise<{ readonly size: number; readonly isFile: boolean }> {
   if (dependencies.statUploadFile !== undefined) {
     return dependencies.statUploadFile(absolutePath);
   }
@@ -144,11 +119,7 @@ async function statUploadPath(
   };
 }
 
-async function readUploadFileBytes(
-  plan: UploadFilePlan,
-  dependencies: CliDependencies,
-  limits: UploadReadLimits,
-): Promise<Uint8Array> {
+async function readUploadFileBytes(plan: UploadFilePlan, dependencies: CliDependencies, limits: UploadReadLimits): Promise<Uint8Array> {
   if (dependencies.readUploadFile !== undefined) {
     return dependencies.readUploadFile(plan.absolutePath, limits);
   }
@@ -158,7 +129,7 @@ async function readUploadFileBytes(
   let totalBytes = 0;
   try {
     for await (const chunk of handle.createReadStream({ highWaterMark: 64 * 1024 })) {
-      const bytes = Buffer.from(chunk);
+      const bytes = uploadChunkToBuffer(chunk);
       totalBytes += bytes.byteLength;
       if (totalBytes > limits.maxFileBytes) {
         throw uploadFileTooLarge(plan.inputPath, totalBytes);
@@ -175,14 +146,20 @@ async function readUploadFileBytes(
   return Buffer.concat(chunks, totalBytes);
 }
 
+function uploadChunkToBuffer(chunk: unknown): Buffer {
+  if (Buffer.isBuffer(chunk)) {
+    return chunk;
+  }
+  if (chunk instanceof Uint8Array || typeof chunk === "string") {
+    return Buffer.from(chunk);
+  }
+  throw new CliUsageError("Upload file stream yielded an unsupported chunk.");
+}
+
 export function uploadFileTooLarge(path: string, actualBytes: number): CliUsageError {
-  return new CliUsageError(
-    `Upload file exceeds ${MAX_UPLOAD_FILE_BYTES} byte per-file limit: ${path} (${actualBytes} bytes).`,
-  );
+  return new CliUsageError(`Upload file exceeds ${String(MAX_UPLOAD_FILE_BYTES)} byte per-file limit: ${path} (${String(actualBytes)} bytes).`);
 }
 
 export function uploadTotalTooLarge(actualBytes: number): CliUsageError {
-  return new CliUsageError(
-    `Upload files exceed ${MAX_UPLOAD_TOTAL_BYTES} byte total limit (${actualBytes} bytes).`,
-  );
+  return new CliUsageError(`Upload files exceed ${String(MAX_UPLOAD_TOTAL_BYTES)} byte total limit (${String(actualBytes)} bytes).`);
 }

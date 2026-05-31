@@ -3,96 +3,21 @@ import {
   createErrorResponseForRequest,
   createOkResponse,
   type EvalResult,
+  type RequestEnvelope,
+  type ResponseEnvelope,
   type WaitResult,
 } from "@firefox-cli/protocol";
 import { delay } from "../browser-command/async.js";
-import {
-  DEFAULT_EVAL_TIMEOUT_MS,
-  DEFAULT_WAIT_INTERVAL_MS,
-  DEFAULT_WAIT_TIMEOUT_MS,
-} from "../browser-command/constants.js";
+import { DEFAULT_EVAL_TIMEOUT_MS, DEFAULT_WAIT_INTERVAL_MS, DEFAULT_WAIT_TIMEOUT_MS } from "../browser-command/constants.js";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
 import { waitForFunction, waitForUrl } from "../browser-command/wait.js";
 import type { EvalExecutorResult } from "../eval-executor.js";
-import type { BrowserHandlerMap } from "./types.js";
+import type { BackgroundBrowserAdapter } from "../browser-command/types.js";
+import type { BrowserHandlerContext, BrowserHandlerMap } from "./types.js";
 
 export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
-  wait: async (request, adapter, context) => {
-    if (request.params.kind === "ms") {
-      const startedAt = Date.now();
-      const durationMs = request.params.durationMs ?? 0;
-      const timeoutMs = request.params.timeoutMs;
-      await delay(Math.min(durationMs, timeoutMs ?? durationMs));
-      if (timeoutMs !== undefined && durationMs > timeoutMs) {
-        throw new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms waiting ${durationMs}ms.`);
-      }
-      return createOkResponse(request, {
-        kind: request.params.kind,
-        matched: true,
-        elapsedMs: Math.max(0, Date.now() - startedAt),
-      });
-    }
-
-    if (request.params.kind === "download") {
-      const startedAt = Date.now();
-      const timeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-      const download = await adapter.waitForDownload({
-        ...(request.params.downloadId === undefined ? {} : { downloadId: request.params.downloadId }),
-        ...(request.params.filenameGlob === undefined ? {} : { filenameGlob: request.params.filenameGlob }),
-        timeoutMs,
-        intervalMs: request.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
-      });
-      return createOkResponse(request, {
-        kind: "download",
-        matched: true,
-        elapsedMs: Math.max(0, Date.now() - startedAt),
-        download,
-      });
-    }
-
-    const waitTimeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-    const resolved = await context.targetContext.resolveTarget(request.params.target, {
-      deadlineMs: waitTimeoutMs,
-      timeoutMessage: () => `Timed out after ${waitTimeoutMs}ms resolving wait target.`,
-    });
-    if (request.params.kind === "url") {
-      const result = await waitForUrl(adapter, resolved.tab.id, request.params);
-      return createOkResponse(request, result);
-    }
-
-    if (request.params.kind === "load-state" && request.params.state === "networkidle") {
-      const startedAt = Date.now();
-      const timeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-      await adapter.waitForNetworkIdle({
-        tabId: resolved.tab.id,
-        timeoutMs,
-        idleMs: request.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
-      });
-      return createOkResponse(request, {
-        kind: "load-state",
-        matched: true,
-        elapsedMs: Math.max(0, Date.now() - startedAt),
-        target: resolved.target,
-      });
-    }
-
-    if (request.params.kind === "function") {
-      const result = await waitForFunction(adapter, resolved.tab.id, request.params);
-      return createOkResponse(request, { ...result, target: resolved.target });
-    }
-
-    const waitResponse = await sendContentCommand(adapter, resolved.tab.id, request);
-    if (!waitResponse.ok) {
-      return createErrorResponseForRequest(request, waitResponse.error);
-    }
-
-    const result: WaitResult = {
-      ...waitResponse.result,
-      target: resolved.target,
-    };
-    return createOkResponse(request, result);
-  },
+  wait: async (request, adapter, context) => handleWaitRequest(request, adapter, context),
   eval: async (request, adapter, context) => {
     const resolved = await context.targetContext.resolveTarget(request.params.target);
     let evalResponse: EvalExecutorResult;
@@ -122,3 +47,100 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
     return createOkResponse(request, result);
   },
 };
+
+async function handleWaitRequest(
+  request: RequestEnvelope<"wait">,
+  adapter: BackgroundBrowserAdapter,
+  context: BrowserHandlerContext,
+): Promise<ResponseEnvelope<"wait">> {
+  if (request.params.kind === "ms") {
+    return waitForDuration(request);
+  }
+
+  if (request.params.kind === "download") {
+    return waitForDownload(request, adapter);
+  }
+
+  const waitTimeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const resolved = await context.targetContext.resolveTarget(request.params.target, {
+    deadlineMs: waitTimeoutMs,
+    timeoutMessage: () => `Timed out after ${String(waitTimeoutMs)}ms resolving wait target.`,
+  });
+
+  if (request.params.kind === "url") {
+    const result = await waitForUrl(adapter, resolved.tab.id, request.params);
+    return createOkResponse(request, result);
+  }
+
+  if (request.params.kind === "load-state" && request.params.state === "networkidle") {
+    const result = await waitForNetworkIdle(request, adapter, resolved.tab.id);
+    return createOkResponse(request, { ...result, target: resolved.target });
+  }
+
+  if (request.params.kind === "function") {
+    const result = await waitForFunction(adapter, resolved.tab.id, request.params);
+    return createOkResponse(request, { ...result, target: resolved.target });
+  }
+
+  const waitResponse = await sendContentCommand(adapter, resolved.tab.id, request);
+  if (!waitResponse.ok) {
+    return createErrorResponseForRequest(request, waitResponse.error);
+  }
+
+  const result: WaitResult = {
+    ...waitResponse.result,
+    target: resolved.target,
+  };
+  return createOkResponse(request, result);
+}
+
+async function waitForDuration(request: RequestEnvelope<"wait">): Promise<ResponseEnvelope<"wait">> {
+  const startedAt = Date.now();
+  const durationMs = request.params.durationMs ?? 0;
+  const timeoutMs = request.params.timeoutMs;
+  await delay(Math.min(durationMs, timeoutMs ?? durationMs));
+  if (timeoutMs !== undefined && durationMs > timeoutMs) {
+    throw new BrowserCommandError("TIMEOUT", `Timed out after ${String(timeoutMs)}ms waiting ${String(durationMs)}ms.`);
+  }
+  return createOkResponse(request, {
+    kind: "ms",
+    matched: true,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  });
+}
+
+async function waitForDownload(request: RequestEnvelope<"wait">, adapter: BackgroundBrowserAdapter): Promise<ResponseEnvelope<"wait">> {
+  const startedAt = Date.now();
+  const timeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const download = await adapter.waitForDownload({
+    ...(request.params.downloadId === undefined ? {} : { downloadId: request.params.downloadId }),
+    ...(request.params.filenameGlob === undefined ? {} : { filenameGlob: request.params.filenameGlob }),
+    timeoutMs,
+    intervalMs: request.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
+  });
+  return createOkResponse(request, {
+    kind: "download",
+    matched: true,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+    download,
+  });
+}
+
+async function waitForNetworkIdle(
+  request: RequestEnvelope<"wait">,
+  adapter: BackgroundBrowserAdapter,
+  tabId: number,
+): Promise<Omit<Extract<WaitResult, { readonly kind: "load-state" }>, "target">> {
+  const startedAt = Date.now();
+  const timeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+  await adapter.waitForNetworkIdle({
+    tabId,
+    timeoutMs,
+    idleMs: request.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
+  });
+  return {
+    kind: "load-state",
+    matched: true,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  };
+}

@@ -14,11 +14,13 @@ export class BackgroundRequestForwarder {
     this.#productVersion = options.productVersion;
   }
 
-  forward(
-    request: RequestEnvelope,
-    approved: boolean,
-    protocolSession: ProtocolSession,
-  ): Promise<ResponseEnvelope> | ResponseEnvelope {
-    return handleRequest(request, this.#productVersion, approved, this.#browserAdapter, protocolSession);
+  forward(request: RequestEnvelope, approved: boolean, protocolSession: ProtocolSession): Promise<ResponseEnvelope> | ResponseEnvelope {
+    return handleRequest({
+      request,
+      productVersion: this.#productVersion,
+      approved,
+      browserAdapter: this.#browserAdapter,
+      protocolSession,
+    });
   }
 }

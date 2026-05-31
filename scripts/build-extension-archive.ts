@@ -13,10 +13,7 @@ await mkdir(artifactDir, { recursive: true });
 const files = await listRegularFilesUnder(sourceDir, "development extension archive");
 const records = await Promise.all(
   files.map(async (file) => {
-    const data = await readRegularFile(
-      file.absolutePath,
-      `development extension archive ${file.relativePath}`,
-    );
+    const data = await readRegularFile(file.absolutePath, `development extension archive ${file.relativePath}`);
     return {
       name: file.relativePath,
       data,
@@ -117,11 +114,7 @@ function createCentralHeader(input: {
   return buffer;
 }
 
-function createEndRecord(input: {
-  readonly entries: number;
-  readonly centralDirectorySize: number;
-  readonly centralDirectoryOffset: number;
-}): Buffer {
+function createEndRecord(input: { readonly entries: number; readonly centralDirectorySize: number; readonly centralDirectoryOffset: number }): Buffer {
   const buffer = Buffer.alloc(22);
   buffer.writeUInt32LE(0x06054b50, 0);
   buffer.writeUInt16LE(0, 4);

@@ -3,6 +3,7 @@ import prettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 import { firefoxCliArchitecture } from "./scripts/eslint-firefox-cli-plugin.js";
 const typeScriptFiles = ["**/*.{ts,tsx,mts,cts}"];
+const automationScriptFiles = ["scripts/**/*.{ts,mts,cts,js,mjs,cjs}"];
 const nodeRuntimeGlobals = Object.fromEntries(
   [
     "AbortController",
@@ -27,20 +28,13 @@ const nodeRuntimeGlobals = Object.fromEntries(
     "setTimeout",
   ].map((name) => [name, "readonly"]),
 );
-const typeCheckedConfigs = [
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
-].map((config) => ({ ...config, files: typeScriptFiles }));
+const typeCheckedConfigs = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked].map((config) => ({
+  ...config,
+  files: typeScriptFiles,
+}));
 export default [
   {
-    ignores: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/coverage/**",
-      "**/gen/**",
-      "**/target/**",
-      ".builder/**",
-    ],
+    ignores: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/gen/**", "**/target/**", ".builder/**"],
   },
   js.configs.recommended,
   {
@@ -87,6 +81,12 @@ export default [
       "max-params": ["error", 4],
       "no-console": "error",
       "no-undef": "off",
+    },
+  },
+  {
+    files: automationScriptFiles,
+    rules: {
+      "no-console": "off",
     },
   },
   prettier,

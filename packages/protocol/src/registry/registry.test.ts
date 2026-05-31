@@ -78,33 +78,17 @@ const expectedCommandIds = [
 ] as const satisfies readonly CommandId[];
 
 type Assert<T extends true> = T;
-type IsExact<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? (<T>() => T extends B ? 1 : 2) extends <T>() => T extends A ? 1 : 2
-      ? true
-      : false
-    : false;
+type IsExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type SuccessfulResult<C extends CommandId> = Extract<ResponseEnvelope<C>, { readonly ok: true }>["result"];
-type SuccessfulSafeParseData<T> =
-  Extract<T, { readonly success: true }> extends { readonly data: infer Data } ? Data : never;
+type SuccessfulSafeParseData<T> = Extract<T, { readonly success: true }> extends { readonly data: infer Data } ? Data : never;
 type ProtocolTypeAssertions = [
   Assert<string extends CommandId ? false : true>,
   Assert<"noop" extends ContentCommandId ? false : true>,
   Assert<IsExact<RequestEnvelope<"get">["params"], GetParams>>,
   Assert<IsExact<SuccessfulResult<"screenshot">, ScreenshotResult>>,
   Assert<IsExact<SuccessfulSafeParseData<ReturnType<typeof safeParseStrictCommandParams<"get">>>, GetParams>>,
-  Assert<
-    IsExact<
-      SuccessfulSafeParseData<ReturnType<typeof safeParseBatchStepCommandParams<"tab.close">>>,
-      RequestEnvelope<"tab.close">["params"]
-    >
-  >,
-  Assert<
-    IsExact<
-      SuccessfulSafeParseData<ReturnType<typeof safeParseCommandResult<"screenshot">>>,
-      ScreenshotResult
-    >
-  >,
+  Assert<IsExact<SuccessfulSafeParseData<ReturnType<typeof safeParseBatchStepCommandParams<"tab.close">>>, RequestEnvelope<"tab.close">["params"]>>,
+  Assert<IsExact<SuccessfulSafeParseData<ReturnType<typeof safeParseCommandResult<"screenshot">>>, ScreenshotResult>>,
 ];
 
 describe("command registry assembly", () => {

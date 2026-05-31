@@ -20,12 +20,10 @@ export async function checkDependencyPolicy(root = rootDefault) {
   if (typeof rootPackage.packageManager !== "string" || !rootPackage.packageManager.startsWith("bun@")) {
     errors.push("Root package.json must declare packageManager as bun@<version>.");
   }
-  if (!(await exists(join(root, "bun.lock"))))
-    errors.push("bun.lock must be present as the single reviewed dependency lockfile.");
+  if (!(await exists(join(root, "bun.lock")))) errors.push("bun.lock must be present as the single reviewed dependency lockfile.");
 
   for (const lockfile of forbiddenLockfiles) {
-    if (await exists(join(root, lockfile)))
-      errors.push(`${lockfile} is not allowed; this workspace is pinned to Bun.`);
+    if (await exists(join(root, lockfile))) errors.push(`${lockfile} is not allowed; this workspace is pinned to Bun.`);
   }
 
   const packages = new Map();
@@ -38,14 +36,8 @@ export async function checkDependencyPolicy(root = rootDefault) {
     }
 
     packages.set(packageJson.name, packagePath);
-    if (
-      rootVersion !== undefined &&
-      packagePath !== join(root, "package.json") &&
-      packageJson.version !== rootVersion
-    ) {
-      errors.push(
-        `${relative(root, packagePath)} version must match root package.json version ${rootVersion}.`,
-      );
+    if (rootVersion !== undefined && packagePath !== join(root, "package.json") && packageJson.version !== rootVersion) {
+      errors.push(`${relative(root, packagePath)} version must match root package.json version ${rootVersion}.`);
     }
 
     for (const dependency of packageJson.trustedDependencies ?? []) {
@@ -64,21 +56,16 @@ export async function checkDependencyPolicy(root = rootDefault) {
       const actual = Object.keys(packageJson[section] ?? {}).sort();
       const listed = [...(allowed[section] ?? [])].sort();
       for (const dependency of actual) {
-        if (!listed.includes(dependency))
-          errors.push(`${packageJson.name} ${section} contains unreviewed dependency ${dependency}.`);
+        if (!listed.includes(dependency)) errors.push(`${packageJson.name} ${section} contains unreviewed dependency ${dependency}.`);
       }
       for (const dependency of listed) {
-        if (!actual.includes(dependency))
-          errors.push(`${packageJson.name} policy allowlists absent ${section} dependency ${dependency}.`);
+        if (!actual.includes(dependency)) errors.push(`${packageJson.name} policy allowlists absent ${section} dependency ${dependency}.`);
       }
     }
   }
 
   for (const packageName of Object.keys(policy.directDependencyAllowlist ?? {}).sort()) {
-    if (!packages.has(packageName))
-      errors.push(
-        `dependency-policy.json contains package ${packageName}, but no matching package.json exists.`,
-      );
+    if (!packages.has(packageName)) errors.push(`dependency-policy.json contains package ${packageName}, but no matching package.json exists.`);
   }
 
   return errors;

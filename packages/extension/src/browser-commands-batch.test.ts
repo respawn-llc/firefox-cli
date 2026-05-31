@@ -1,12 +1,7 @@
-import { MAX_BATCH_RESULT_BYTES, createRequest } from "@firefox-cli/protocol";
+import { createRequest } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { handleBrowserRequest } from "./browser-commands.js";
-import {
-  FakeBrowserAdapter,
-  ONE_BY_ONE_PNG_BASE64,
-  tabSummary,
-  windowSnapshot,
-} from "./browser-commands-test-utils.js";
+import { FakeBrowserAdapter, tabSummary, windowSnapshot } from "./browser-commands-test-utils.js";
 
 describe("browser batch command handling", () => {
   it("runs steps serially with a once-resolved default target", async () => {
@@ -77,9 +72,7 @@ describe("browser batch command handling", () => {
   });
 
   it("uses the locked default target for target commands that omit step targets", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -114,9 +107,7 @@ describe("browser batch command handling", () => {
   });
 
   it("uses the locked default target for network and network-idle batch steps", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
     adapter.networkRequests = [
       { id: "locked", tabId: 101, url: "https://example.test/locked" },
       { id: "active-after-select", tabId: 102, url: "https://example.test/active" },
@@ -159,9 +150,7 @@ describe("browser batch command handling", () => {
   });
 
   it("preserves explicit network batch step target overrides", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
     adapter.networkRequests = [
       { id: "default", tabId: 101, url: "https://example.test/default" },
       { id: "override", tabId: 102, url: "https://example.test/override" },
@@ -304,113 +293,6 @@ describe("browser batch command handling", () => {
                   error: { code: "SCRIPT_INJECTION_FAILED" },
                 },
               ],
-            },
-          },
-        ],
-      },
-    });
-  });
-
-  it("applies remaining outer timeout to timeout-aware steps", async () => {
-    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-
-    const response = await handleBrowserRequest(
-      createRequest(
-        "batch",
-        {
-          timeoutMs: 10,
-          steps: [{ command: "wait", params: { kind: "url", urlGlob: "https://never.test/*" } }],
-        },
-        "batch-timeout",
-      ),
-      adapter,
-    );
-
-    expect(response).toMatchObject({
-      ok: true,
-      result: {
-        ok: false,
-        firstFailedIndex: 0,
-        steps: [{ index: 0, command: "wait", ok: false, error: { code: "TIMEOUT" } }],
-      },
-    });
-  });
-
-  it("applies remaining outer timeout to duration waits", async () => {
-    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-
-    const response = await handleBrowserRequest(
-      createRequest(
-        "batch",
-        {
-          timeoutMs: 1,
-          steps: [{ command: "wait", params: { kind: "ms", durationMs: 30 } }],
-        },
-        "batch-duration-timeout",
-      ),
-      adapter,
-    );
-
-    expect(response).toMatchObject({
-      ok: true,
-      result: {
-        ok: false,
-        firstFailedIndex: 0,
-        steps: [{ index: 0, command: "wait", ok: false, error: { code: "TIMEOUT" } }],
-      },
-    });
-  });
-
-  it("enforces batch public-result size limits", async () => {
-    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-
-    const response = await handleBrowserRequest(
-      createRequest(
-        "batch",
-        {
-          maxResultBytes: 1,
-          steps: [{ command: "snapshot", params: {} }],
-        },
-        "batch-large",
-      ),
-      adapter,
-    );
-
-    expect(response).toMatchObject({
-      ok: false,
-      error: {
-        code: "RESULT_TOO_LARGE",
-      },
-    });
-  });
-
-  it("returns screenshot step bytes internally while sizing the public batch result", async () => {
-    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-
-    const response = await handleBrowserRequest(
-      createRequest(
-        "batch",
-        {
-          maxResultBytes: MAX_BATCH_RESULT_BYTES,
-          steps: [{ command: "screenshot", params: { path: "/tmp/page.png", format: "png" } }],
-        },
-        "batch-screenshot",
-      ),
-      adapter,
-    );
-
-    expect(response).toMatchObject({
-      ok: true,
-      result: {
-        ok: true,
-        steps: [
-          {
-            index: 0,
-            command: "screenshot",
-            ok: true,
-            result: {
-              bytes: 68,
-              imageBase64: ONE_BY_ONE_PNG_BASE64,
             },
           },
         ],

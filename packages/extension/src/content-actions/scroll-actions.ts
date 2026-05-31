@@ -1,11 +1,6 @@
 import type { ElementActionParams, ScrollParams } from "@firefox-cli/protocol";
 import type { ActionOptions, ContentActionResult } from "../content-action-types.js";
-import {
-  assertVisible,
-  elementActionResult,
-  resolveOptionalElement,
-  resolveRequiredElement,
-} from "./action-targets.js";
+import { assertVisible, elementActionResult, resolveOptionalElement, resolveRequiredElement } from "./action-targets.js";
 
 const DEFAULT_SCROLL_DISTANCE_PX = 600;
 
@@ -45,20 +40,14 @@ export function scrollAction(options: ActionOptions, params: ScrollParams): Cont
   };
 }
 
-export function scrollIntoViewAction(
-  options: ActionOptions,
-  params: ElementActionParams,
-): ContentActionResult {
+export function scrollIntoViewAction(options: ActionOptions, params: ElementActionParams): ContentActionResult {
   const resolution = resolveRequiredElement(options, params);
   assertVisible(options, resolution.element);
-  resolution.element.scrollIntoView?.({ block: "center", inline: "center", behavior: "instant" });
+  resolution.element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
   return elementActionResult(options, resolution);
 }
 
-function scrollDelta(
-  direction: ScrollParams["direction"],
-  distance: number,
-): { readonly x: number; readonly y: number } {
+function scrollDelta(direction: ScrollParams["direction"], distance: number): { readonly x: number; readonly y: number } {
   switch (direction) {
     case "up":
       return { x: 0, y: -distance };

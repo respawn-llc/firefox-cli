@@ -3,9 +3,8 @@ import { writeFile } from "node:fs/promises";
 import {
   MAX_SCREENSHOT_BYTES,
   createLocalComponentIdentity,
-  createRequestProtocolMismatchError,
   createProtocolSession,
-  getNegotiatedProtocolSession,
+  createRequestProtocolMismatchError,
   getRequestProtocolCompatibility,
   isRequestCommand,
   localProtocolVersionRange,
@@ -14,7 +13,6 @@ import {
   parseBatchStepResultAs,
   type BatchResult,
   type CommandId,
-  type ProtocolConnectionState,
   type ProtocolError,
   type ProtocolSession,
   type ProtocolVersionRange,
@@ -22,25 +20,29 @@ import {
   type ResponseEnvelope,
   type ScreenshotResult,
 } from "@firefox-cli/protocol";
+import {
+  getNegotiatedExtensionSession,
+  pairVerificationToProtocolError,
+  screenshotResultWithoutImage,
+  type ExtensionProtocolState,
+} from "./host-broker-helpers.js";
 import type { HostIdentity, PairTokenVerification } from "./pair-state.js";
 
-export type ExtensionConnection = {
+export interface ExtensionConnection {
   readonly approved: boolean;
   readonly token: string | undefined;
   readonly pairingError?: PairTokenVerification | undefined;
   readonly protocolState?: ExtensionProtocolState;
   send(request: RequestEnvelope): Promise<unknown>;
-};
+}
 
-export type ExtensionProtocolState = Exclude<ProtocolConnectionState, { readonly state: "disconnected" }>;
-
-export type NativeHostBrokerOptions = {
+export interface NativeHostBrokerOptions {
   readonly hostIdentity: HostIdentity;
   readonly productVersion?: string;
   readonly protocolRange?: ProtocolVersionRange;
   writeFile?(path: string, data: Uint8Array): Promise<void>;
   verifyPairToken?(token: string | undefined): Promise<PairTokenVerification> | PairTokenVerification;
-};
+}
 
 function rebaseResponseProtocolVersion<C extends CommandId>(
   protocolSession: ProtocolSession,
@@ -62,8 +64,8 @@ export class NativeHostBroker {
     this.#hostIdentity = options.hostIdentity;
     this.#productVersion = options.productVersion ?? "0.0.0";
     this.#protocolRange = options.protocolRange ?? localProtocolVersionRange;
-    this.#verifyPairToken = options.verifyPairToken;
-    this.#writeFile = options.writeFile ?? ((path, data) => writeFile(path, data));
+    this.#verifyPairToken = options.verifyPairToken?.bind(options);
+    this.#writeFile = options.writeFile?.bind(options) ?? (async (path, data) => writeFile(path, data));
   }
 
   get hostIdentity(): HostIdentity {
@@ -80,103 +82,111 @@ export class NativeHostBroker {
     }
   }
 
-  async handleCliRequest(
-    raw: unknown,
-    options: { readonly protocolSession?: ProtocolSession } = {},
-  ): Promise<ResponseEnvelope> {
+  async handleCliRequest(raw: unknown, options: { readonly protocolSession?: ProtocolSession } = {}): Promise<ResponseEnvelope> {
     const parsed = parseBoundaryRequest("cli-to-host", raw, {
-      ...(options.protocolSession === undefined
-        ? {}
-        : { protocolVersion: options.protocolSession.protocolVersion }),
+      ...(options.protocolSession === undefined ? {} : { protocolVersion: options.protocolSession.protocolVersion }),
       hello: {
         local: this.#protocolRange,
         expectedPeerComponent: "cli",
       },
     });
     if (!parsed.ok) {
-      return (
-        options.protocolSession ?? createProtocolSession(this.#protocolRange.protocolMax)
-      ).createErrorResponse("invalid-request", parsed.error);
+      return (options.protocolSession ?? createProtocolSession(this.#protocolRange.protocolMax)).createErrorResponse("invalid-request", parsed.error);
     }
 
     const request = parsed.value;
     const cliSession = options.protocolSession ?? createProtocolSession(request.protocolVersion);
     if (isRequestCommand(request, "hello")) {
-      return cliSession.createOkResponse(request, {
-        accepted: true,
-        negotiatedProtocolVersion: cliSession.protocolVersion,
-        peer: {
-          ...createLocalComponentIdentity("native-host", this.#productVersion),
-          protocolMin: this.#protocolRange.protocolMin,
-          protocolMax: this.#protocolRange.protocolMax,
-        },
-      });
+      return this.#createHelloResponse(request, cliSession);
     }
 
-    if (this.#extensionConnection === null) {
-      return cliSession.createErrorResponseForRequest(request, {
-        code: "EXTENSION_NOT_CONNECTED",
-        message: "Firefox extension is not connected to the native host.",
-      });
-    }
-
-    const extensionSession = getNegotiatedExtensionSession(this.#extensionConnection);
-    if (!extensionSession.ok) {
-      return cliSession.createErrorResponseForRequest(request, extensionSession.error);
-    }
-
-    if (!this.#extensionConnection.approved) {
-      const pairingError = this.#extensionConnection.pairingError;
-      if (pairingError !== undefined && !pairingError.ok) {
-        return cliSession.createErrorResponseForRequest(request, {
-          code:
-            pairingError.code === "NOT_APPROVED" || pairingError.code === "TOKEN_REQUIRED"
-              ? "NOT_APPROVED"
-              : "PAIRING_MISMATCH",
-          message: pairingError.message,
-        });
-      }
-      return cliSession.createErrorResponseForRequest(request, {
-        code: "NOT_APPROVED",
-        message: "Approve firefox-cli in the extension popup before running CLI commands.",
-      });
-    }
-
-    const pairVerification = await this.#verifyPairToken?.(this.#extensionConnection.token);
-    if (pairVerification !== undefined && !pairVerification.ok) {
-      return cliSession.createErrorResponseForRequest(request, {
-        code:
-          pairVerification.code === "NOT_APPROVED" || pairVerification.code === "TOKEN_REQUIRED"
-            ? "NOT_APPROVED"
-            : "PAIRING_MISMATCH",
-        message: pairVerification.message,
-      });
-    }
-
-    const extensionCompatibility = getRequestProtocolCompatibility(
-      request,
-      extensionSession.value.protocolVersion,
-    );
-    if (!extensionCompatibility.compatible) {
-      return cliSession.createErrorResponseForRequest(
-        request,
-        createRequestProtocolMismatchError(request, extensionSession.value.protocolVersion),
-      );
+    const extension = await this.#getReadyExtension(request, cliSession);
+    if (!extension.ok) {
+      return extension.response;
     }
 
     if (isRequestCommand(request, "screenshot")) {
-      const response = await this.#forwardToExtension(request, extensionSession.value, cliSession);
+      const response = await this.#forwardToExtension(request, extension.session, cliSession);
       return response.ok ? this.#writeScreenshotResponse(request, response.result, cliSession) : response;
     }
 
     if (isRequestCommand(request, "batch")) {
-      const response = await this.#forwardToExtension(request, extensionSession.value, cliSession);
-      return response.ok
-        ? this.#writeBatchScreenshotResponses(request, response.result, cliSession)
-        : response;
+      const response = await this.#forwardToExtension(request, extension.session, cliSession);
+      return response.ok ? this.#writeBatchScreenshotResponses(request, response.result, cliSession) : response;
     }
 
-    return this.#forwardToExtension(request, extensionSession.value, cliSession);
+    return this.#forwardToExtension(request, extension.session, cliSession);
+  }
+
+  #createHelloResponse(request: RequestEnvelope<"hello">, protocolSession: ProtocolSession): ResponseEnvelope<"hello"> {
+    return protocolSession.createOkResponse(request, {
+      accepted: true,
+      negotiatedProtocolVersion: protocolSession.protocolVersion,
+      peer: {
+        ...createLocalComponentIdentity("native-host", this.#productVersion),
+        protocolMin: this.#protocolRange.protocolMin,
+        protocolMax: this.#protocolRange.protocolMax,
+      },
+    });
+  }
+
+  async #getReadyExtension<C extends CommandId>(
+    request: RequestEnvelope<C>,
+    cliSession: ProtocolSession,
+  ): Promise<{ readonly ok: true; readonly session: ProtocolSession } | { readonly ok: false; readonly response: ResponseEnvelope<C> }> {
+    const connection = this.#extensionConnection;
+    if (connection === null) {
+      return {
+        ok: false,
+        response: cliSession.createErrorResponseForRequest(request, {
+          code: "EXTENSION_NOT_CONNECTED",
+          message: "Firefox extension is not connected to the native host.",
+        }),
+      };
+    }
+
+    const extensionSession = getNegotiatedExtensionSession(connection);
+    if (!extensionSession.ok) {
+      return { ok: false, response: cliSession.createErrorResponseForRequest(request, extensionSession.error) };
+    }
+
+    const approval = await this.#verifyExtensionApproval(connection);
+    if (!approval.ok) {
+      return { ok: false, response: cliSession.createErrorResponseForRequest(request, approval.error) };
+    }
+
+    if (!getRequestProtocolCompatibility(request, extensionSession.value.protocolVersion).compatible) {
+      return {
+        ok: false,
+        response: cliSession.createErrorResponseForRequest(request, createRequestProtocolMismatchError(request, extensionSession.value.protocolVersion)),
+      };
+    }
+
+    return { ok: true, session: extensionSession.value };
+  }
+
+  async #verifyExtensionApproval(connection: ExtensionConnection): Promise<{ readonly ok: true } | { readonly ok: false; readonly error: ProtocolError }> {
+    if (!connection.approved) {
+      const pairingError = connection.pairingError;
+      if (pairingError !== undefined && !pairingError.ok) {
+        return { ok: false, error: pairVerificationToProtocolError(pairingError) };
+      }
+
+      return {
+        ok: false,
+        error: {
+          code: "NOT_APPROVED",
+          message: "Approve firefox-cli in the extension popup before running CLI commands.",
+        },
+      };
+    }
+
+    const pairVerification = await this.#verifyPairToken?.(connection.token);
+    if (pairVerification !== undefined && !pairVerification.ok) {
+      return { ok: false, error: pairVerificationToProtocolError(pairVerification) };
+    }
+
+    return { ok: true };
   }
 
   async #forwardToExtension<C extends CommandId>(
@@ -194,11 +204,7 @@ export class NativeHostBroker {
 
     const extensionRequest = extensionSession.withRequestVersion(request);
     const extensionResponse = await extensionConnection.send(extensionRequest);
-    const response = extensionSession.parseResponseForRequest(
-      "host-to-extension",
-      request,
-      extensionResponse,
-    );
+    const response = extensionSession.parseResponseForRequest("host-to-extension", request, extensionResponse);
     if (!response.ok) {
       return cliSession.createErrorResponseForRequest(request, response.error);
     }
@@ -239,12 +245,7 @@ export class NativeHostBroker {
         });
       }
 
-      const writeResult = await this.#writeScreenshotResult(
-        request,
-        requestStep.value.params,
-        responseStep.value.result,
-        protocolSession,
-      );
+      const writeResult = await this.#writeScreenshotResult(request, requestStep.value.params, responseStep.value.result, protocolSession);
       if (!writeResult.ok) {
         return writeResult.response;
       }
@@ -266,10 +267,7 @@ export class NativeHostBroker {
     params: RequestEnvelope<"screenshot">["params"],
     result: ScreenshotResult,
     protocolSession: ProtocolSession,
-  ): Promise<
-    | { readonly ok: true; readonly result: Omit<ScreenshotResult, "imageBase64"> }
-    | { readonly ok: false; readonly response: ResponseEnvelope<C> }
-  > {
+  ): Promise<{ readonly ok: true; readonly result: Omit<ScreenshotResult, "imageBase64"> } | { readonly ok: false; readonly response: ResponseEnvelope<C> }> {
     if (result.imageBase64 === undefined) {
       return {
         ok: false,
@@ -301,7 +299,7 @@ export class NativeHostBroker {
         ok: false,
         response: protocolSession.createErrorResponseForRequest(request, {
           code: "OUTPUT_TOO_LARGE",
-          message: `Screenshot is ${bytes.byteLength} bytes, exceeding the ${maxImageBytes} byte limit.`,
+          message: `Screenshot is ${String(bytes.byteLength)} bytes, exceeding the ${String(maxImageBytes)} byte limit.`,
         }),
       };
     }
@@ -323,22 +321,6 @@ export class NativeHostBroker {
       };
     }
 
-    const { imageBase64: _imageBase64, ...publicResponse } = publicResult;
-    return { ok: true, result: publicResponse };
+    return { ok: true, result: screenshotResultWithoutImage(publicResult) };
   }
-}
-
-function getNegotiatedExtensionSession(
-  connection: ExtensionConnection,
-):
-  | { readonly ok: true; readonly value: ProtocolSession }
-  | { readonly ok: false; readonly error: ProtocolError } {
-  if (connection.protocolState === undefined) {
-    return { ok: true, value: createProtocolSession(localProtocolVersionRange.protocolMax) };
-  }
-
-  return getNegotiatedProtocolSession(connection.protocolState, {
-    code: "EXTENSION_NOT_CONNECTED",
-    message: "Firefox extension protocol negotiation has not completed.",
-  });
 }

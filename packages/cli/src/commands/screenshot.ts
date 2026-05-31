@@ -1,18 +1,12 @@
 import { resolve } from "node:path";
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
-import {
-  getOptionValue,
-  hasOption,
-  optionalTarget,
-  parsePositiveIntegerValue,
-  parseTargetOptions,
-} from "../parse.js";
+import { getOptionValue, hasOption, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
 import { isScreenshotFormat } from "./guards.js";
 
-type ParsedScreenshotArguments = {
+interface ParsedScreenshotArguments {
   readonly optionArgs: readonly string[];
   readonly outputPath?: string;
   readonly format: "png" | "jpeg";
@@ -21,27 +15,18 @@ type ParsedScreenshotArguments = {
   readonly timeout?: string;
   readonly maxImageBytes?: string;
   readonly json: boolean;
-};
+}
 
-export function buildScreenshotRequest(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-): RequestEnvelope {
+export function buildScreenshotRequest(argv: readonly string[], dependencies: CliDependencies): RequestEnvelope {
   const parsedArgs = parseScreenshotArguments(argv.slice(1));
   const outputPath = resolve(dependencies.cwd ?? process.cwd(), parsedArgs.outputPath ?? "screenshot.png");
   return createValidatedRequest("screenshot", {
     path: outputPath,
     format: parsedArgs.format,
     ...(parsedArgs.fullPage ? { fullPage: true } : {}),
-    ...(parsedArgs.quality === undefined
-      ? {}
-      : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
-    ...(parsedArgs.timeout === undefined
-      ? {}
-      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-    ...(parsedArgs.maxImageBytes === undefined
-      ? {}
-      : { maxImageBytes: parsePositiveIntegerValue(parsedArgs.maxImageBytes, "max output") }),
+    ...(parsedArgs.quality === undefined ? {} : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
+    ...(parsedArgs.timeout === undefined ? {} : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxImageBytes === undefined ? {} : { maxImageBytes: parsePositiveIntegerValue(parsedArgs.maxImageBytes, "max output") }),
     ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
   });
 }

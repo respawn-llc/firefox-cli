@@ -12,9 +12,7 @@ describe("safe extension file traversal", () => {
     await writeFile(join(outsideRoot, "secret.txt"), "outside\n");
     await symlink(join(outsideRoot, "secret.txt"), join(root, "nested/secret.txt"));
 
-    await expect(listRegularFilesUnder(root, "test extension archive")).rejects.toThrow(
-      "Refusing to traverse symlink",
-    );
+    await expect(listRegularFilesUnder(root, "test extension archive")).rejects.toThrow("Refusing to traverse symlink");
   });
 
   it("rejects symlinks before reading package-validation inputs", async () => {
@@ -23,8 +21,6 @@ describe("safe extension file traversal", () => {
     await writeFile(join(outsideRoot, "manifest.json"), "{}\n");
     await symlink(join(outsideRoot, "manifest.json"), join(root, "manifest.json"));
 
-    await expect(readRegularFileUnder(root, "manifest.json", "test manifest")).rejects.toThrow(
-      "Refusing to read symlink",
-    );
+    await expect(readRegularFileUnder(root, "manifest.json", "test manifest")).rejects.toThrow("Refusing to read symlink");
   });
 });

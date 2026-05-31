@@ -41,8 +41,6 @@ describe("buildBatchRequest", () => {
       },
     };
 
-    await expect(
-      buildBatchRequest(["batch", JSON.stringify([["setup"]])], dependencies, context),
-    ).rejects.toThrow("Invalid batch argv command at step 0.");
+    await expect(buildBatchRequest(["batch", JSON.stringify([["setup"]])], dependencies, context)).rejects.toThrow("Invalid batch argv command at step 0.");
   });
 });

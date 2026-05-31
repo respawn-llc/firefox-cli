@@ -27,6 +27,12 @@ test("ESLint policy keeps maintainability limits enabled for TypeScript files", 
   assert.deepEqual(rules["no-console"], [2, {}]);
 });
 
+test("ESLint policy allows terminal output in automation scripts", async () => {
+  const scriptRules = await rulesFor("scripts/release-check.ts");
+
+  assert.deepEqual(scriptRules["no-console"], [0, {}]);
+});
+
 test("ESLint policy keeps firefox-cli architecture rules enabled for TypeScript files", async () => {
   const rules = await rulesFor("packages/cli/src/index.ts");
 

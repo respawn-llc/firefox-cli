@@ -1,12 +1,12 @@
 import { NATIVE_HOST_NAME } from "@firefox-cli/protocol";
 import type { BackgroundRuntimeAdapter, NativePortLike } from "./background-controller-types.js";
 
-export type NativeConnectionEvents = {
+export interface NativeConnectionEvents {
   onConnect(): void;
   onMessage(message: unknown): void;
   onDisconnect(message: string): void;
   onConnectError(message: string): void;
-};
+}
 
 export class NativeConnectionManager {
   readonly #connectNative: BackgroundRuntimeAdapter["connectNative"];
@@ -106,8 +106,7 @@ export class NativeConnectionManager {
       return;
     }
 
-    const delay =
-      this.#reconnectDelaysMs[Math.min(this.#reconnectAttempt, this.#reconnectDelaysMs.length - 1)];
+    const delay = this.#reconnectDelaysMs[Math.min(this.#reconnectAttempt, this.#reconnectDelaysMs.length - 1)];
     this.#reconnectAttempt += 1;
     this.#reconnectScheduled = true;
     this.#scheduleTimer(() => {

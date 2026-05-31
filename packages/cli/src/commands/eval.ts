@@ -1,17 +1,11 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { readProcessStdin } from "../default-dependencies.js";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
-import {
-  getOptionValue,
-  hasOption,
-  optionalTarget,
-  parsePositiveIntegerValue,
-  parseTargetOptions,
-} from "../parse.js";
+import { getOptionValue, hasOption, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
 
-type ParsedEvalArguments = {
+interface ParsedEvalArguments {
   readonly optionArgs: readonly string[];
   readonly source: "argv" | "stdin" | "base64";
   readonly script?: string;
@@ -19,23 +13,16 @@ type ParsedEvalArguments = {
   readonly timeout?: string;
   readonly maxResultBytes?: string;
   readonly json: boolean;
-};
+}
 
-export async function buildEvalRequest(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-): Promise<RequestEnvelope> {
+export async function buildEvalRequest(argv: readonly string[], dependencies: CliDependencies): Promise<RequestEnvelope> {
   const parsedArgs = parseEvalArguments(argv.slice(1));
   const script = await readEvalScript(parsedArgs, dependencies);
   return createValidatedRequest("eval", {
     script,
     source: parsedArgs.source,
-    ...(parsedArgs.timeout === undefined
-      ? {}
-      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-    ...(parsedArgs.maxResultBytes === undefined
-      ? {}
-      : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+    ...(parsedArgs.timeout === undefined ? {} : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxResultBytes === undefined ? {} : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
     ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
   });
 }
@@ -50,10 +37,7 @@ function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
   const timeout = getOptionValue(parsed.optionArgs, ["--timeout"]);
   const maxResultBytes = getOptionValue(parsed.optionArgs, ["--max-output"]);
   const script = parsed.positionals.length === 0 ? undefined : parsed.positionals.join(" ");
-  const sourceCount =
-    (script === undefined ? 0 : 1) +
-    (hasOption(parsed.optionArgs, "--stdin") ? 1 : 0) +
-    (base64 === undefined ? 0 : 1);
+  const sourceCount = (script === undefined ? 0 : 1) + (hasOption(parsed.optionArgs, "--stdin") ? 1 : 0) + (base64 === undefined ? 0 : 1);
   if (sourceCount !== 1) {
     throw new CliUsageError("Specify exactly one eval source.");
   }

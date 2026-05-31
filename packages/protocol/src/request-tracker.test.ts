@@ -85,20 +85,24 @@ function createManualScheduler(): {
   readonly clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
   runNext(): void;
 } {
-  const scheduled: (() => void)[] = [];
+  const scheduled = new Map<ReturnType<typeof setTimeout>, () => void>();
   return {
-    setTimer: (callback) => {
-      scheduled.push(callback);
-      return scheduled.length as unknown as ReturnType<typeof setTimeout>;
+    setTimer: (callback, delayMs) => {
+      const timer = setTimeout(() => undefined, delayMs);
+      scheduled.set(timer, callback);
+      return timer;
     },
     clearTimer: (timer) => {
-      const index = Number(timer) - 1;
-      if (index >= 0) {
-        scheduled[index] = () => undefined;
-      }
+      clearTimeout(timer);
+      scheduled.delete(timer);
     },
     runNext: () => {
-      scheduled.shift()?.();
+      const [timer, callback] = scheduled.entries().next().value ?? [];
+      if (timer !== undefined && callback !== undefined) {
+        scheduled.delete(timer);
+        clearTimeout(timer);
+        callback();
+      }
     },
   };
 }

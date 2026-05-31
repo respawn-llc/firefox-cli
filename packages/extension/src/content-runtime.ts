@@ -1,25 +1,21 @@
 import { createErrorResponse, parseBoundaryRequest } from "@firefox-cli/protocol";
 import { ElementRefRegistry, handleContentScriptRequest } from "./content-snapshot.js";
-import {
-  createContentLogCaptureService,
-  type ContentLogCaptureService,
-  type LogCaptureHandle,
-} from "./content-snapshot/log-capture.js";
+import { createContentLogCaptureService, type ContentLogCaptureService, type LogCaptureHandle } from "./content-snapshot/log-capture.js";
 
 export type ContentRuntimeMessageHandler = (message: unknown) => Promise<unknown>;
 
-export type ContentBrowserRuntime = {
+export interface ContentBrowserRuntime {
   readonly onMessage: {
     addListener(listener: ContentRuntimeMessageHandler): void;
     removeListener(listener: ContentRuntimeMessageHandler): void;
   };
-};
+}
 
-export type ContentRuntimeLifecycle = {
+export interface ContentRuntimeLifecycle {
   dispose(): void;
-};
+}
 
-type ContentRuntimeOptions = {
+interface ContentRuntimeOptions {
   readonly browserRuntime: ContentBrowserRuntime;
   readonly document: Document;
   readonly registry?: ElementRefRegistry<Element>;
@@ -27,37 +23,38 @@ type ContentRuntimeOptions = {
   readonly now?: number;
   readonly clock?: () => number;
   readonly sleep?: (durationMs: number) => Promise<void>;
-};
+}
 
-type RuntimeState = {
+interface RuntimeState {
   readonly runtime: ContentBrowserRuntime;
   readonly registry: ElementRefRegistry<Element>;
   readonly handler: ContentRuntimeMessageHandler;
   readonly globalLogHandle: LogCaptureHandle;
   readonly windowLogHandle: LogCaptureHandle;
   refCount: number;
-};
+}
 
 const CONTENT_RUNTIME_STATE_KEY = Symbol.for("firefox-cli.contentRuntime.state");
+type ContentRuntimeGlobal = typeof globalThis & {
+  [CONTENT_RUNTIME_STATE_KEY]?: RuntimeState;
+};
 
 export function startContentScriptRuntime(options: ContentRuntimeOptions): ContentRuntimeLifecycle {
-  const global = globalThis as typeof globalThis & {
-    [CONTENT_RUNTIME_STATE_KEY]?: RuntimeState;
-  };
+  const global: ContentRuntimeGlobal = globalThis;
   const existing = global[CONTENT_RUNTIME_STATE_KEY];
-  if (existing !== undefined && existing.runtime === options.browserRuntime) {
+  if (existing?.runtime === options.browserRuntime) {
     existing.refCount += 1;
     return createRuntimeHandle(() => {
       existing.refCount -= 1;
       if (existing.refCount === 0 && global[CONTENT_RUNTIME_STATE_KEY] === existing) {
         disposeRuntimeState(existing);
-        delete global[CONTENT_RUNTIME_STATE_KEY];
+        Reflect.deleteProperty(global, CONTENT_RUNTIME_STATE_KEY);
       }
     });
   }
   if (existing !== undefined) {
     disposeRuntimeState(existing);
-    delete global[CONTENT_RUNTIME_STATE_KEY];
+    Reflect.deleteProperty(global, CONTENT_RUNTIME_STATE_KEY);
   }
 
   const logCapture = options.logCapture ?? createContentLogCaptureService();
@@ -87,7 +84,7 @@ export function startContentScriptRuntime(options: ContentRuntimeOptions): Conte
     state.refCount -= 1;
     if (state.refCount === 0 && global[CONTENT_RUNTIME_STATE_KEY] === state) {
       disposeRuntimeState(state);
-      delete global[CONTENT_RUNTIME_STATE_KEY];
+      Reflect.deleteProperty(global, CONTENT_RUNTIME_STATE_KEY);
     }
   });
 }

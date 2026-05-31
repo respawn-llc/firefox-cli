@@ -15,20 +15,14 @@ export type NativeProtocolState = ProtocolConnectionState;
 
 export function getNegotiatedNativeSession(
   state: NativeProtocolState,
-):
-  | { readonly ok: true; readonly value: ProtocolSession }
-  | { readonly ok: false; readonly error: ProtocolError } {
+): { readonly ok: true; readonly value: ProtocolSession } | { readonly ok: false; readonly error: ProtocolError } {
   return getNegotiatedProtocolSession(state, {
     code: "NATIVE_HOST_UNAVAILABLE",
     message: "Native host protocol negotiation has not completed.",
   });
 }
 
-export function createProtocolStateErrorResponse(
-  state: NativeProtocolState,
-  id: string,
-  error: ProtocolError,
-): ResponseEnvelope {
+export function createProtocolStateErrorResponse(state: NativeProtocolState, id: string, error: ProtocolError): ResponseEnvelope {
   return createSharedProtocolStateErrorResponse(state, id, error);
 }
 

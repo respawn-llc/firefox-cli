@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import rootPackage from "../../package.json" with { type: "json" };
 import { createTempDir } from "@firefox-cli/test-support";
-import {
-  packagedSignedExtensionProvenanceJson,
-  readValidatedSignedExtensionSource,
-} from "../package-signed-extension.js";
+import { packagedSignedExtensionProvenanceJson, readValidatedSignedExtensionSource } from "../package-signed-extension.js";
 import type { SignedExtensionSignatureVerifier } from "../signed-extension-signature.js";
 import { createZipFixture } from "./zip-test-utils.js";
 

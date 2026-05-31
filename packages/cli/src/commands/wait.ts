@@ -1,17 +1,10 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
-import {
-  getOptionValue,
-  hasOption,
-  optionalTarget,
-  parseElementTarget,
-  parsePositiveIntegerValue,
-  parseTargetOptions,
-} from "../parse.js";
+import { getOptionValue, hasOption, optionalTarget, parseElementTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError } from "../types.js";
 
-type ParsedWaitArguments = {
+interface ParsedWaitArguments {
   readonly positionals: readonly string[];
   readonly text?: string;
   readonly urlGlob?: string;
@@ -22,24 +15,9 @@ type ParsedWaitArguments = {
   readonly generationId?: string;
   readonly timeout?: string;
   readonly interval?: string;
-};
-
-export function buildWaitRequest(argv: readonly string[]): RequestEnvelope {
-  const args = argv.slice(1);
-  const waitArgs = parseWaitArguments(args);
-  return createValidatedRequest("wait", {
-    ...parseWaitParams(waitArgs),
-    ...(waitArgs.timeout === undefined
-      ? {}
-      : { timeoutMs: parsePositiveIntegerValue(waitArgs.timeout, "timeout") }),
-    ...(waitArgs.interval === undefined
-      ? {}
-      : { intervalMs: parsePositiveIntegerValue(waitArgs.interval, "interval") }),
-    ...optionalTarget(parseTargetOptions(args)),
-  });
 }
 
-function parseWaitParams(waitArgs: ParsedWaitArguments): {
+interface WaitParams {
   readonly kind: "ms" | "element" | "text" | "url" | "function" | "load-state" | "download";
   readonly durationMs?: number;
   readonly selector?: string;
@@ -51,62 +29,70 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
   readonly expression?: string;
   readonly downloadId?: number;
   readonly filenameGlob?: string;
-} {
-  const conditionCount = [
-    waitArgs.text,
-    waitArgs.urlGlob,
-    waitArgs.expression,
-    waitArgs.loadState,
-    waitArgs.download,
-  ].filter((value) => value !== undefined).length;
+}
+
+export function buildWaitRequest(argv: readonly string[]): RequestEnvelope {
+  const args = argv.slice(1);
+  const waitArgs = parseWaitArguments(args);
+  return createValidatedRequest("wait", {
+    ...parseWaitParams(waitArgs),
+    ...(waitArgs.timeout === undefined ? {} : { timeoutMs: parsePositiveIntegerValue(waitArgs.timeout, "timeout") }),
+    ...(waitArgs.interval === undefined ? {} : { intervalMs: parsePositiveIntegerValue(waitArgs.interval, "interval") }),
+    ...optionalTarget(parseTargetOptions(args)),
+  });
+}
+
+function parseWaitParams(waitArgs: ParsedWaitArguments): WaitParams {
+  const conditionCount = countOptionWaitConditions(waitArgs);
   if (conditionCount > 1) {
     throw new CliUsageError("Specify exactly one wait condition.");
   }
 
-  if (conditionCount > 0 && waitArgs.positionals.length > 0) {
+  assertOptionWaitConditionCompatibility(waitArgs, conditionCount);
+
+  const optionCondition = parseOptionWaitCondition(waitArgs);
+  return optionCondition ?? parsePositionalWaitCondition(waitArgs);
+}
+
+function countOptionWaitConditions(waitArgs: ParsedWaitArguments): number {
+  return [waitArgs.text, waitArgs.urlGlob, waitArgs.expression, waitArgs.loadState, waitArgs.download].filter((value) => value !== undefined).length;
+}
+
+function assertOptionWaitConditionCompatibility(waitArgs: ParsedWaitArguments, conditionCount: number): void {
+  if (conditionCount === 0) {
+    return;
+  }
+  if (waitArgs.positionals.length > 0) {
     throw new CliUsageError("Specify exactly one wait condition.");
   }
-
-  if (conditionCount > 0 && waitArgs.state !== undefined) {
+  if (waitArgs.state !== undefined) {
     throw new CliUsageError("Only element waits accept --state.");
   }
-
-  if (conditionCount > 0 && waitArgs.generationId !== undefined) {
+  if (waitArgs.generationId !== undefined) {
     throw new CliUsageError("Only element waits accept --generation.");
   }
+}
 
+function parseOptionWaitCondition(waitArgs: ParsedWaitArguments): WaitParams | undefined {
   if (waitArgs.text !== undefined) {
     return { kind: "text", text: waitArgs.text };
   }
-
   if (waitArgs.urlGlob !== undefined) {
     return { kind: "url", urlGlob: waitArgs.urlGlob };
   }
-
   if (waitArgs.expression !== undefined) {
     return { kind: "function", expression: waitArgs.expression };
   }
-
   if (waitArgs.loadState !== undefined) {
-    if (
-      waitArgs.loadState !== "domcontentloaded" &&
-      waitArgs.loadState !== "complete" &&
-      waitArgs.loadState !== "networkidle"
-    ) {
-      throw new CliUsageError(`Invalid load state: ${waitArgs.loadState}`);
-    }
-    return { kind: "load-state", state: waitArgs.loadState };
+    return { kind: "load-state", state: parseLoadState(waitArgs.loadState) };
   }
-
   if (waitArgs.download !== undefined) {
-    if (waitArgs.download.length === 0) {
-      return { kind: "download" };
-    }
-    return /^\d+$/u.test(waitArgs.download)
-      ? { kind: "download", downloadId: Number(waitArgs.download) }
-      : { kind: "download", filenameGlob: waitArgs.download };
+    return parseDownloadWait(waitArgs.download);
   }
+  return undefined;
+}
 
+function parsePositionalWaitCondition(waitArgs: ParsedWaitArguments): WaitParams {
   const target = waitArgs.positionals[0];
   if (target === undefined) {
     throw new CliUsageError("Missing wait target or condition.");
@@ -117,13 +103,7 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
   }
 
   if (/^\d+$/u.test(target)) {
-    if (waitArgs.state !== undefined) {
-      throw new CliUsageError("Only element waits accept --state.");
-    }
-    if (waitArgs.generationId !== undefined) {
-      throw new CliUsageError("Only element waits accept --generation.");
-    }
-    return { kind: "ms", durationMs: Number(target) };
+    return parseDurationWait(waitArgs, target);
   }
 
   const elementState = waitArgs.state ?? "visible";
@@ -141,6 +121,30 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
     state: elementState,
     ...(waitArgs.generationId === undefined ? {} : { generationId: waitArgs.generationId }),
   };
+}
+
+function parseDurationWait(waitArgs: ParsedWaitArguments, target: string): WaitParams {
+  if (waitArgs.state !== undefined) {
+    throw new CliUsageError("Only element waits accept --state.");
+  }
+  if (waitArgs.generationId !== undefined) {
+    throw new CliUsageError("Only element waits accept --generation.");
+  }
+  return { kind: "ms", durationMs: Number(target) };
+}
+
+function parseLoadState(value: string): "domcontentloaded" | "complete" | "networkidle" {
+  if (value !== "domcontentloaded" && value !== "complete" && value !== "networkidle") {
+    throw new CliUsageError(`Invalid load state: ${value}`);
+  }
+  return value;
+}
+
+function parseDownloadWait(value: string): WaitParams {
+  if (value.length === 0) {
+    return { kind: "download" };
+  }
+  return /^\d+$/u.test(value) ? { kind: "download", downloadId: Number(value) } : { kind: "download", filenameGlob: value };
 }
 
 function parseWaitArguments(args: readonly string[]): ParsedWaitArguments {

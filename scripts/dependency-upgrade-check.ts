@@ -4,14 +4,14 @@ import { runProcess, type ProcessRunnerOptions } from "./process-runner.js";
 
 export type DependencyUpgradeKind = "none" | "patch" | "minor" | "major" | "unknown";
 
-export type DependencyUpgradePolicy = {
+export interface DependencyUpgradePolicy {
   readonly patchMinorReleaseAgeDays: number;
   readonly majorReleaseAgeDays: number;
   readonly auditCommand: readonly string[];
   readonly agedOutdatedCommand: readonly string[];
   readonly upgradeVerificationCommands: readonly (readonly string[])[];
   readonly localUnsignedReleaseVerificationCommand: readonly string[];
-};
+}
 
 export const SECONDS_PER_DAY = 24 * 60 * 60;
 export const PATCH_MINOR_RELEASE_AGE_DAYS = 7;
@@ -21,11 +21,7 @@ export const dependencyUpgradePolicy: DependencyUpgradePolicy = {
   patchMinorReleaseAgeDays: PATCH_MINOR_RELEASE_AGE_DAYS,
   majorReleaseAgeDays: MAJOR_RELEASE_AGE_DAYS,
   auditCommand: ["bun", "audit"],
-  agedOutdatedCommand: [
-    "bun",
-    "outdated",
-    `--minimum-release-age=${String(PATCH_MINOR_RELEASE_AGE_DAYS * SECONDS_PER_DAY)}`,
-  ],
+  agedOutdatedCommand: ["bun", "outdated", `--minimum-release-age=${String(PATCH_MINOR_RELEASE_AGE_DAYS * SECONDS_PER_DAY)}`],
   upgradeVerificationCommands: [
     ["bun", "run", "check"],
     ["bun", "run", "release:check"],
@@ -33,22 +29,18 @@ export const dependencyUpgradePolicy: DependencyUpgradePolicy = {
   localUnsignedReleaseVerificationCommand: ["bun", "run", "release:check:local"],
 };
 
-export type DependencyUpgradeCheckOptions = {
+export interface DependencyUpgradeCheckOptions {
   readonly runCommand?: DependencyUpgradeCommandRunner;
   readonly write?: (message: string) => void;
-};
+}
 
-export type DependencyUpgradeCommandRunner = (
-  command: string,
-  args: readonly string[],
-  options: ProcessRunnerOptions,
-) => Promise<unknown>;
+export type DependencyUpgradeCommandRunner = (command: string, args: readonly string[], options: ProcessRunnerOptions) => Promise<unknown>;
 
-type ParsedVersion = {
+interface ParsedVersion {
   readonly major: number;
   readonly minor: number;
   readonly patch: number;
-};
+}
 
 export function classifyVersionChange(current: string, target: string): DependencyUpgradeKind {
   const currentVersion = parseVersion(current);
@@ -85,9 +77,7 @@ export function minimumReleaseAgeDaysFor(kind: DependencyUpgradeKind): number {
   return 0;
 }
 
-export function renderDependencyUpgradePolicy(
-  policy: DependencyUpgradePolicy = dependencyUpgradePolicy,
-): string {
+export function renderDependencyUpgradePolicy(policy: DependencyUpgradePolicy = dependencyUpgradePolicy): string {
   return [
     "Dependency upgrade lane:",
     `- security fixes: eligible immediately when backed by audit/advisory evidence; run ${renderCommand(requiredCommand(policy.upgradeVerificationCommands, 0))} and ${renderCommand(requiredCommand(policy.upgradeVerificationCommands, 1))}`,
@@ -102,26 +92,18 @@ export async function runDependencyUpgradeCheck(options: DependencyUpgradeCheckO
   const write = options.write ?? console.log;
 
   write(renderDependencyUpgradePolicy());
-  await runCommand(
-    dependencyUpgradePolicy.auditCommand[0] ?? "",
-    dependencyUpgradePolicy.auditCommand.slice(1),
-    {
-      label: "dependency audit",
-      stdout: "inherit",
-      stderr: "inherit",
-      timeoutMs: 120_000,
-    },
-  );
-  await runCommand(
-    dependencyUpgradePolicy.agedOutdatedCommand[0] ?? "",
-    dependencyUpgradePolicy.agedOutdatedCommand.slice(1),
-    {
-      label: "aged dependency drift report",
-      stdout: "inherit",
-      stderr: "inherit",
-      timeoutMs: 120_000,
-    },
-  );
+  await runCommand(dependencyUpgradePolicy.auditCommand[0] ?? "", dependencyUpgradePolicy.auditCommand.slice(1), {
+    label: "dependency audit",
+    stdout: "inherit",
+    stderr: "inherit",
+    timeoutMs: 120_000,
+  });
+  await runCommand(dependencyUpgradePolicy.agedOutdatedCommand[0] ?? "", dependencyUpgradePolicy.agedOutdatedCommand.slice(1), {
+    label: "aged dependency drift report",
+    stdout: "inherit",
+    stderr: "inherit",
+    timeoutMs: 120_000,
+  });
   write("Dependency upgrade lane check passed.");
 }
 
@@ -151,11 +133,7 @@ function requiredCommand(commands: readonly (readonly string[])[], index: number
   return command;
 }
 
-async function runDependencyCommand(
-  command: string,
-  args: readonly string[],
-  options: ProcessRunnerOptions,
-): Promise<unknown> {
+async function runDependencyCommand(command: string, args: readonly string[], options: ProcessRunnerOptions): Promise<unknown> {
   return runProcess(command, args, options);
 }
 

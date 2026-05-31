@@ -1,19 +1,14 @@
 import { z } from "zod";
 import { parseDisposableFirefoxProcesses, type DisposableFirefoxProcess } from "./e2e-firefox-cleanup.js";
 import { pollUntil } from "./script-timing.js";
-import {
-  runProcess,
-  stopProcessTree,
-  type ProcessResult,
-  type StopProcessOptions,
-} from "./process-runner.js";
+import { runProcess, stopProcessTree, type ProcessResult, type StopProcessOptions } from "./process-runner.js";
 
-export type FirefoxProcessAdapter = {
+export interface FirefoxProcessAdapter {
   readonly findProfileProcesses: (profileDir: string) => Promise<readonly DisposableFirefoxProcess[]>;
   readonly stopProfile: (profileDir: string) => Promise<void>;
-};
+}
 
-export type FirefoxProcessAdapterOptions = {
+export interface FirefoxProcessAdapterOptions {
   readonly platform?: NodeJS.Platform;
   readonly run?: typeof runProcess;
   readonly stop?: (pid: number, options?: StopProcessOptions) => Promise<void>;
@@ -21,7 +16,7 @@ export type FirefoxProcessAdapterOptions = {
   readonly scanTimeoutMs?: number;
   readonly stopTimeoutMs?: number;
   readonly pollIntervalMs?: number;
-};
+}
 
 type Scanner = (profileDir: string) => Promise<readonly DisposableFirefoxProcess[]>;
 
@@ -35,18 +30,16 @@ const windowsProcessSchema = z
     Name: z.string().min(1),
     CommandLine: z.string().nullable().optional(),
   })
-  .passthrough();
+  .loose();
 
-export function createFirefoxProcessAdapter(
-  options: FirefoxProcessAdapterOptions = {},
-): FirefoxProcessAdapter {
+export function createFirefoxProcessAdapter(options: FirefoxProcessAdapterOptions = {}): FirefoxProcessAdapter {
   const platform = options.platform ?? process.platform;
   const run = options.run ?? runProcess;
   const stop = options.stop ?? stopProcessTree;
   const scan =
     platform === "win32"
-      ? (profileDir: string) => findWindowsFirefoxProcesses(profileDir, run)
-      : (profileDir: string) => findPosixFirefoxProcesses(profileDir, run);
+      ? async (profileDir: string) => findWindowsFirefoxProcesses(profileDir, run)
+      : async (profileDir: string) => findPosixFirefoxProcesses(profileDir, run);
 
   return createFirefoxProcessAdapterWithScanner(scan, {
     stop,
@@ -58,10 +51,7 @@ export function createFirefoxProcessAdapter(
 
 export function createFirefoxProcessAdapterWithScanner(
   scan: Scanner,
-  options: Pick<
-    FirefoxProcessAdapterOptions,
-    "pollIntervalMs" | "stop" | "stopOptions" | "stopTimeoutMs"
-  > = {},
+  options: Pick<FirefoxProcessAdapterOptions, "pollIntervalMs" | "stop" | "stopOptions" | "stopTimeoutMs"> = {},
 ): FirefoxProcessAdapter {
   const stop = options.stop ?? stopProcessTree;
   const stopOptions = options.stopOptions ?? {};
@@ -78,10 +68,7 @@ export function createFirefoxProcessAdapterWithScanner(
   };
 }
 
-async function findPosixFirefoxProcesses(
-  profileDir: string,
-  run: typeof runProcess,
-): Promise<readonly DisposableFirefoxProcess[]> {
+async function findPosixFirefoxProcesses(profileDir: string, run: typeof runProcess): Promise<readonly DisposableFirefoxProcess[]> {
   const result = await run("ps", ["-axo", "pid=,comm=,args="], {
     timeoutMs: DEFAULT_SCAN_TIMEOUT_MS,
     maxOutputBytes: 512 * 1024,
@@ -90,10 +77,7 @@ async function findPosixFirefoxProcesses(
   return parseDisposableFirefoxProcesses(result.stdout, { profileDir });
 }
 
-async function findWindowsFirefoxProcesses(
-  profileDir: string,
-  run: typeof runProcess,
-): Promise<readonly DisposableFirefoxProcess[]> {
+async function findWindowsFirefoxProcesses(profileDir: string, run: typeof runProcess): Promise<readonly DisposableFirefoxProcess[]> {
   const result = await run(
     "powershell.exe",
     [
@@ -117,27 +101,16 @@ async function findWindowsFirefoxProcesses(
   return parseWindowsFirefoxProcesses(result, profileDir);
 }
 
-export function parseWindowsFirefoxProcesses(
-  result: Pick<ProcessResult, "stdout">,
-  profileDir: string,
-): readonly DisposableFirefoxProcess[] {
+export function parseWindowsFirefoxProcesses(result: Pick<ProcessResult, "stdout">, profileDir: string): readonly DisposableFirefoxProcess[] {
   const output = result.stdout.trim();
   if (output.length === 0) {
     return [];
   }
-  const parsed = JSON.parse(output) as unknown;
+  const parsed: unknown = JSON.parse(output);
   const rows = z.union([windowsProcessSchema, z.array(windowsProcessSchema), z.null()]).parse(parsed);
   const processes = rows === null ? [] : Array.isArray(rows) ? rows : [rows];
   return parseDisposableFirefoxProcesses(
-    processes
-      .map((process) =>
-        [
-          String(process.ProcessId),
-          process.Name,
-          process.CommandLine === null || process.CommandLine === undefined ? "" : process.CommandLine,
-        ].join(" "),
-      )
-      .join("\n"),
+    processes.map((process) => [String(process.ProcessId), process.Name, process.CommandLine ?? ""].join(" ")).join("\n"),
     { profileDir },
   );
 }
@@ -147,5 +120,5 @@ async function stopFirefoxProcesses(
   stop: (pid: number, options?: StopProcessOptions) => Promise<void>,
   options: StopProcessOptions,
 ): Promise<void> {
-  await Promise.all(processes.map((process) => stop(process.pid, options)));
+  await Promise.all(processes.map(async (process) => stop(process.pid, options)));
 }

@@ -7,11 +7,11 @@ export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
 export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
 export type CommandTimeoutPolicy = "none" | "command" | "batch";
 export type CommandFrameScope = "not-applicable" | "main-frame-only" | "main-frame-with-iframe-diagnostics";
-export type CommandFrameScopeMetadata = {
+export interface CommandFrameScopeMetadata {
   readonly scope: CommandFrameScope;
   readonly reason: string;
   readonly future?: string;
-};
+}
 export type CommandPrivilegeReason =
   | "page-mutation"
   | "page-code-execution"
@@ -34,42 +34,42 @@ export type CommandSecurityMetadata =
       readonly reasons: readonly [CommandPrivilegeReason, ...CommandPrivilegeReason[]];
     };
 
-export type CommandProtocolParameterMatch = {
+export interface CommandProtocolParameterMatch {
   readonly path: readonly [string, ...string[]];
   readonly equals: string | number | boolean | null;
-};
+}
 
-export type CommandProtocolRequirement = {
+export interface CommandProtocolRequirement {
   readonly minProtocolVersion: number;
   readonly reason: string;
   readonly params?: {
     readonly matches: readonly [CommandProtocolParameterMatch, ...CommandProtocolParameterMatch[]];
   };
-};
+}
 
-export type CommandCompatibilityMetadata = {
+export interface CommandCompatibilityMetadata {
   readonly requirements: readonly CommandProtocolRequirement[];
-};
+}
 
-export type CliRouteMetadata = {
+export interface CliRouteMetadata {
   readonly id: string;
   readonly path: readonly [string, ...string[]];
   readonly batch: boolean;
-};
+}
 
-export type CliRouteEntry<C extends string = string> = {
+export interface CliRouteEntry<C extends string = string> {
   readonly command: C;
   readonly route: CliRouteMetadata;
-};
+}
 
-export type CommandBatchMetadata = {
+export interface CommandBatchMetadata {
   readonly allowed: boolean;
   readonly protocolDefaultTarget?: boolean;
   readonly extensionDefaultTarget?: boolean;
   readonly timeoutRebase?: boolean;
-};
+}
 
-export type CommandSchemaMetadata = {
+export interface CommandSchemaMetadata {
   readonly owner: CommandOwner;
   readonly target: CommandTargetPolicy;
   readonly content: CommandContentPolicy;
@@ -80,7 +80,7 @@ export type CommandSchemaMetadata = {
   readonly frameScope?: CommandFrameScopeMetadata;
   readonly batch: CommandBatchMetadata;
   readonly cliRoutes: readonly CliRouteMetadata[];
-};
+}
 
 export type CommandSchemaEntry = CommandSchemaMetadata & {
   readonly params: z.ZodType;

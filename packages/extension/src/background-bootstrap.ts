@@ -4,15 +4,17 @@ import { createContentScriptInjectionState } from "./content-script-delivery.js"
 import { NetworkObservationService } from "./network-observation-service.js";
 import { NetworkRequestTracker } from "./network-tracker.js";
 
-type RuntimeMessage = { readonly type?: string };
+interface RuntimeMessage {
+  readonly type?: string;
+}
 type RuntimeMessageListener = (message: RuntimeMessage) => Promise<unknown>;
 
 export type BackgroundBrowserApi = typeof browser;
 
-export type BackgroundLifecycle = {
+export interface BackgroundLifecycle {
   readonly controller: FirefoxCliBackgroundController;
   dispose(): void;
-};
+}
 
 export function startBackground(options: {
   readonly browser: BackgroundBrowserApi;
@@ -43,21 +45,10 @@ export function startBackground(options: {
     }),
     connectNative: (name) => options.browser.runtime.connectNative(name),
     productVersion: options.manifest.version,
-    ...(options.controllerOptions?.reconnectDelaysMs === undefined
-      ? {}
-      : { reconnectDelaysMs: options.controllerOptions.reconnectDelaysMs }),
-    ...(options.controllerOptions?.scheduleTimer === undefined
-      ? {}
-      : { scheduleTimer: options.controllerOptions.scheduleTimer }),
-    ...(options.controllerOptions?.requestTimeoutMs === undefined
-      ? {}
-      : { requestTimeoutMs: options.controllerOptions.requestTimeoutMs }),
-    ...(options.controllerOptions?.storageAdapter === undefined
-      ? {}
-      : { storageAdapter: options.controllerOptions.storageAdapter }),
+    ...createControllerOptions(options.controllerOptions),
   });
 
-  const runtimeListener: RuntimeMessageListener = (message) => controller.handleRuntimeMessage(message);
+  const runtimeListener: RuntimeMessageListener = async (message) => controller.handleRuntimeMessage(message);
   const onTabRemoved = (tabId: number) => {
     networkObservation.pruneTab(tabId);
     contentScriptState.forgetTab(tabId);
@@ -75,5 +66,26 @@ export function startBackground(options: {
       options.browser.tabs.onRemoved?.removeListener(onTabRemoved);
       controller.stop();
     },
+  };
+}
+
+function createControllerOptions(
+  options:
+    | {
+        readonly reconnectDelaysMs?: readonly number[];
+        readonly scheduleTimer?: (callback: () => void, delayMs: number) => void;
+        readonly requestTimeoutMs?: number;
+        readonly storageAdapter?: BackgroundStorageAdapter;
+      }
+    | undefined,
+) {
+  if (options === undefined) {
+    return {};
+  }
+  return {
+    ...(options.reconnectDelaysMs === undefined ? {} : { reconnectDelaysMs: options.reconnectDelaysMs }),
+    ...(options.scheduleTimer === undefined ? {} : { scheduleTimer: options.scheduleTimer }),
+    ...(options.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: options.requestTimeoutMs }),
+    ...(options.storageAdapter === undefined ? {} : { storageAdapter: options.storageAdapter }),
   };
 }

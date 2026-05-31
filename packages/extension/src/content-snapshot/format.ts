@@ -1,9 +1,6 @@
 export const DEFAULT_MAX_OUTPUT_BYTES = 60_000;
 
-export function truncateText(
-  text: string,
-  maxBytes: number,
-): { readonly text: string; readonly truncated: boolean } {
+export function truncateText(text: string, maxBytes: number): { readonly text: string; readonly truncated: boolean } {
   const encoder = new TextEncoder();
   if (encoder.encode(text).length <= maxBytes) {
     return { text, truncated: false };

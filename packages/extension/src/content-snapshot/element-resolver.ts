@@ -2,24 +2,38 @@ import type { DragParams } from "@firefox-cli/protocol";
 import type { ElementRefRegistry } from "../element-ref-registry.js";
 import { ContentSnapshotError } from "./errors.js";
 
-export type ElementTarget = {
+export interface ElementRefStore<TElement> {
+  createGeneration(
+    elements: readonly TElement[],
+    now?: number,
+  ): {
+    readonly generationId: string;
+    readonly refsByElement: ReadonlyMap<TElement, string>;
+    readonly refCount: number;
+  };
+  resolve(ref: string, options?: { readonly generationId?: string; readonly now?: number }): TElement;
+  resolveRef(ref: string, options?: { readonly generationId?: string; readonly now?: number }): { readonly element: TElement; readonly generationId: string };
+  invalidate(): void;
+}
+
+export interface ElementTarget {
   readonly selector?: string | undefined;
   readonly ref?: string | undefined;
   readonly generationId?: string | undefined;
-};
+}
 
-export type ElementResolution = {
+export interface ElementResolution {
   readonly element: Element;
   readonly ref?: string;
   readonly generationId?: string;
-};
+}
 
 export type RefElementResolution = ElementResolution & {
   readonly ref: string;
   readonly generationId: string;
 };
 
-export type ContentElementResolver = {
+export interface ContentElementResolver {
   resolveScope(selector: string | undefined): Element;
   resolveRequiredTarget(
     params: ElementTarget,
@@ -31,18 +45,15 @@ export type ContentElementResolver = {
   resolveOptionalTarget(params: ElementTarget, now?: number): ElementResolution | undefined;
   resolveContentCommandTarget(params: ElementTarget, now?: number): ElementResolution;
   resolveRequiredDragTarget(params: DragParams, role: "source" | "target", now?: number): ElementResolution;
-  resolveRef(
-    ref: string,
-    options: { readonly generationId?: string; readonly now?: number },
-  ): RefElementResolution;
+  resolveRef(ref: string, options: { readonly generationId?: string; readonly now?: number }): RefElementResolution;
   querySingle(selector: string): Element;
   queryOptional(selector: string): Element | null;
   queryAll(selector: string): readonly Element[];
-};
+}
 
 export function createContentElementResolver(options: {
   readonly document: Document;
-  readonly registry: ElementRefRegistry<Element>;
+  readonly registry: ElementRefStore<Element> | ElementRefRegistry<Element>;
   readonly now?: number;
 }): ContentElementResolver {
   const now = (value?: number) => value ?? options.now ?? Date.now();
@@ -53,8 +64,7 @@ export function createContentElementResolver(options: {
         missingMessage: resolveOptions.missingMessage,
         now: now(resolveOptions.now),
       }),
-    resolveOptionalTarget: (params, resolveNow) =>
-      resolveOptionalTarget(options.document, options.registry, params, now(resolveNow)),
+    resolveOptionalTarget: (params, resolveNow) => resolveOptionalTarget(options.document, options.registry, params, now(resolveNow)),
     resolveContentCommandTarget: (params, resolveNow) =>
       resolveRequiredTarget(options.document, options.registry, params, {
         missingMessage: "Element selector is required.",
@@ -93,7 +103,7 @@ export function createContentElementResolver(options: {
 
 function resolveScope(document: Document, selector: string | undefined): Element {
   if (selector === undefined) {
-    const root = document.body ?? document.documentElement;
+    const root = document.querySelector("body") ?? document.querySelector(":root");
     if (root === null) {
       throw new ContentSnapshotError("SCRIPT_INJECTION_FAILED", "Document has no snapshot root.");
     }
@@ -105,7 +115,7 @@ function resolveScope(document: Document, selector: string | undefined): Element
 
 function resolveRequiredTarget(
   document: Document,
-  registry: ElementRefRegistry<Element>,
+  registry: ElementRefStore<Element>,
   params: ElementTarget,
   options: { readonly missingMessage: string; readonly now: number },
 ): ElementResolution {
@@ -116,12 +126,7 @@ function resolveRequiredTarget(
   return resolved;
 }
 
-function resolveOptionalTarget(
-  document: Document,
-  registry: ElementRefRegistry<Element>,
-  params: ElementTarget,
-  now: number,
-): ElementResolution | undefined {
+function resolveOptionalTarget(document: Document, registry: ElementRefStore<Element>, params: ElementTarget, now: number): ElementResolution | undefined {
   if (params.ref !== undefined) {
     const resolved = registry.resolveRef(params.ref, {
       ...(params.generationId === undefined ? {} : { generationId: params.generationId }),
@@ -154,10 +159,7 @@ function queryOptionalElement(document: Document, selector: string): Element | n
   try {
     return document.querySelector(selector);
   } catch (error) {
-    throw new ContentSnapshotError(
-      "SELECTOR_NOT_FOUND",
-      `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -165,9 +167,6 @@ function queryAllElements(document: Document, selector: string): readonly Elemen
   try {
     return Array.from(document.querySelectorAll(selector));
   } catch (error) {
-    throw new ContentSnapshotError(
-      "SELECTOR_NOT_FOUND",
-      `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new ContentSnapshotError("SELECTOR_NOT_FOUND", `Selector is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

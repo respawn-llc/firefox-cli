@@ -11,11 +11,7 @@ import { ok } from "../result.js";
 import { createNoopRequest, sendOrUnavailable } from "../transport.js";
 import type { CliDependencies, CliResult } from "../types.js";
 
-export async function setup(
-  args: readonly string[],
-  dependencies: CliDependencies,
-  renderHelp: () => string,
-): Promise<CliResult> {
+export async function setup(args: readonly string[], dependencies: CliDependencies, renderHelp: () => string): Promise<CliResult> {
   if (args[0] === "native-host") {
     return setupNativeHost(args, dependencies);
   }
@@ -36,14 +32,7 @@ export async function setup(
       );
     }
 
-    return ok(
-      [
-        "firefox-cli setup",
-        formatExtensionSetupInstruction(extensionPath),
-        "Native host: run `firefox-cli setup native-host`.",
-        "",
-      ].join("\n"),
-    );
+    return ok(["firefox-cli setup", formatExtensionSetupInstruction(extensionPath), "Native host: run `firefox-cli setup native-host`.", ""].join("\n"));
   }
 
   if (args[0] !== "native-host") {
@@ -108,16 +97,10 @@ export async function doctor(args: readonly string[], dependencies: CliDependenc
       "firefox-cli doctor",
       `Native host manifest: ${payload.nativeHostManifest.status}`,
       `Path: ${plan.manifestPath}`,
-      payload.nativeHostManifest.status === "stale"
-        ? `Installed path: ${payload.nativeHostManifest.installedPath}`
-        : undefined,
-      payload.nativeHostManifest.status === "invalid"
-        ? `Validation error: ${payload.nativeHostManifest.reason}`
-        : undefined,
+      payload.nativeHostManifest.status === "stale" ? `Installed path: ${payload.nativeHostManifest.installedPath}` : undefined,
+      payload.nativeHostManifest.status === "invalid" ? `Validation error: ${payload.nativeHostManifest.reason}` : undefined,
       `Extension connection: ${connection.status}`,
-      "nextAction" in payload.nativeHostManifest
-        ? `Next action: ${payload.nativeHostManifest.nextAction}`
-        : undefined,
+      "nextAction" in payload.nativeHostManifest ? `Next action: ${payload.nativeHostManifest.nextAction}` : undefined,
       connection.nextAction === undefined ? undefined : `Connection next action: ${connection.nextAction}`,
       "",
     ]
@@ -161,9 +144,7 @@ async function resolveExtensionInstallPath(dependencies: CliDependencies): Promi
 }
 
 function formatExtensionSetupInstruction(extensionPath: string): string {
-  return extensionPath.endsWith(".xpi")
-    ? `Extension: install ${extensionPath} in Firefox.`
-    : `Extension: load ${extensionPath} in Firefox about:debugging.`;
+  return extensionPath.endsWith(".xpi") ? `Extension: install ${extensionPath} in Firefox.` : `Extension: load ${extensionPath} in Firefox about:debugging.`;
 }
 
 async function readNativeHostManifestStatus(plan: Awaited<ReturnType<typeof createManifestPlan>>): Promise<
@@ -243,7 +224,6 @@ function isNativeMessagingManifestCanonical(
     installed.name === expected.name &&
     installed.description === expected.description &&
     installed.path === expected.path &&
-    installed.type === expected.type &&
     installed.allowed_extensions.length === expected.allowed_extensions.length &&
     installed.allowed_extensions.every((value, index) => value === expected.allowed_extensions[index])
   );
@@ -268,8 +248,7 @@ async function checkExtensionConnection(dependencies: CliDependencies): Promise<
   if (response.error.code === "VERSION_MISMATCH") {
     return {
       status: "version-mismatch",
-      nextAction:
-        "Upgrade/rebuild firefox-cli, the native host, and the extension so their protocol versions match.",
+      nextAction: "Upgrade/rebuild firefox-cli, the native host, and the extension so their protocol versions match.",
     };
   }
 

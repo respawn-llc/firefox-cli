@@ -1,16 +1,7 @@
 import type { ProtocolError, ParseResult } from "./core.js";
-import {
-  safeParseBatchStepCommandParams,
-  safeParseCommandResult,
-  safeParseStrictCommandParams,
-} from "./command-validation.js";
+import { safeParseBatchStepCommandParams, safeParseCommandResult, safeParseStrictCommandParams } from "./command-validation.js";
 import type { CommandParams, CommandResult, RequestEnvelope, ResponseEnvelope } from "./envelopes.js";
-import {
-  batchStepResultSchema,
-  batchStepSchema,
-  isBatchableCommandId,
-  type CommandId,
-} from "./registry/index.js";
+import { batchStepResultSchema, batchStepSchema, isBatchableCommandId, type CommandId } from "./registry/index.js";
 
 export type CommandHandler<C extends CommandId, Args extends readonly unknown[] = []> = (
   request: RequestEnvelope<C>,
@@ -21,10 +12,10 @@ export type CommandHandlerMap<Commands extends CommandId, Args extends readonly 
   readonly [C in Commands]: CommandHandler<C, Args>;
 };
 
-export type ParsedBatchStep<C extends CommandId> = {
+export interface ParsedBatchStep<C extends CommandId> {
   readonly command: C;
   readonly params: CommandParams<C>;
-};
+}
 
 export type ParsedBatchStepResult<C extends CommandId> =
   | {
@@ -40,42 +31,28 @@ export type ParsedBatchStepResult<C extends CommandId> =
       readonly error: ProtocolError;
     };
 
-type CommandHandlerMapFactory<Args extends readonly unknown[]> = <
-  const Commands extends readonly CommandId[],
->(
+type CommandHandlerMapFactory<Args extends readonly unknown[]> = <const Commands extends readonly CommandId[]>(
   commands: Commands,
   handlers: CommandHandlerMap<Commands[number], Args>,
 ) => CommandHandlerMap<Commands[number], Args>;
 
 type AnyCommandHandlerMap = Partial<Record<CommandId, unknown>>;
-type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) extends (
-  value: infer Intersection,
-) => void
-  ? Intersection
-  : never;
+type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) extends (value: infer Intersection) => void ? Intersection : never;
 
-export function isRequestCommand<C extends CommandId>(
-  request: RequestEnvelope,
-  command: C,
-): request is RequestEnvelope<C> {
+export function isRequestCommand<C extends CommandId>(request: RequestEnvelope | RequestEnvelope<C>, command: C): request is RequestEnvelope<C> {
   return request.command === command;
 }
 
-export function defineCommandHandlerMap<
-  Args extends readonly unknown[] = [],
->(): CommandHandlerMapFactory<Args> {
+export function defineCommandHandlerMap<Args extends readonly unknown[] = []>(): CommandHandlerMapFactory<Args> {
   return (_commands, handlers) => handlers;
 }
 
-export function defineExactCommandHandlerMap<
-  Args extends readonly unknown[] = [],
->(): CommandHandlerMapFactory<Args> {
+export function defineExactCommandHandlerMap<Args extends readonly unknown[] = []>(): CommandHandlerMapFactory<Args> {
   return (_commands, handlers) => handlers;
 }
 
-export function mergeDisjointHandlerMaps<const Maps extends readonly AnyCommandHandlerMap[]>(
-  ...maps: Maps
-): UnionToIntersection<Maps[number]> {
+export function mergeDisjointHandlerMaps<const Maps extends readonly AnyCommandHandlerMap[]>(...maps: Maps): UnionToIntersection<Maps[number]>;
+export function mergeDisjointHandlerMaps(...maps: readonly AnyCommandHandlerMap[]): Partial<Record<CommandId, unknown>> {
   const merged: Record<string, unknown> = {};
   for (const map of maps) {
     for (const [command, handler] of Object.entries(map)) {
@@ -85,7 +62,7 @@ export function mergeDisjointHandlerMaps<const Maps extends readonly AnyCommandH
       merged[command] = handler;
     }
   }
-  return merged as UnionToIntersection<Maps[number]>;
+  return merged;
 }
 
 export function dispatchCommandHandler<Commands extends CommandId, Args extends readonly unknown[]>(
@@ -93,14 +70,11 @@ export function dispatchCommandHandler<Commands extends CommandId, Args extends 
   request: RequestEnvelope<Commands>,
   ...args: Args
 ): Promise<ResponseEnvelope<Commands>> | ResponseEnvelope<Commands> {
-  const handler = getCommandHandler(handlers, request.command);
+  const handler = getCommandHandler(handlers, request);
   return handler(request, ...args);
 }
 
-export function parseBatchStepAs<C extends CommandId>(
-  command: C,
-  step: unknown,
-): ParseResult<ParsedBatchStep<C>> {
+export function parseBatchStepAs<C extends CommandId>(command: C, step: unknown): ParseResult<ParsedBatchStep<C>> {
   const parsed = batchStepSchema.safeParse(step);
   if (!parsed.success) {
     return failure("INVALID_ENVELOPE", "Batch step is invalid.", {
@@ -117,7 +91,7 @@ export function parseBatchStepAs<C extends CommandId>(
   }
 
   if (!isBatchableCommandId(command)) {
-    return failure("INVALID_ENVELOPE", `Command cannot run inside batch: ${command}`, {
+    return failure("INVALID_ENVELOPE", `Command cannot run inside batch: ${String(command)}`, {
       command,
     });
   }
@@ -139,10 +113,7 @@ export function parseBatchStepAs<C extends CommandId>(
   };
 }
 
-export function parseBatchStepResultAs<C extends CommandId>(
-  command: C,
-  step: unknown,
-): ParseResult<ParsedBatchStepResult<C>> {
+export function parseBatchStepResultAs<C extends CommandId>(command: C, step: unknown): ParseResult<ParsedBatchStepResult<C>> {
   const parsed = batchStepResultSchema.safeParse(step);
   if (!parsed.success) {
     return failure("INVALID_RESPONSE", "Batch step result is invalid.", {
@@ -189,10 +160,7 @@ export function parseBatchStepResultAs<C extends CommandId>(
   };
 }
 
-export function parseCommandParamsAs<C extends CommandId>(
-  command: C,
-  params: unknown,
-): ParseResult<CommandParams<C>> {
+export function parseCommandParamsAs<C extends CommandId>(command: C, params: unknown): ParseResult<CommandParams<C>> {
   const parsed = safeParseStrictCommandParams(command, params);
   if (!parsed.success) {
     return failure("INVALID_ENVELOPE", "Command params are invalid.", {
@@ -205,16 +173,13 @@ export function parseCommandParamsAs<C extends CommandId>(
 
 function getCommandHandler<Commands extends CommandId, Args extends readonly unknown[]>(
   handlers: CommandHandlerMap<Commands, Args>,
-  command: CommandId,
-): CommandHandler<Commands, Args> {
-  return handlers[command as Commands] as CommandHandler<Commands, Args>;
+  request: RequestEnvelope<Commands>,
+): CommandHandler<Commands, Args>;
+function getCommandHandler(handlers: Record<string, unknown>, request: RequestEnvelope): unknown {
+  return handlers[request.command];
 }
 
-function failure(
-  code: ProtocolError["code"],
-  message: string,
-  details?: Record<string, unknown>,
-): ParseResult<never> {
+function failure(code: ProtocolError["code"], message: string, details?: Record<string, unknown>): ParseResult<never> {
   return {
     ok: false,
     error: {

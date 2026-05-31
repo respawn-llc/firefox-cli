@@ -1,21 +1,13 @@
 import { createRequest } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { handleBrowserRequest } from "./browser-commands.js";
-import {
-  FakeBrowserAdapter,
-  ONE_BY_ONE_PNG_BASE64,
-  tabSummary,
-  windowSnapshot,
-} from "./browser-commands-test-utils.js";
+import { FakeBrowserAdapter, ONE_BY_ONE_PNG_BASE64, tabSummary, windowSnapshot } from "./browser-commands-test-utils.js";
 
 describe("browser screenshot command handling", () => {
   it("captures the active visible tab as PNG metadata with internal image bytes", async () => {
     const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
-    const response = await handleBrowserRequest(
-      createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-1"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-1"), adapter);
 
     expect(response).toMatchObject({
       ok: true,
@@ -49,11 +41,7 @@ describe("browser screenshot command handling", () => {
     ]);
 
     const response = await handleBrowserRequest(
-      createRequest(
-        "screenshot",
-        { path: "/tmp/page.png", format: "png", target: { tab: { kind: "id", id: 201 } } },
-        "screenshot-1",
-      ),
+      createRequest("screenshot", { path: "/tmp/page.png", format: "png", target: { tab: { kind: "id", id: 201 } } }, "screenshot-1"),
       adapter,
     );
 
@@ -83,10 +71,7 @@ describe("browser screenshot command handling", () => {
       },
     ]);
 
-    const response = await handleBrowserRequest(
-      createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-private"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-private"), adapter);
 
     expect(response).toMatchObject({
       ok: false,
@@ -103,11 +88,7 @@ describe("browser screenshot command handling", () => {
     const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
-      createRequest(
-        "screenshot",
-        { path: "/tmp/page.png", format: "png", maxImageBytes: 67 },
-        "screenshot-large",
-      ),
+      createRequest("screenshot", { path: "/tmp/page.png", format: "png", maxImageBytes: 67 }, "screenshot-large"),
       adapter,
     );
 
@@ -124,10 +105,7 @@ describe("browser screenshot command handling", () => {
     const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.captureFailure = new Error("capture permission denied");
 
-    const response = await handleBrowserRequest(
-      createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-fail"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-fail"), adapter);
 
     expect(response).toMatchObject({
       ok: false,
@@ -139,17 +117,11 @@ describe("browser screenshot command handling", () => {
   });
 
   it("maps screenshot activation failures before capture", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, false, 10), tabSummary(102, 1, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, false, 10), tabSummary(102, 1, true, 10)])]);
     adapter.selectFailure = new Error("tab activation blocked");
 
     const response = await handleBrowserRequest(
-      createRequest(
-        "screenshot",
-        { path: "/tmp/page.png", format: "png", target: { tab: { kind: "id", id: 101 } } },
-        "screenshot-activation-fail",
-      ),
+      createRequest("screenshot", { path: "/tmp/page.png", format: "png", target: { tab: { kind: "id", id: 101 } } }, "screenshot-activation-fail"),
       adapter,
     );
 
@@ -168,11 +140,7 @@ describe("browser screenshot command handling", () => {
     adapter.captureDelayMs = 100;
 
     const response = await handleBrowserRequest(
-      createRequest(
-        "screenshot",
-        { path: "/tmp/page.png", format: "png", timeoutMs: 1 },
-        "screenshot-timeout",
-      ),
+      createRequest("screenshot", { path: "/tmp/page.png", format: "png", timeoutMs: 1 }, "screenshot-timeout"),
       adapter,
     );
 
@@ -188,10 +156,7 @@ describe("browser screenshot command handling", () => {
     const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.screenshotDataUrl = "data:image/jpeg;base64,AAAA";
 
-    const response = await handleBrowserRequest(
-      createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-format"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-format"), adapter);
 
     expect(response).toMatchObject({
       ok: false,

@@ -48,19 +48,11 @@ export async function writeSignedExtensionProvenance(input: {
 }
 
 export async function readSignedExtensionProvenance(path: string): Promise<SignedExtensionProvenance> {
-  return parseSignedExtensionProvenance(
-    (await readRegularFile(path, "signed extension provenance")).toString("utf8"),
-    path,
-  );
+  return parseSignedExtensionProvenance((await readRegularFile(path, "signed extension provenance")).toString("utf8"), path);
 }
 
 export function parseSignedExtensionProvenance(content: string, location: string): SignedExtensionProvenance {
-  return parseJsonWithSchema(
-    content,
-    "signed extension provenance",
-    location,
-    signedExtensionProvenanceSchema,
-  );
+  return parseJsonWithSchema(content, "signed extension provenance", location, signedExtensionProvenanceSchema);
 }
 
 export async function hashFile(path: string): Promise<string> {

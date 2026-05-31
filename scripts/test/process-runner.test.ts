@@ -2,22 +2,13 @@ import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
-import {
-  ProcessRunnerError,
-  raceWithProcessFailure,
-  renderCommand,
-  runProcess,
-  startManagedProcess,
-} from "../process-runner.js";
+import { ProcessRunnerError, raceWithProcessFailure, renderCommand, runProcess, startManagedProcess } from "../process-runner.js";
 
 const node = process.execPath;
 
 describe("process runner", () => {
   it("captures successful stdout and stderr after process close", async () => {
-    const result = await runProcess(node, [
-      "-e",
-      "process.stdout.write('out'); process.stderr.write('err');",
-    ]);
+    const result = await runProcess(node, ["-e", "process.stdout.write('out'); process.stderr.write('err');"]);
 
     expect(result).toMatchObject({
       exitCode: 0,
@@ -46,9 +37,7 @@ describe("process runner", () => {
   });
 
   it("supports expected nonzero exits and rejects unexpected exits", async () => {
-    await expect(
-      runProcess(node, ["-e", "process.exit(2);"], { expectedExitCodes: [2] }),
-    ).resolves.toMatchObject({ exitCode: 2 });
+    await expect(runProcess(node, ["-e", "process.exit(2);"], { expectedExitCodes: [2] })).resolves.toMatchObject({ exitCode: 2 });
 
     await expect(runProcess(node, ["-e", "process.exit(2);"])).rejects.toBeInstanceOf(ProcessRunnerError);
   });
@@ -64,9 +53,14 @@ describe("process runner", () => {
     }
 
     expect(failure).toBeInstanceOf(ProcessRunnerError);
-    const pid = (failure as ProcessRunnerError).pid;
+    if (!(failure instanceof ProcessRunnerError)) {
+      throw new Error("Expected ProcessRunnerError.");
+    }
+    const pid = failure.pid;
     expect(pid).toBeTypeOf("number");
-    await eventually(() => expectProcessGone(pid));
+    await eventually(() => {
+      expectProcessGone(pid);
+    });
   });
 
   it("terminates timed-out process trees", async () => {
@@ -86,7 +80,9 @@ describe("process runner", () => {
 
       expect(failure).toBeInstanceOf(ProcessRunnerError);
       expect(grandchildPid).toBeTypeOf("number");
-      await eventually(() => expectProcessGone(grandchildPid));
+      await eventually(() => {
+        expectProcessGone(grandchildPid);
+      });
     } finally {
       cleanupProcess(grandchildPid);
     }
@@ -100,7 +96,9 @@ describe("process runner", () => {
 
     expect(stopped.signal ?? stopped.exitCode).not.toBeNull();
     expect(pid).toBeTypeOf("number");
-    await eventually(() => expectProcessGone(pid));
+    await eventually(() => {
+      expectProcessGone(pid);
+    });
   });
 
   it("stops managed process trees with signal escalation", async () => {
@@ -123,8 +121,12 @@ describe("process runner", () => {
 
       expect(stopped.signal ?? stopped.exitCode).not.toBeNull();
       expect(pid).toBeTypeOf("number");
-      await eventually(() => expectProcessGone(pid));
-      await eventually(() => expectProcessGone(grandchildPid));
+      await eventually(() => {
+        expectProcessGone(pid);
+      });
+      await eventually(() => {
+        expectProcessGone(grandchildPid);
+      });
     } finally {
       cleanupProcessTree(pid);
       cleanupProcess(grandchildPid);
@@ -133,14 +135,10 @@ describe("process runner", () => {
 
   it("races readiness against child exit and spawn failure", async () => {
     const exited = startManagedProcess(node, ["-e", "process.exit(3);"]);
-    await expect(raceWithProcessFailure(exited, sleep(1000), "early-exit")).rejects.toBeInstanceOf(
-      ProcessRunnerError,
-    );
+    await expect(raceWithProcessFailure(exited, sleep(1000), "early-exit")).rejects.toBeInstanceOf(ProcessRunnerError);
 
     const missing = startManagedProcess("__firefox_cli_missing_process__");
-    await expect(raceWithProcessFailure(missing, sleep(1000), "spawn-fail")).rejects.toBeInstanceOf(
-      ProcessRunnerError,
-    );
+    await expect(raceWithProcessFailure(missing, sleep(1000), "spawn-fail")).rejects.toBeInstanceOf(ProcessRunnerError);
   });
 
   it("redacts configured command argument values", async () => {
@@ -158,7 +156,10 @@ describe("process runner", () => {
     }
 
     expect(failure).toBeInstanceOf(ProcessRunnerError);
-    expect((failure as Error).message).not.toContain("super-secret");
+    if (!(failure instanceof Error)) {
+      throw new Error("Expected Error.");
+    }
+    expect(failure.message).not.toContain("super-secret");
   });
 });
 
@@ -240,6 +241,6 @@ function cleanupProcess(pid: number | undefined): void {
   }
 }
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }

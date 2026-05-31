@@ -64,8 +64,6 @@ export class PairingStateService {
       this.#pairToken = null;
       await this.#storageAdapter.setPairToken(null);
     }
-    return !pairing.approved && pairing.status === "invalid-pair-state"
-      ? (pairing.message ?? "Native host pair state is invalid.")
-      : undefined;
+    return !pairing.approved && pairing.status === "invalid-pair-state" ? (pairing.message ?? "Native host pair state is invalid.") : undefined;
   }
 }

@@ -1,4 +1,4 @@
-import { commandSchemas, getCommandSecurityMetadata, type CommandId } from "./registry/index.js";
+import { commandSchemas, getCommandSecurityMetadata, isCommandId, type CommandId } from "./registry/index.js";
 import type { CommandPrivilegeReason, CommandSchemaEntry } from "./metadata.js";
 
 export type FirefoxManifestPermission =
@@ -28,20 +28,20 @@ export type FirefoxDataCollectionPermission =
   | "websiteContent"
   | "technicalAndInteraction";
 
-export type ExtensionCommandRequirement = {
+export interface ExtensionCommandRequirement {
   readonly command: CommandId;
   readonly securityReasons: readonly CommandPrivilegeReason[];
   readonly hostAccess: boolean;
   readonly manifestPermissions: readonly FirefoxManifestPermission[];
   readonly networkObservation: boolean;
-};
+}
 
-export type FirefoxDataCollectionRequirements = {
+export interface FirefoxDataCollectionRequirements {
   readonly required: readonly FirefoxDataCollectionPermission[];
   readonly optional: readonly FirefoxDataCollectionPermission[];
-};
+}
 
-export type ExtensionPermissionRequirements = {
+export interface ExtensionPermissionRequirements {
   readonly firefoxStrictMinVersion: string;
   readonly manifestPermissions: readonly FirefoxManifestPermission[];
   readonly hostPermissions: readonly FirefoxHostPermission[];
@@ -49,16 +49,11 @@ export type ExtensionPermissionRequirements = {
   readonly webRequestListenerOrigins: readonly FirefoxHostPermission[];
   readonly dataCollection: FirefoxDataCollectionRequirements;
   readonly commands: readonly ExtensionCommandRequirement[];
-};
+}
 
 const allUrlsOrigin: FirefoxHostPermission = "<all_urls>";
 
-const baseManifestPermissions = [
-  "nativeMessaging",
-  "scripting",
-  "tabs",
-  "storage",
-] as const satisfies readonly FirefoxManifestPermission[];
+const baseManifestPermissions = ["nativeMessaging", "scripting", "tabs", "storage"] as const satisfies readonly FirefoxManifestPermission[];
 
 const requiredDataCollectionPermissions = [
   "browsingActivity",
@@ -90,7 +85,7 @@ export function getExtensionPermissionRequirements(): ExtensionPermissionRequire
   const webRequestListenerOrigins = new Set<FirefoxHostPermission>();
 
   const commands = Object.entries(commandSchemas).map(([command, entry]) => {
-    const requirement = deriveCommandRequirement(command as CommandId, entry);
+    const requirement = deriveCommandRequirement(entry, getCommandId(command));
     for (const permission of requirement.manifestPermissions) {
       manifestPermissions.add(permission);
     }
@@ -119,13 +114,10 @@ export function getExtensionPermissionRequirements(): ExtensionPermissionRequire
 }
 
 export function commandRequiresExtensionHostAccess(command: CommandId): boolean {
-  return deriveCommandRequirement(command, commandSchemas[command]).hostAccess;
+  return deriveCommandRequirement(commandSchemas[command], command).hostAccess;
 }
 
-function deriveCommandRequirement(
-  command: CommandId,
-  entry: CommandSchemaEntry,
-): ExtensionCommandRequirement {
+function deriveCommandRequirement(entry: CommandSchemaEntry, command: CommandId): ExtensionCommandRequirement {
   const securityReasons = [...getCommandSecurityMetadata(command).reasons];
   const manifestPermissions = new Set<FirefoxManifestPermission>();
 
@@ -144,16 +136,17 @@ function deriveCommandRequirement(
   };
 }
 
-function commandNeedsHostAccess(
-  entry: CommandSchemaEntry,
-  securityReasons: readonly CommandPrivilegeReason[],
-): boolean {
+function getCommandId(command: string): CommandId {
+  if (isCommandId(command)) {
+    return command;
+  }
+  throw new Error(`Unknown command id: ${command}`);
+}
+
+function commandNeedsHostAccess(entry: CommandSchemaEntry, securityReasons: readonly CommandPrivilegeReason[]): boolean {
   return (
     entry.owner === "extension" &&
-    (entry.target !== "none" ||
-      entry.content !== "never" ||
-      entry.action ||
-      securityReasons.some((reason) => pageAccessReasons.has(reason)))
+    (entry.target !== "none" || entry.content !== "never" || entry.action || securityReasons.some((reason) => pageAccessReasons.has(reason)))
   );
 }
 

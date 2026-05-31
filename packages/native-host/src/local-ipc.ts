@@ -1,17 +1,7 @@
 import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import {
-  createProtocolSession,
-  localProtocolVersionRange,
-  parseBoundaryResponse,
-  timeoutPolicies,
-} from "@firefox-cli/protocol";
-import {
-  getRequestId,
-  getRequestIdFromFrameError,
-  isHelloRequestLike,
-  unwrapAuthorizedMessage,
-} from "./local-ipc-auth.js";
+import { createProtocolSession, localProtocolVersionRange, parseBoundaryResponse, timeoutPolicies } from "@firefox-cli/protocol";
+import { getRequestId, getRequestIdFromFrameError, isHelloRequestLike, unwrapAuthorizedMessage } from "./local-ipc-auth.js";
 import {
   createLocalIpcErrorResponse,
   endSocketWithResponse,
@@ -117,11 +107,7 @@ export class LocalIpcServer {
     try {
       await this.#listenWithNewServer();
     } catch (error) {
-      if (
-        !options.retryStaleUnixSocket ||
-        this.#endpoint.kind !== "unix-socket" ||
-        !isNodeError(error, "EADDRINUSE")
-      ) {
+      if (!options.retryStaleUnixSocket || this.#endpoint.kind !== "unix-socket" || !isNodeError(error, "EADDRINUSE")) {
         throw error;
       }
 
@@ -169,22 +155,15 @@ export class LocalIpcServer {
   }
 
   async #handleSocket(socket: Socket): Promise<void> {
-    let readErrorHandled = false;
     try {
       const message = await readOneJsonLine(socket, {
         timeoutMs: this.#requestLineTimeoutMs,
         onFrameError: (error) => {
-          readErrorHandled = true;
           const requestId = getRequestIdFromFrameError(error);
           const protocolError = frameErrorToProtocolError(error);
           endSocketWithResponseSync(
             socket,
-            createLocalIpcErrorResponse(
-              requestId,
-              protocolError.code,
-              protocolError.message,
-              protocolError.details,
-            ),
+            createLocalIpcErrorResponse(requestId, protocolError.code, protocolError.message, protocolError.details),
             requestId,
           );
         },
@@ -205,21 +184,6 @@ export class LocalIpcServer {
       await endSocketWithResponse(socket, response, getRequestId(authorizedMessage.message));
     } catch (error) {
       if (error instanceof LocalIpcFrameError) {
-        if (readErrorHandled) {
-          return;
-        }
-
-        const protocolError = frameErrorToProtocolError(error);
-        await endSocketWithResponse(
-          socket,
-          createLocalIpcErrorResponse(
-            getRequestIdFromFrameError(error),
-            protocolError.code,
-            protocolError.message,
-            protocolError.details,
-          ),
-          getRequestIdFromFrameError(error),
-        );
         return;
       }
 
@@ -252,12 +216,10 @@ export class LocalIpcServer {
     }
 
     const protocolSession = createProtocolSession(hello.value.protocolVersion);
-    let readErrorHandled = false;
     try {
       const message = await readOneJsonLine(socket, {
         timeoutMs: this.#requestLineTimeoutMs,
         onFrameError: (error) => {
-          readErrorHandled = true;
           const protocolError = frameErrorToProtocolError(error);
           endSocketWithResponseSync(
             socket,
@@ -267,11 +229,7 @@ export class LocalIpcServer {
         },
       });
       const requestId = getRequestId(message);
-      const authorizedMessage = unwrapAuthorizedMessage(
-        message,
-        this.#authToken,
-        protocolSession.protocolVersion,
-      );
+      const authorizedMessage = unwrapAuthorizedMessage(message, this.#authToken, protocolSession.protocolVersion);
       if (!authorizedMessage.ok) {
         await endSocketWithResponse(socket, authorizedMessage.response, requestId);
         return;
@@ -281,16 +239,6 @@ export class LocalIpcServer {
       await endSocketWithResponse(socket, response, getRequestId(authorizedMessage.message));
     } catch (error) {
       if (error instanceof LocalIpcFrameError) {
-        if (readErrorHandled) {
-          return;
-        }
-
-        const protocolError = frameErrorToProtocolError(error);
-        await endSocketWithResponse(
-          socket,
-          protocolSession.createErrorResponse(getRequestIdFromFrameError(error), protocolError),
-          getRequestIdFromFrameError(error),
-        );
         return;
       }
 

@@ -34,10 +34,7 @@ type StaticBrowserCommand = keyof typeof staticHandlers & CommandId;
 
 const batchHandler = createBatchHandler();
 
-export async function dispatchBrowserRequest(
-  request: RequestEnvelope,
-  adapter: BackgroundBrowserAdapter,
-): Promise<ResponseEnvelope> {
+export async function dispatchBrowserRequest(request: RequestEnvelope, adapter: BackgroundBrowserAdapter): Promise<ResponseEnvelope> {
   const targetContext = createBrowserTargetContext(adapter);
   const executeStep = async (stepRequest: RequestEnvelope, stepAdapter: BackgroundBrowserAdapter) => {
     try {
@@ -54,21 +51,21 @@ export async function dispatchBrowserRequest(
     }
   };
   if (isRequestCommand(request, "batch")) {
-    return await batchHandler(request, adapter, {
+    return batchHandler(request, adapter, {
       executeStep,
       targetContext,
     });
   }
 
   if (isActionRequest(request)) {
-    return await handleActionCommand(request, adapter, {
+    return handleActionCommand(request, adapter, {
       executeStep,
       targetContext,
     });
   }
 
   if (isStaticBrowserRequest(request)) {
-    return await dispatchCommandHandler(staticHandlers, request, adapter, {
+    return dispatchCommandHandler(staticHandlers, request, adapter, {
       executeStep,
       targetContext,
     });

@@ -8,12 +8,12 @@ import {
   type NativeMessagingManifestPlan,
 } from "@firefox-cli/native-host";
 
-export type Phase2E2ePlan = {
+export interface Phase2E2ePlan {
   readonly env: NodeJS.ProcessEnv;
   readonly stateRoot: string;
   readonly endpoint: LocalIpcEndpoint;
   readonly manifestPlan: NativeMessagingManifestPlan;
-};
+}
 
 export function planPhase2E2e(options: {
   readonly binaryPath: string;

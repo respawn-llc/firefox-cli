@@ -8,10 +8,7 @@ export function planLocalIpcEndpoint(options: LocalIpcEndpointOptions): LocalIpc
   if (options.platform === "win32") {
     const endpointScope = "endpointScope" in options ? options.endpointScope : undefined;
     if (endpointScope === undefined || endpointScope.length === 0) {
-      throw new LocalIpcError(
-        "SOCKET_FAILED",
-        "Windows local IPC endpoints require an auth-token-derived scope.",
-      );
+      throw new LocalIpcError("SOCKET_FAILED", "Windows local IPC endpoints require an auth-token-derived scope.");
     }
     return {
       kind: "windows-named-pipe",

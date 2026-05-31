@@ -1,11 +1,7 @@
 import { builtinModules } from "node:module";
 import { posix } from "node:path";
 
-const nodeBuiltins = new Set(
-  builtinModules.flatMap((name) =>
-    name.startsWith("node:") ? [name, name.slice(5)] : [name, `node:${name}`],
-  ),
-);
+const nodeBuiltins = new Set(builtinModules.flatMap((name) => (name.startsWith("node:") ? [name, name.slice(5)] : [name, `node:${name}`])));
 const bunBuiltins = new Set(["bun", "bun:ffi", "bun:jsc", "bun:sqlite", "bun:test"]);
 const workspacePackages = new Set([
   "@firefox-cli/cli",
@@ -22,8 +18,7 @@ export const firefoxCliArchitecture = {
         type: "problem",
         docs: { description: "Disallow exported mutable bindings." },
         messages: {
-          mutableExport:
-            "Do not export mutable bindings. Export constants, functions, classes, or immutable factories.",
+          mutableExport: "Do not export mutable bindings. Export constants, functions, classes, or immutable factories.",
         },
         schema: [],
       },
@@ -61,8 +56,7 @@ export const firefoxCliArchitecture = {
         type: "problem",
         docs: { description: "Keep WebExtension browser/chrome API access inside the extension package." },
         messages: {
-          platformOutsideExtension:
-            "Firefox WebExtension APIs belong inside packages/extension/src boundary adapters.",
+          platformOutsideExtension: "Firefox WebExtension APIs belong inside packages/extension/src boundary adapters.",
         },
         schema: [],
       },
@@ -70,10 +64,7 @@ export const firefoxCliArchitecture = {
         if (isExtensionSource(context.filename ?? context.getFilename())) return {};
         return {
           MemberExpression(node) {
-            if (
-              node.object.type === "Identifier" &&
-              (node.object.name === "browser" || node.object.name === "chrome")
-            ) {
+            if (node.object.type === "Identifier" && (node.object.name === "browser" || node.object.name === "chrome")) {
               const scope = context.sourceCode.getScope(node);
               if (!hasLocalBinding(scope, node.object.name)) {
                 context.report({ node, messageId: "platformOutsideExtension" });
@@ -88,8 +79,7 @@ export const firefoxCliArchitecture = {
         type: "problem",
         docs: { description: "Disallow Node/Bun builtins in Firefox extension runtime source." },
         messages: {
-          nodeBuiltinInExtension:
-            "Node/Bun runtime APIs are not available in Firefox extension runtime source.",
+          nodeBuiltinInExtension: "Node/Bun runtime APIs are not available in Firefox extension runtime source.",
         },
         schema: [],
       },
@@ -129,8 +119,7 @@ export const firefoxCliArchitecture = {
         const filename = context.filename ?? context.getFilename();
         const currentPackage = packageForFile(filename);
         const check = (node) => {
-          if (violatesBoundary(currentPackage, filename, node.source?.value))
-            context.report({ node, messageId: "packageBoundary" });
+          if (violatesBoundary(currentPackage, filename, node.source?.value)) context.report({ node, messageId: "packageBoundary" });
         };
         return { ImportDeclaration: check, ExportAllDeclaration: check, ExportNamedDeclaration: check };
       },
@@ -176,12 +165,7 @@ function isExtensionSource(file) {
 }
 function isExtensionRuntime(file) {
   const path = normalized(file);
-  return (
-    path.includes("/packages/extension/src/") &&
-    !path.endsWith(".test.ts") &&
-    !path.endsWith(".test.tsx") &&
-    !path.endsWith(".d.ts")
-  );
+  return path.includes("/packages/extension/src/") && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && !path.endsWith(".d.ts");
 }
 function isNodeOrBunBuiltin(source) {
   return typeof source === "string" && (nodeBuiltins.has(source) || bunBuiltins.has(source));
@@ -211,10 +195,8 @@ function violatesBoundary(currentPackage, filename, importValue) {
 }
 function violatesPackageOwnership(currentPackage, importedPackage) {
   if (currentPackage === "@firefox-cli/protocol") return importedPackage !== "@firefox-cli/protocol";
-  if (currentPackage === "@firefox-cli/extension")
-    return importedPackage === "@firefox-cli/cli" || importedPackage === "@firefox-cli/native-host";
-  if (currentPackage === "@firefox-cli/native-host")
-    return importedPackage === "@firefox-cli/cli" || importedPackage === "@firefox-cli/extension";
+  if (currentPackage === "@firefox-cli/extension") return importedPackage === "@firefox-cli/cli" || importedPackage === "@firefox-cli/native-host";
+  if (currentPackage === "@firefox-cli/native-host") return importedPackage === "@firefox-cli/cli" || importedPackage === "@firefox-cli/extension";
   if (currentPackage === "@firefox-cli/cli") return importedPackage === "@firefox-cli/extension";
   return false;
 }

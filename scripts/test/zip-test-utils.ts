@@ -1,16 +1,16 @@
 import { deflateRawSync } from "node:zlib";
 import { calculateCrc32 } from "../zip-archive.js";
 
-export type ZipFixtureEntryInput = {
+export interface ZipFixtureEntryInput {
   readonly name: string;
   readonly data?: Buffer | string;
   readonly compressionMethod?: number;
   readonly crc32?: number;
   readonly useDataDescriptor?: boolean;
   readonly versionNeeded?: number;
-};
+}
 
-export type ZipFixtureOptions = {
+export interface ZipFixtureOptions {
   readonly eocdComment?: Buffer | string;
   readonly diskNumber?: number;
   readonly centralDirectoryDisk?: number;
@@ -18,19 +18,16 @@ export type ZipFixtureOptions = {
   readonly totalEntryCount?: number;
   readonly centralDirectorySize?: number;
   readonly centralDirectoryOffset?: number;
-};
+}
 
-export type ZipFixture = {
+export interface ZipFixture {
   readonly data: Buffer;
   readonly localHeaderOffsets: readonly number[];
   readonly centralHeaderOffsets: readonly number[];
   readonly eocdOffset: number;
-};
+}
 
-export function createZipFixture(
-  entries: readonly ZipFixtureEntryInput[],
-  options: ZipFixtureOptions = {},
-): ZipFixture {
+export function createZipFixture(entries: readonly ZipFixtureEntryInput[], options: ZipFixtureOptions = {}): ZipFixture {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   const localHeaderOffsets: number[] = [];
@@ -39,50 +36,16 @@ export function createZipFixture(
   let centralOffset = 0;
 
   for (const entry of entries) {
-    const name = Buffer.from(entry.name, "utf8");
-    const source = toBuffer(entry.data ?? "");
-    const compressionMethod = entry.compressionMethod ?? 0;
-    const compressed = compressionMethod === 8 ? deflateRawSync(source) : Buffer.from(source);
-    const crc32 = entry.crc32 ?? calculateCrc32(source);
-    const useDataDescriptor = entry.useDataDescriptor === true;
-    const flags = useDataDescriptor ? 0x0008 : 0;
-    const versionNeeded = entry.versionNeeded ?? 20;
-    const localHeader = createLocalHeader({
-      compressedSize: compressed.length,
-      compressionMethod,
-      crc32Value: crc32,
-      fileNameLength: name.length,
-      flags,
-      uncompressedSize: source.length,
-      useDataDescriptor,
-      versionNeeded,
-    });
-    const dataDescriptor = useDataDescriptor
-      ? createDataDescriptor({
-          compressedSize: compressed.length,
-          crc32Value: crc32,
-          uncompressedSize: source.length,
-        })
-      : Buffer.alloc(0);
+    const fixtureEntry = createZipFixtureEntry(entry, localOffset);
 
     localHeaderOffsets.push(localOffset);
-    localParts.push(localHeader, name, compressed, dataDescriptor);
+    localParts.push(...fixtureEntry.localParts);
 
     centralHeaderRelativeOffsets.push(centralOffset);
-    const centralHeader = createCentralHeader({
-      compressedSize: compressed.length,
-      compressionMethod,
-      crc32Value: crc32,
-      fileNameLength: name.length,
-      flags,
-      localHeaderOffset: localOffset,
-      uncompressedSize: source.length,
-      versionNeeded,
-    });
-    centralParts.push(centralHeader, name);
+    centralParts.push(...fixtureEntry.centralParts);
 
-    localOffset += localHeader.length + name.length + compressed.length + dataDescriptor.length;
-    centralOffset += centralHeader.length + name.length;
+    localOffset += fixtureEntry.localSize;
+    centralOffset += fixtureEntry.centralSize;
   }
 
   const localDirectory = Buffer.concat(localParts);
@@ -104,6 +67,59 @@ export function createZipFixture(
     localHeaderOffsets,
     centralHeaderOffsets: centralHeaderRelativeOffsets.map((offset) => localDirectory.length + offset),
     eocdOffset,
+  };
+}
+
+function createZipFixtureEntry(
+  entry: ZipFixtureEntryInput,
+  localOffset: number,
+): {
+  readonly localParts: readonly Buffer[];
+  readonly centralParts: readonly Buffer[];
+  readonly localSize: number;
+  readonly centralSize: number;
+} {
+  const name = Buffer.from(entry.name, "utf8");
+  const source = toBuffer(entry.data ?? "");
+  const compressionMethod = entry.compressionMethod ?? 0;
+  const compressed = compressionMethod === 8 ? deflateRawSync(source) : Buffer.from(source);
+  const crc32 = entry.crc32 ?? calculateCrc32(source);
+  const useDataDescriptor = entry.useDataDescriptor === true;
+  const flags = useDataDescriptor ? 0x0008 : 0;
+  const versionNeeded = entry.versionNeeded ?? 20;
+  const localHeader = createLocalHeader({
+    compressedSize: compressed.length,
+    compressionMethod,
+    crc32Value: crc32,
+    fileNameLength: name.length,
+    flags,
+    uncompressedSize: source.length,
+    useDataDescriptor,
+    versionNeeded,
+  });
+  const dataDescriptor = useDataDescriptor
+    ? createDataDescriptor({
+        compressedSize: compressed.length,
+        crc32Value: crc32,
+        uncompressedSize: source.length,
+      })
+    : Buffer.alloc(0);
+  const centralHeader = createCentralHeader({
+    compressedSize: compressed.length,
+    compressionMethod,
+    crc32Value: crc32,
+    fileNameLength: name.length,
+    flags,
+    localHeaderOffset: localOffset,
+    uncompressedSize: source.length,
+    versionNeeded,
+  });
+
+  return {
+    localParts: [localHeader, name, compressed, dataDescriptor],
+    centralParts: [centralHeader, name],
+    localSize: localHeader.length + name.length + compressed.length + dataDescriptor.length,
+    centralSize: centralHeader.length + name.length,
   };
 }
 
@@ -163,11 +179,7 @@ function createCentralHeader(input: {
   return buffer;
 }
 
-function createDataDescriptor(input: {
-  readonly compressedSize: number;
-  readonly crc32Value: number;
-  readonly uncompressedSize: number;
-}): Buffer {
+function createDataDescriptor(input: { readonly compressedSize: number; readonly crc32Value: number; readonly uncompressedSize: number }): Buffer {
   const buffer = Buffer.alloc(16);
   buffer.writeUInt32LE(0x08074b50, 0);
   buffer.writeUInt32LE(input.crc32Value, 4);

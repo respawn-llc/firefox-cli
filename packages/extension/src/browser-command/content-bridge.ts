@@ -1,6 +1,6 @@
 import {
   PROTOCOL_VERSION,
-  createErrorResponse,
+  createErrorResponseForRequest,
   parseBoundaryResponse,
   withRequestProtocolVersion,
   type ContentCommandId,
@@ -23,8 +23,7 @@ export async function sendContentCommand<C extends ContentCommandId>(
     rawContentResponse = await adapter.sendContentRequest(tabId, contentCommand);
   } catch (error) {
     const deliveryError = error instanceof ContentScriptDeliveryError ? error : undefined;
-    const message =
-      deliveryError?.originalMessage ?? (error instanceof Error ? error.message : String(error));
+    const message = deliveryError?.originalMessage ?? (error instanceof Error ? error.message : String(error));
     throw new BrowserCommandError(
       "SCRIPT_INJECTION_FAILED",
       `${deliveryFailureGuidance(deliveryError)} Firefox reported: ${message}`,
@@ -38,28 +37,30 @@ export async function sendContentCommand<C extends ContentCommandId>(
     );
   }
 
-  const contentResponse = parseBoundaryResponse(
-    "extension-to-content-script",
-    command.command,
-    rawContentResponse,
-    { protocolVersion: PROTOCOL_VERSION },
-  );
+  const contentResponse = parseBoundaryResponse("extension-to-content-script", command.command, rawContentResponse, { protocolVersion: PROTOCOL_VERSION });
   if (!contentResponse.ok) {
     if (contentResponse.error.code === "VERSION_MISMATCH") {
       return createContentVersionMismatchResponse(command, contentResponse.error);
     }
-    return createErrorResponse(
-      command.id,
-      contentResponse.error,
-      command.protocolVersion,
-    ) as ResponseEnvelope<C>;
+    return createErrorResponseForRequest(command, contentResponse.error);
   }
 
   if (!contentResponse.value.ok && contentResponse.value.error.code === "VERSION_MISMATCH") {
     return createContentVersionMismatchResponse(command, contentResponse.value.error);
   }
 
-  return contentResponse.value as ResponseEnvelope<C>;
+  if (isContentResponseForCommand(command, contentResponse.value)) {
+    return contentResponse.value;
+  }
+
+  return createErrorResponseForRequest(command, {
+    code: "INVALID_RESPONSE",
+    message: "Content script returned a response for a different command.",
+  });
+}
+
+function isContentResponseForCommand<C extends ContentCommandId>(command: RequestEnvelope<C>, response: ResponseEnvelope): response is ResponseEnvelope<C> {
+  return response.id === command.id;
 }
 
 function deliveryFailureGuidance(error: ContentScriptDeliveryError | undefined): string {
@@ -83,17 +84,9 @@ function deliveryFailureGuidance(error: ContentScriptDeliveryError | undefined):
   }
 }
 
-function createContentVersionMismatchResponse<C extends ContentCommandId>(
-  command: RequestEnvelope<C>,
-  error: ProtocolError,
-): ResponseEnvelope<C> {
-  return createErrorResponse(
-    command.id,
-    {
-      ...error,
-      message:
-        "Content script protocol mismatch. Reload the tab and ensure the Firefox extension is upgraded.",
-    },
-    command.protocolVersion,
-  ) as ResponseEnvelope<C>;
+function createContentVersionMismatchResponse<C extends ContentCommandId>(command: RequestEnvelope<C>, error: ProtocolError): ResponseEnvelope<C> {
+  return createErrorResponseForRequest(command, {
+    ...error,
+    message: "Content script protocol mismatch. Reload the tab and ensure the Firefox extension is upgraded.",
+  });
 }

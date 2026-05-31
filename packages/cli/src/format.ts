@@ -14,11 +14,7 @@ import { error, ok } from "./result.js";
 import { formatProtocolError } from "./transport.js";
 import type { CliResponseFormatter, CliResponseFormatterKind, CliResult } from "./types.js";
 
-export function formatCliResponse<C extends CommandId>(
-  formatter: CliResponseFormatter<C>,
-  response: ResponseEnvelope<C>,
-  json: boolean,
-): CliResult {
+export function formatCliResponse<C extends CommandId>(formatter: CliResponseFormatter<C>, response: ResponseEnvelope<C>, json: boolean): CliResult {
   return formatter(response, json);
 }
 
@@ -29,11 +25,7 @@ const formatCapabilities: CliResponseFormatter<"capabilities"> = (response, json
 
   return json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(
-        `${response.result.capabilities
-          .map((capability) => `${capability.command}\t${capability.status}`)
-          .join("\n")}\n`,
-      );
+    : ok(`${response.result.capabilities.map((capability) => `${capability.command}\t${capability.status}`).join("\n")}\n`);
 };
 
 const formatTabList: CliResponseFormatter<"tabs.list"> = (response, json) => {
@@ -41,21 +33,15 @@ const formatTabList: CliResponseFormatter<"tabs.list"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(response.result.tabs.map(renderTabSummary).join(""));
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(response.result.tabs.map(renderTabSummary).join(""));
 };
 
-const formatTabTarget: CliResponseFormatter<
-  "tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"
-> = (response, json) => {
+const formatTabTarget: CliResponseFormatter<"tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"> = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${renderTargetSummary(response.result.target)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${renderTargetSummary(response.result.target)}\n`);
 };
 
 const formatTabClose: CliResponseFormatter<"tab.close"> = (response, json) => {
@@ -63,9 +49,7 @@ const formatTabClose: CliResponseFormatter<"tab.close"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`Closed tab ${response.result.closedTabId}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`Closed tab ${String(response.result.closedTabId)}\n`);
 };
 
 const formatWindowList: CliResponseFormatter<"windows.list"> = (response, json) => {
@@ -79,9 +63,9 @@ const formatWindowList: CliResponseFormatter<"windows.list"> = (response, json) 
         response.result.windows
           .map(
             (window) =>
-              `${window.focused ? "*" : " "} w${window.id} [${window.index}] tabs=${
-                window.tabCount
-              }${window.activeTabId === undefined ? "" : ` active=t${window.activeTabId}`}\n`,
+              `${window.focused ? "*" : " "} w${String(window.id)} [${String(window.index)}] tabs=${String(
+                window.tabCount,
+              )}${window.activeTabId === undefined ? "" : ` active=t${String(window.activeTabId)}`}\n`,
           )
           .join(""),
       );
@@ -92,9 +76,7 @@ const formatWindowTarget: CliResponseFormatter<"window.new" | "window.select"> =
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`w${response.result.window.id} [${response.result.window.index}]\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`w${String(response.result.window.id)} [${String(response.result.window.index)}]\n`);
 };
 
 const formatWindowClose: CliResponseFormatter<"window.close"> = (response, json) => {
@@ -102,9 +84,7 @@ const formatWindowClose: CliResponseFormatter<"window.close"> = (response, json)
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`Closed window ${response.result.closedWindowId}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`Closed window ${String(response.result.closedWindowId)}\n`);
 };
 
 const formatSnapshot: CliResponseFormatter<"snapshot"> = (response, json) => {
@@ -127,9 +107,7 @@ const formatRef: CliResponseFormatter<"ref.resolve"> = (response, json) => {
   }
 
   const element = response.result.element;
-  return ok(
-    `${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`,
-  );
+  return ok(`${element.ref} ${element.role} ${element.name ?? element.text ?? element.tagName} (${element.generationId})\n`);
 };
 
 const formatGet: CliResponseFormatter<"get"> = (response, json) => {
@@ -137,9 +115,7 @@ const formatGet: CliResponseFormatter<"get"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatGetValue(response.result.value)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${formatGetValue(response.result.value)}\n`);
 };
 
 const formatIs: CliResponseFormatter<"is"> = (response, json) => {
@@ -147,7 +123,7 @@ const formatIs: CliResponseFormatter<"is"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${response.result.value}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${String(response.result.value)}\n`);
 };
 
 const formatWait: CliResponseFormatter<"wait"> = (response, json) => {
@@ -155,9 +131,7 @@ const formatWait: CliResponseFormatter<"wait"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatWaitResult(response.result)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${formatWaitResult(response.result)}\n`);
 };
 
 const formatEval: CliResponseFormatter<"eval"> = (response, json) => {
@@ -165,9 +139,7 @@ const formatEval: CliResponseFormatter<"eval"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatEvalResult(response.result)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${formatEvalResult(response.result)}\n`);
 };
 
 const formatScreenshot: CliResponseFormatter<"screenshot"> = (response, json) => {
@@ -175,9 +147,7 @@ const formatScreenshot: CliResponseFormatter<"screenshot"> = (response, json) =>
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatScreenshotResult(response.result)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${formatScreenshotResult(response.result)}\n`);
 };
 
 const formatFind: CliResponseFormatter<"find"> = (response, json) => {
@@ -187,14 +157,7 @@ const formatFind: CliResponseFormatter<"find"> = (response, json) => {
 
   return json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(
-        response.result.elements
-          .map(
-            (element) =>
-              `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`,
-          )
-          .join(""),
-      );
+    : ok(response.result.elements.map((element) => `${element.ref ?? ""} ${element.role} ${element.name ?? element.text ?? element.tagName}\n`).join(""));
 };
 
 const formatFrame: CliResponseFormatter<"frame"> = (response, json) => {
@@ -204,11 +167,7 @@ const formatFrame: CliResponseFormatter<"frame"> = (response, json) => {
 
   return json
     ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(
-        response.result.frames
-          .map((frame) => `${frame.index} ${frame.title ?? ""} ${frame.url ?? ""}\n`)
-          .join(""),
-      );
+    : ok(response.result.frames.map((frame) => `${String(frame.index)} ${frame.title ?? ""} ${frame.url ?? ""}\n`).join(""));
 };
 
 const formatBatch: CliResponseFormatter<"batch"> = (response, json) => {
@@ -218,9 +177,7 @@ const formatBatch: CliResponseFormatter<"batch"> = (response, json) => {
 
   return {
     exitCode: response.result.ok ? 0 : 1,
-    stdout: json
-      ? `${JSON.stringify(response.result, null, 2)}\n`
-      : `${formatBatchResult(response.result)}\n`,
+    stdout: json ? `${JSON.stringify(response.result, null, 2)}\n` : `${formatBatchResult(response.result)}\n`,
     stderr: "",
   };
 };
@@ -230,19 +187,15 @@ const formatActionResponse: CliResponseFormatter<ActionKind> = (response, json) 
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${formatActionResult(response.result)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${formatActionResult(response.result)}\n`);
 };
 
-const formatJsonOrObject: CliResponseFormatter<CommandId> = (response, json) => {
+const formatJsonOrObject: CliResponseFormatter = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${JSON.stringify(response.result)}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${JSON.stringify(response.result)}\n`);
 };
 
 export const cliResponseFormatters = {
@@ -271,13 +224,13 @@ function renderTabSummary(tab: TabSummary): string {
   const activePrefix = tab.active ? "*" : " ";
   const title = tab.title ?? "(untitled)";
   const url = tab.url ?? "(url unavailable)";
-  return `${activePrefix} w${tab.windowId} t${tab.id} [${tab.index}] ${title} ${url}\n`;
+  return `${activePrefix} w${String(tab.windowId)} t${String(tab.id)} [${String(tab.index)}] ${title} ${url}\n`;
 }
 
 function renderTargetSummary(target: ResolvedTarget): string {
   const title = target.title ?? "(untitled)";
   const url = target.url ?? "(url unavailable)";
-  return `w${target.windowId} t${target.tabId} [${target.tabIndex}] ${title} ${url}`;
+  return `w${String(target.windowId)} t${String(target.tabId)} [${String(target.tabIndex)}] ${title} ${url}`;
 }
 
 function formatGetValue(value: unknown): string {
@@ -293,19 +246,19 @@ function formatGetValue(value: unknown): string {
 }
 
 function formatWaitResult(result: WaitResult): string {
-  const suffix = `in ${result.elapsedMs}ms`;
+  const suffix = `in ${String(result.elapsedMs)}ms`;
   if (result.kind === "element" && result.element !== undefined) {
     const element = result.element;
     const refPrefix = element.ref === undefined ? "" : `${element.ref} `;
     return `${refPrefix}${element.role} ${element.name ?? element.text ?? element.tagName} ${suffix}`;
   }
 
-  if ("value" in result && result.value !== undefined) {
+  if (result.kind === "text" || result.kind === "url" || result.kind === "function") {
     return `${formatGetValue(result.value)} ${suffix}`;
   }
 
   if (result.kind === "download") {
-    return `download ${result.download.id} ${result.download.state ?? "matched"} ${suffix}`;
+    return `download ${String(result.download.id)} ${result.download.state ?? "matched"} ${suffix}`;
   }
 
   return `matched ${suffix}`;
@@ -320,40 +273,47 @@ function formatEvalResult(result: EvalResult): string {
 }
 
 function formatScreenshotResult(result: ScreenshotResult): string {
-  const dimensions =
-    result.width === undefined || result.height === undefined ? "" : ` ${result.width}x${result.height}`;
-  return `${result.path} ${result.bytes} bytes${dimensions}`;
+  const dimensions = result.width === undefined || result.height === undefined ? "" : ` ${String(result.width)}x${String(result.height)}`;
+  return `${result.path} ${String(result.bytes)} bytes${dimensions}`;
 }
 
 function formatBatchResult(result: BatchResult): string {
   return [
     ...result.steps.map((step) =>
-      step.ok
-        ? `${step.index} ${step.command} ok`
-        : `${step.index} ${step.command} ${step.error.code}: ${step.error.message}`,
+      step.ok ? `${String(step.index)} ${step.command} ok` : `${String(step.index)} ${step.command} ${step.error.code}: ${step.error.message}`,
     ),
-    `batch ${result.ok ? "ok" : "failed"} in ${result.elapsedMs}ms`,
+    `batch ${result.ok ? "ok" : "failed"} in ${String(result.elapsedMs)}ms`,
   ].join("\n");
 }
 
 function formatActionResult(result: ActionResult): string {
   const parts = [`${result.action} ok`];
-  if (result.element !== undefined) {
-    const refPrefix = result.element.ref === undefined ? "" : `${result.element.ref} `;
-    parts.push(
-      `${refPrefix}${result.element.role} ${
-        result.element.name ?? result.element.text ?? result.element.tagName
-      }`,
-    );
+  const elementText = formatActionElement(result);
+  if (elementText !== undefined) {
+    parts.push(elementText);
   }
-  if ("valueLength" in result && result.valueLength !== undefined) {
-    parts.push(`valueLength=${result.valueLength}`);
+  if (
+    result.action === "fill" ||
+    result.action === "type" ||
+    result.action === "keyboard.type" ||
+    result.action === "keyboard.inserttext" ||
+    result.action === "upload"
+  ) {
+    parts.push(`valueLength=${String(result.valueLength)}`);
   }
-  if ("selectedValues" in result && result.selectedValues !== undefined) {
+  if (result.action === "select") {
     parts.push(`selected=${result.selectedValues.join(",")}`);
   }
-  if ("scroll" in result && result.scroll !== undefined) {
-    parts.push(`scroll=${result.scroll.x},${result.scroll.y}`);
+  if (result.action === "scroll" || result.action === "swipe") {
+    parts.push(`scroll=${String(result.scroll.x)},${String(result.scroll.y)}`);
   }
   return parts.join(" ");
+}
+
+function formatActionElement(result: ActionResult): string | undefined {
+  if (result.element === undefined) {
+    return undefined;
+  }
+  const refPrefix = result.element.ref === undefined ? "" : `${result.element.ref} `;
+  return `${refPrefix}${result.element.role} ${result.element.name ?? result.element.text ?? result.element.tagName}`;
 }

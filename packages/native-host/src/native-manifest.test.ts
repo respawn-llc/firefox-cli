@@ -3,11 +3,7 @@ import { join, resolve, win32 } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
-import {
-  createNativeMessagingManifest,
-  planNativeMessagingManifest,
-  writeNativeMessagingManifest,
-} from "./native-manifest.js";
+import { createNativeMessagingManifest, planNativeMessagingManifest, writeNativeMessagingManifest } from "./native-manifest.js";
 
 describe("native messaging manifest generation", () => {
   it("creates Firefox native messaging manifest content", () => {
@@ -27,19 +23,11 @@ describe("native messaging manifest generation", () => {
     const binaryPath = "/opt/firefox-cli/bin/darwin-arm64/firefox-cli";
 
     expect(planNativeMessagingManifest({ binaryPath, homeDir, platform: "darwin" })).toEqual({
-      manifestPath: join(
-        homeDir,
-        "Library/Application Support/Mozilla/NativeMessagingHosts",
-        `${NATIVE_HOST_NAME}.json`,
-      ),
+      manifestPath: join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
       manifest: createNativeMessagingManifest({ binaryPath }),
       registration: {
         kind: "file",
-        manifestPath: join(
-          homeDir,
-          "Library/Application Support/Mozilla/NativeMessagingHosts",
-          `${NATIVE_HOST_NAME}.json`,
-        ),
+        manifestPath: join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
       },
     });
   });
@@ -64,12 +52,7 @@ describe("native messaging manifest generation", () => {
     });
 
     expect(plan).toEqual({
-      manifestPath: win32.join(
-        appDataDir,
-        "firefox-cli",
-        "native-messaging-hosts",
-        `${NATIVE_HOST_NAME}.json`,
-      ),
+      manifestPath: win32.join(appDataDir, "firefox-cli", "native-messaging-hosts", `${NATIVE_HOST_NAME}.json`),
       manifest: createNativeMessagingManifest({ binaryPath }),
       registration: {
         kind: "windows-registry",
@@ -109,8 +92,6 @@ describe("native messaging manifest generation", () => {
 
     await writeNativeMessagingManifest(plan);
 
-    await expect(readFile(plan.manifestPath, "utf8")).resolves.toBe(
-      `${JSON.stringify(plan.manifest, null, 2)}\n`,
-    );
+    await expect(readFile(plan.manifestPath, "utf8")).resolves.toBe(`${JSON.stringify(plan.manifest, null, 2)}\n`);
   });
 });

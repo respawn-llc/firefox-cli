@@ -1,32 +1,22 @@
-import { homedir } from "node:os";
-import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { access } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { z } from "zod";
-import {
-  getBinaryName,
-  getPlatformKey,
-  type NativeMessagingManifestPlan,
-  planNativeMessagingManifest,
-  writeNativeMessagingManifest,
-} from "@firefox-cli/native-host";
+import { getBinaryName, getPlatformKey, planNativeMessagingManifest, writeNativeMessagingManifest } from "@firefox-cli/native-host";
 import { createTempDir } from "@firefox-cli/test-support";
 import { runAgentWorkflowE2e, startWorkflowFixtureServer } from "./e2e-disposable-workflow.js";
+import { parsePositiveIntegerEnv, shellQuote, tail } from "./e2e-disposable-firefox-utils.js";
+import { installFirefoxVisibleManifest } from "./e2e-firefox-visible-manifest.js";
 import { approveExtensionWithMarionette, type MarionetteApprovalResult } from "./marionette-client.js";
 import { createFirefoxProcessAdapter } from "./firefox-process-adapter.js";
-import {
-  raceWithProcessFailure,
-  runProcess,
-  startManagedProcess,
-  type ManagedProcess,
-} from "./process-runner.js";
+import { raceWithProcessFailure, runProcess, startManagedProcess, type ManagedProcess } from "./process-runner.js";
 import { parseJsonWithSchema } from "./manifest-validation.js";
 import { pollUntil } from "./script-timing.js";
 
-type CliRun = {
+interface CliRun {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
-};
+}
 
 const doctorStatusSchema = z
   .object({
@@ -34,16 +24,16 @@ const doctorStatusSchema = z
       .object({
         status: z.string().min(1).optional(),
       })
-      .passthrough()
+      .loose()
       .optional(),
   })
-  .passthrough();
+  .loose();
 
 const capabilitiesOutputSchema = z
   .object({
     capabilities: z.array(z.unknown()).optional(),
   })
-  .passthrough();
+  .loose();
 
 if (process.env.FIREFOX_CLI_E2E_DISPOSABLE !== "1") {
   console.log("Disposable Firefox E2E skipped. Set FIREFOX_CLI_E2E_DISPOSABLE=1 to run it.");
@@ -52,14 +42,9 @@ if (process.env.FIREFOX_CLI_E2E_DISPOSABLE !== "1") {
 
 const approvalMode = process.env.FIREFOX_CLI_E2E_APPROVAL ?? "marionette";
 if (approvalMode !== "manual" && approvalMode !== "marionette") {
-  throw new Error(
-    `Unsupported FIREFOX_CLI_E2E_APPROVAL=${approvalMode}. Supported values: marionette, manual.`,
-  );
+  throw new Error(`Unsupported FIREFOX_CLI_E2E_APPROVAL=${approvalMode}. Supported values: marionette, manual.`);
 }
-const manualApprovalTimeoutMs = parsePositiveIntegerEnv(
-  "FIREFOX_CLI_E2E_MANUAL_APPROVAL_TIMEOUT_MS",
-  300_000,
-);
+const manualApprovalTimeoutMs = parsePositiveIntegerEnv("FIREFOX_CLI_E2E_MANUAL_APPROVAL_TIMEOUT_MS", 300_000);
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
 const extensionDir = resolve("dist/extension");
@@ -128,20 +113,14 @@ try {
     "datareporting.policy.dataSubmissionPolicyBypassNotification=true",
     "--pref",
     "datareporting.healthreport.uploadEnabled=false",
-    ...(approvalMode === "marionette"
-      ? ["--arg=--marionette", "--arg=--remote-allow-system-access", "--arg=--headless"]
-      : []),
+    ...(approvalMode === "marionette" ? ["--arg=--marionette", "--arg=--remote-allow-system-access", "--arg=--headless"] : []),
   ];
   webExt = startManagedProcess(webExtBinary, launchArgs, {
     env,
     label: "web-ext disposable Firefox",
   });
 
-  await raceWithProcessFailure(
-    webExt,
-    waitForDoctorStatus({ env, status: "not-approved", timeoutMs: 20_000 }),
-    "web-ext disposable Firefox",
-  );
+  await raceWithProcessFailure(webExt, waitForDoctorStatus({ env, status: "not-approved", timeoutMs: 20_000 }), "web-ext disposable Firefox");
   if (approvalMode === "marionette") {
     approvalResult = await approveExtensionWithMarionette(profileDir);
   } else {
@@ -153,7 +132,7 @@ try {
         `Current doctor --json: ${lastDoctorStatus}`,
         "Open the firefox-cli extension popup in the disposable Firefox window and click Approve.",
         "Do not approve anything in your normal Firefox window.",
-        `Timeout: ${manualApprovalTimeoutMs}ms`,
+        `Timeout: ${String(manualApprovalTimeoutMs)}ms`,
       ].join("\n"),
     );
   }
@@ -176,11 +155,9 @@ try {
   );
   console.error(`Disposable Firefox approval confirmed by doctor --json: ${lastDoctorStatus}`);
   if (approvalResult?.captureVisibleTabAvailableBeforeApproval === false) {
-    console.error(
-      "Disposable Firefox approval exercised the extension-reload path for tabs.captureVisibleTab.",
-    );
+    console.error("Disposable Firefox approval exercised the extension-reload path for tabs.captureVisibleTab.");
   }
-  await runAgentWorkflowE2e((args) => runCliJson(args, env), fixture.url);
+  await runAgentWorkflowE2e(async (args) => runCliJson(args, env), fixture.url);
 
   console.log("Disposable Firefox E2E passed.");
 } catch (error) {
@@ -190,73 +167,15 @@ try {
   await webExt?.stop();
   await firefoxProcessAdapter.stopProfile(profileDir);
   await restoreFirefoxVisibleManifest?.();
-  await new Promise<void>((resolveClose) => fixture.server.close(() => resolveClose()));
+  await new Promise<void>((resolveClose) =>
+    fixture.server.close(() => {
+      resolveClose();
+    }),
+  );
   const output = webExtOutput().trim();
   if (output.length > 0 && (failed || process.env.FIREFOX_CLI_E2E_DEBUG === "1")) {
     console.error(tail(output, 12_000));
   }
-}
-
-async function installFirefoxVisibleManifest(
-  plan: NativeMessagingManifestPlan,
-  disposableHomeDir: string,
-): Promise<() => Promise<void>> {
-  if (process.platform !== "darwin") {
-    return async () => undefined;
-  }
-
-  const firefoxHomeDir = homedir();
-  if (firefoxHomeDir === disposableHomeDir) {
-    return async () => undefined;
-  }
-
-  const firefoxPlan = planNativeMessagingManifest({
-    binaryPath: plan.manifest.path,
-    platform: process.platform,
-    homeDir: firefoxHomeDir,
-  });
-  if (firefoxPlan.manifestPath === plan.manifestPath) {
-    return async () => undefined;
-  }
-
-  const original = await readOptionalFile(firefoxPlan.manifestPath);
-  const temporary = `${JSON.stringify(firefoxPlan.manifest, null, 2)}\n`;
-  await mkdir(dirname(firefoxPlan.manifestPath), { recursive: true });
-  await writeFile(firefoxPlan.manifestPath, temporary);
-
-  return async () => {
-    const current = await readOptionalFile(firefoxPlan.manifestPath);
-    if (current !== temporary) {
-      console.error(
-        `Disposable Firefox E2E left ${firefoxPlan.manifestPath} unchanged because it was modified during the run.`,
-      );
-      return;
-    }
-    if (original === null) {
-      await unlink(firefoxPlan.manifestPath).catch((error: unknown) => {
-        if (!isNodeErrorCode(error, "ENOENT")) {
-          throw error;
-        }
-      });
-      return;
-    }
-    await writeFile(firefoxPlan.manifestPath, original);
-  };
-}
-
-async function readOptionalFile(path: string): Promise<string | null> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (error) {
-    if (isNodeErrorCode(error, "ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function isNodeErrorCode(error: unknown, code: string): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 async function waitForDoctorStatus(options: {
@@ -273,27 +192,18 @@ async function waitForDoctorStatus(options: {
       if (result.exitCode !== 0 && result.stdout.trim().length === 0) {
         return false;
       }
-      const payload = parseJsonWithSchema(
-        result.stdout,
-        "doctor --json output",
-        "disposable Firefox doctor stdout",
-        doctorStatusSchema,
-      );
+      const payload = parseJsonWithSchema(result.stdout, "doctor --json output", "disposable Firefox doctor stdout", doctorStatusSchema);
       return payload.extensionConnection?.status === options.status;
     },
     {
       timeoutMs: options.timeoutMs,
       intervalMs: 250,
-      timeoutMessage: () =>
-        `Timed out waiting for disposable Firefox ${options.status} status.\nLast doctor: ${lastDoctor}\n${webExtOutput()}`,
+      timeoutMessage: () => `Timed out waiting for disposable Firefox ${options.status} status.\nLast doctor: ${lastDoctor}\n${webExtOutput()}`,
     },
   );
 }
 
-async function waitForStableCliConnection(options: {
-  readonly env: NodeJS.ProcessEnv;
-  readonly timeoutMs: number;
-}): Promise<void> {
+async function waitForStableCliConnection(options: { readonly env: NodeJS.ProcessEnv; readonly timeoutMs: number }): Promise<void> {
   let consecutive = 0;
   let lastProbe = "<not run>";
   await pollUntil(
@@ -319,8 +229,7 @@ async function waitForStableCliConnection(options: {
     {
       timeoutMs: options.timeoutMs,
       intervalMs: 250,
-      timeoutMessage: () =>
-        `Timed out waiting for stable disposable Firefox CLI connectivity.\nLast probe: ${lastProbe}\n${webExtOutput()}`,
+      timeoutMessage: () => `Timed out waiting for stable disposable Firefox CLI connectivity.\nLast probe: ${lastProbe}\n${webExtOutput()}`,
     },
   );
 }
@@ -330,12 +239,7 @@ function doctorReportsConnected(result: CliRun): boolean {
     return false;
   }
   try {
-    const payload = parseJsonWithSchema(
-      result.stdout,
-      "doctor --json output",
-      "disposable Firefox doctor stdout",
-      doctorStatusSchema,
-    );
+    const payload = parseJsonWithSchema(result.stdout, "doctor --json output", "disposable Firefox doctor stdout", doctorStatusSchema);
     return payload.extensionConnection?.status === "connected";
   } catch {
     return false;
@@ -347,12 +251,7 @@ function capabilitiesReportsReady(result: CliRun): boolean {
     return false;
   }
   try {
-    const payload = parseJsonWithSchema(
-      result.stdout,
-      "capabilities --json output",
-      "disposable Firefox capabilities stdout",
-      capabilitiesOutputSchema,
-    );
+    const payload = parseJsonWithSchema(result.stdout, "capabilities --json output", "disposable Firefox capabilities stdout", capabilitiesOutputSchema);
     return Array.isArray(payload.capabilities);
   } catch {
     return false;
@@ -368,8 +267,8 @@ async function runCliJson<T>(args: readonly string[], env: NodeJS.ProcessEnv): P
     result.stdout,
     `firefox-cli ${args.join(" ")} output`,
     `firefox-cli ${args.join(" ")} stdout`,
-    z.unknown(),
-  ) as T;
+    z.custom<T>(() => true),
+  );
 }
 
 async function runCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<CliRun> {
@@ -394,12 +293,7 @@ function e2eEnvironment(homeDir: string): NodeJS.ProcessEnv {
 async function findFirefoxBinary(): Promise<string> {
   const candidates =
     process.platform === "darwin"
-      ? [
-          process.env.FIREFOX_BINARY,
-          "/Applications/Firefox.app/Contents/MacOS/firefox",
-          "/opt/homebrew/bin/firefox",
-          "/usr/local/bin/firefox",
-        ]
+      ? [process.env.FIREFOX_BINARY, "/Applications/Firefox.app/Contents/MacOS/firefox", "/opt/homebrew/bin/firefox", "/usr/local/bin/firefox"]
       : [process.env.FIREFOX_BINARY, "firefox"];
 
   for (const candidate of candidates) {
@@ -422,27 +316,4 @@ async function findFirefoxBinary(): Promise<string> {
 
 function webExtOutput(): string {
   return webExt?.output() ?? "";
-}
-
-function tail(value: string, maxChars: number): string {
-  return value.length <= maxChars ? value : value.slice(value.length - maxChars);
-}
-
-function parsePositiveIntegerEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined) {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer, got ${raw}.`);
-  }
-  return parsed;
-}
-
-function shellQuote(value: string): string {
-  if (/^[A-Za-z0-9_./:=@-]+$/u.test(value)) {
-    return value;
-  }
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }

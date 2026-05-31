@@ -38,9 +38,7 @@ describe("native messaging frames", () => {
   it("keeps buffered bytes for following frames without copying incomplete reads", async () => {
     const input = new PassThrough();
     const reader = new NativeMessagingFrameReader(input);
-    input.end(
-      Buffer.concat([encodeNativeMessageFrame({ index: 1 }), encodeNativeMessageFrame({ index: 2 })]),
-    );
+    input.end(Buffer.concat([encodeNativeMessageFrame({ index: 1 }), encodeNativeMessageFrame({ index: 2 })]));
 
     await expect(reader.read()).resolves.toEqual({ index: 1 });
     await expect(reader.read()).resolves.toEqual({ index: 2 });

@@ -1,9 +1,5 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
-import {
-  NetworkRequestTracker,
-  type NetworkRequestEnd,
-  type NetworkRequestStart,
-} from "./network-tracker.js";
+import { NetworkRequestTracker, type NetworkRequestEnd, type NetworkRequestStart } from "./network-tracker.js";
 
 export type NetworkObservationWebRequestDetails = NetworkRequestStart &
   NetworkRequestEnd & {
@@ -11,40 +7,37 @@ export type NetworkObservationWebRequestDetails = NetworkRequestStart &
     readonly tabId?: number;
   };
 
-export type NetworkObservationWebRequestEvent = {
-  addListener(
-    listener: (details: NetworkObservationWebRequestDetails) => void,
-    filter: { readonly urls: readonly string[]; readonly tabId?: number },
-  ): void;
+export interface NetworkObservationWebRequestEvent {
+  addListener(listener: (details: NetworkObservationWebRequestDetails) => void, filter: { readonly urls: readonly string[]; readonly tabId?: number }): void;
   removeListener(listener: (details: NetworkObservationWebRequestDetails) => void): void;
-};
+}
 
-export type NetworkObservationBrowserApi = {
+export interface NetworkObservationBrowserApi {
   readonly webRequest?: {
     readonly onBeforeRequest?: NetworkObservationWebRequestEvent;
     readonly onCompleted?: NetworkObservationWebRequestEvent;
     readonly onErrorOccurred?: NetworkObservationWebRequestEvent;
   };
-};
+}
 
-export type NetworkObservationServiceOptions = {
+export interface NetworkObservationServiceOptions {
   readonly browser: NetworkObservationBrowserApi;
   readonly tracker?: NetworkRequestTracker;
   readonly retentionMs?: number;
   readonly scheduleTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   readonly clearTimer?: (timer: TimerHandle) => void;
-};
+}
 
-type TimerHandle = unknown;
+type TimerHandle = Parameters<typeof clearTimeout>[0];
 
-type TabObservation = {
+interface TabObservation {
   activeCount: number;
   registrations: {
     readonly event: NetworkObservationWebRequestEvent;
     readonly listener: (details: NetworkObservationWebRequestDetails) => void;
   }[];
   retentionTimer?: TimerHandle;
-};
+}
 
 const DEFAULT_RETENTION_MS = 30_000;
 
@@ -62,7 +55,10 @@ export class NetworkObservationService {
     this.#retentionMs = options.retentionMs ?? DEFAULT_RETENTION_MS;
     this.#scheduleTimer = options.scheduleTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
     this.#clearTimer =
-      options.clearTimer ?? ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>));
+      options.clearTimer ??
+      ((timer) => {
+        clearTimeout(timer);
+      });
   }
 
   async observeTab<T>(
@@ -129,11 +125,7 @@ export class NetworkObservationService {
     return observation;
   }
 
-  #addListener(
-    tabId: number,
-    event: NetworkObservationWebRequestEvent | undefined,
-    listener: (details: NetworkObservationWebRequestDetails) => void,
-  ): void {
+  #addListener(tabId: number, event: NetworkObservationWebRequestEvent | undefined, listener: (details: NetworkObservationWebRequestDetails) => void): void {
     const observation = this.#observedTabs.get(tabId);
     if (event === undefined || observation === undefined) {
       return;

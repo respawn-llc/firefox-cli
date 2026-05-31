@@ -118,5 +118,6 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 }
 
 async function readJsonVersion(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(path, "utf8")).version;
+  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  return parsed !== null && typeof parsed === "object" && "version" in parsed ? parsed.version : undefined;
 }

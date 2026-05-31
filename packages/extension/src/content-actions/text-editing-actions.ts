@@ -28,10 +28,7 @@ export function typeAction(options: ActionOptions, params: TextActionParams): Co
   };
 }
 
-export function keyboardTextAction(
-  options: ActionOptions,
-  params: KeyboardTextActionParams,
-): ContentActionResult {
+export function keyboardTextAction(options: ActionOptions, params: KeyboardTextActionParams): ContentActionResult {
   const focused = requireFocusedElement(options);
   const editable = requireEditable(options, focused);
   insertText(options, editable, params.text, {

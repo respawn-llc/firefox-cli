@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { refineGetParams, refineWaitParams, requireExclusiveElementLocator } from "./content-refinements.js";
 import { resolvedTargetSchema, targetSelectorSchema } from "./target.js";
 
 export const snapshotParamsSchema = z
@@ -68,7 +69,7 @@ export const waitElementSummarySchema = elementSummarySchema
   .superRefine((summary, context) => {
     if ((summary.ref === undefined) !== (summary.generationId === undefined)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Wait element summaries require both ref and generationId, or neither.",
         path: summary.ref === undefined ? ["generationId"] : ["ref"],
       });
@@ -106,48 +107,7 @@ export const getParamsSchema = z
     maxOutputBytes: z.number().int().positive().max(1_000_000).optional(),
   })
   .strict()
-  .superRefine((params, context) => {
-    const isTabGetter = params.kind === "title" || params.kind === "url";
-    if (isTabGetter && (params.selector !== undefined || params.ref !== undefined)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `${params.kind} does not accept an element selector or ref.`,
-        path: params.selector === undefined ? ["ref"] : ["selector"],
-      });
-    }
-
-    if (!isTabGetter && (params.selector === undefined) === (params.ref === undefined)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Element getters require exactly one selector or ref.",
-        path: ["selector"],
-      });
-    }
-
-    if (params.kind === "attr" && params.attribute === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Attribute getters require an attribute name.",
-        path: ["attribute"],
-      });
-    }
-
-    if (params.kind !== "attr" && params.attribute !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only attr getters accept an attribute name.",
-        path: ["attribute"],
-      });
-    }
-
-    if (params.ref === undefined && params.generationId !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Generation IDs apply only to refs.",
-        path: ["generationId"],
-      });
-    }
-  });
+  .superRefine(refineGetParams);
 export type GetParams = z.infer<typeof getParamsSchema>;
 
 export const getScalarValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -230,21 +190,7 @@ export const isParamsSchema = z
   })
   .strict()
   .superRefine((params, context) => {
-    if ((params.selector === undefined) === (params.ref === undefined)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "State checks require exactly one selector or ref.",
-        path: ["selector"],
-      });
-    }
-
-    if (params.ref === undefined && params.generationId !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Generation IDs apply only to refs.",
-        path: ["generationId"],
-      });
-    }
+    requireExclusiveElementLocator(params, context, "State checks require exactly one selector or ref.");
   });
 export type IsParams = z.infer<typeof isParamsSchema>;
 
@@ -261,14 +207,7 @@ export type IsResult = z.infer<typeof isResultSchema>;
 export const waitKinds = ["ms", "element", "text", "url", "function", "load-state", "download"] as const;
 export const waitKindSchema = z.enum(waitKinds);
 export type WaitKind = z.infer<typeof waitKindSchema>;
-export const waitStates = [
-  "visible",
-  "hidden",
-  "attached",
-  "domcontentloaded",
-  "complete",
-  "networkidle",
-] as const;
+export const waitStates = ["visible", "hidden", "attached", "domcontentloaded", "complete", "networkidle"] as const;
 export const waitStateSchema = z.enum(waitStates);
 export type WaitState = z.infer<typeof waitStateSchema>;
 
@@ -290,141 +229,7 @@ export const waitParamsSchema = z
     intervalMs: z.number().int().positive().max(60_000).optional(),
   })
   .strict()
-  .superRefine((params, context) => {
-    if (params.kind === "ms" && params.durationMs === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Duration waits require durationMs.",
-        path: ["durationMs"],
-      });
-    }
-
-    if (params.kind !== "ms" && params.durationMs !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only duration waits accept durationMs.",
-        path: ["durationMs"],
-      });
-    }
-
-    if (params.kind === "element" && (params.selector === undefined) === (params.ref === undefined)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Element waits require exactly one selector or ref.",
-        path: ["selector"],
-      });
-    }
-
-    if (
-      params.kind === "element" &&
-      params.state !== undefined &&
-      params.state !== "visible" &&
-      params.state !== "hidden" &&
-      params.state !== "attached"
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Element waits require visible, hidden, or attached state.",
-        path: ["state"],
-      });
-    }
-
-    if (params.kind === "text" && params.text === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Text waits require text.",
-        path: ["text"],
-      });
-    }
-
-    if (params.kind !== "text" && params.text !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only text waits accept text.",
-        path: ["text"],
-      });
-    }
-
-    if (params.kind === "url" && params.urlGlob === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "URL waits require urlGlob.",
-        path: ["urlGlob"],
-      });
-    }
-
-    if (params.kind !== "url" && params.urlGlob !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only URL waits accept urlGlob.",
-        path: ["urlGlob"],
-      });
-    }
-
-    if (params.kind === "function" && params.expression === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Function waits require expression.",
-        path: ["expression"],
-      });
-    }
-
-    if (params.kind !== "function" && params.expression !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only function waits accept expression.",
-        path: ["expression"],
-      });
-    }
-
-    if (
-      params.kind !== "download" &&
-      (params.downloadId !== undefined || params.filenameGlob !== undefined)
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only download waits accept download criteria.",
-        path: params.downloadId === undefined ? ["filenameGlob"] : ["downloadId"],
-      });
-    }
-
-    if (
-      params.kind === "load-state" &&
-      params.state !== "domcontentloaded" &&
-      params.state !== "complete" &&
-      params.state !== "networkidle"
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Load-state waits require domcontentloaded, complete, or networkidle state.",
-        path: ["state"],
-      });
-    }
-
-    if (params.kind !== "element" && params.kind !== "load-state" && params.state !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only element and load-state waits accept state.",
-        path: ["state"],
-      });
-    }
-
-    if (params.kind !== "element" && (params.selector !== undefined || params.ref !== undefined)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only element waits accept selector or ref.",
-        path: params.selector === undefined ? ["ref"] : ["selector"],
-      });
-    }
-
-    if (params.ref === undefined && params.generationId !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Generation IDs apply only to refs.",
-        path: ["generationId"],
-      });
-    }
-  });
+  .superRefine(refineWaitParams);
 export type WaitParams = z.infer<typeof waitParamsSchema>;
 
 const waitBaseResultSchema = z

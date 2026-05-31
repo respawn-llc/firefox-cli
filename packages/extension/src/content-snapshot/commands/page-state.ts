@@ -20,11 +20,13 @@ export function createClipboardResult(
     readonly generationId?: string;
     readonly text?: string;
   },
-  registry: ElementRefRegistry<Element>,
-  now = Date.now(),
+  options: {
+    readonly registry: ElementRefRegistry<Element>;
+    readonly now?: number;
+  },
 ): ClipboardResult {
   if (action === "copy") {
-    const element = resolveElement(document, params, registry, now);
+    const element = resolveElement(document, params, options.registry, options.now);
     return {
       action,
       ok: true,
@@ -32,7 +34,7 @@ export function createClipboardResult(
     };
   }
   if (action === "paste") {
-    const element = resolveElement(document, params, registry, now);
+    const element = resolveElement(document, params, options.registry, options.now);
     setElementText(element, params.text ?? "");
     return { action, ok: true };
   }
@@ -48,8 +50,7 @@ export function createStorageResult(
     readonly value?: string;
   },
 ): StorageResult {
-  const storage =
-    params.area === "local" ? document.defaultView?.localStorage : document.defaultView?.sessionStorage;
+  const storage = params.area === "local" ? document.defaultView?.localStorage : document.defaultView?.sessionStorage;
   if (storage === undefined) {
     throw new ContentSnapshotError("ACTION_REJECTED", "Storage is unavailable.");
   }

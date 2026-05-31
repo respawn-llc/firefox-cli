@@ -8,15 +8,16 @@ import {
 } from "@firefox-cli/protocol";
 import { handleBrowserRequest, type BackgroundBrowserAdapter } from "./browser-commands.js";
 
-export function handleRequest(
-  request: RequestEnvelope,
-  productVersion: string,
-  approved: boolean,
-  browserAdapter: BackgroundBrowserAdapter,
-  protocolSession: ProtocolSession,
-): Promise<ResponseEnvelope> | ResponseEnvelope {
+export function handleRequest(options: {
+  readonly request: RequestEnvelope;
+  readonly productVersion: string;
+  readonly approved: boolean;
+  readonly browserAdapter: BackgroundBrowserAdapter;
+  readonly protocolSession: ProtocolSession;
+}): Promise<ResponseEnvelope> | ResponseEnvelope {
+  const { request, productVersion, approved, browserAdapter, protocolSession } = options;
   if (request.command === "hello") {
-    return protocolSession.createOkResponse(request as RequestEnvelope<"hello">, {
+    return protocolSession.createOkResponse(request, {
       accepted: true,
       negotiatedProtocolVersion: protocolSession.protocolVersion,
       peer: {

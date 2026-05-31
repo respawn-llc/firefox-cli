@@ -10,24 +10,12 @@ import {
 } from "@firefox-cli/protocol";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import { readProcessStdin } from "../default-dependencies.js";
-import {
-  getOptionValue,
-  hasOption,
-  isRecord,
-  optionalTarget,
-  parsePositiveIntegerValue,
-  parseTargetOptions,
-} from "../parse.js";
+import { getOptionValue, hasOption, isRecord, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { createUploadBudget, parseUploadArguments, statUploadFiles, uploadTotalTooLarge } from "../upload.js";
-import {
-  CliUsageError,
-  InvalidBatchArgvCommandError,
-  type CliDependencies,
-  type CliRequestBuildContext,
-} from "../types.js";
+import { CliUsageError, InvalidBatchArgvCommandError, type CliDependencies, type CliRequestBuildContext } from "../types.js";
 
-type ParsedBatchArguments = {
+interface ParsedBatchArguments {
   readonly optionArgs: readonly string[];
   readonly inputSource: "argv" | "stdin";
   readonly input?: string;
@@ -35,24 +23,16 @@ type ParsedBatchArguments = {
   readonly timeout?: string;
   readonly maxResultBytes?: string;
   readonly json: boolean;
-};
+}
 
-export async function buildBatchRequest(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<RequestEnvelope> {
+export async function buildBatchRequest(argv: readonly string[], dependencies: CliDependencies, context: CliRequestBuildContext): Promise<RequestEnvelope> {
   const parsedArgs = parseBatchArguments(argv.slice(1));
   const steps = await readBatchSteps(parsedArgs, dependencies, context);
   const params = parseBatchParamsForCli({
     steps,
     ...(parsedArgs.bail ? { bail: true } : {}),
-    ...(parsedArgs.timeout === undefined
-      ? {}
-      : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
-    ...(parsedArgs.maxResultBytes === undefined
-      ? {}
-      : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
+    ...(parsedArgs.timeout === undefined ? {} : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),
+    ...(parsedArgs.maxResultBytes === undefined ? {} : { maxResultBytes: parsePositiveIntegerValue(parsedArgs.maxResultBytes, "max output") }),
     ...optionalTarget(parseTargetOptions(parsedArgs.optionArgs)),
   });
   return createValidatedRequest("batch", params);
@@ -92,24 +72,13 @@ function parseBatchParamsForCli(params: BatchParams): BatchParams {
   }
 
   const firstIssue = parsed.error.issues[0];
-  throw new CliUsageError(
-    firstIssue === undefined
-      ? "Batch request is invalid."
-      : `Batch request is invalid: ${firstIssue.message}`,
-  );
+  throw new CliUsageError(firstIssue === undefined ? "Batch request is invalid." : `Batch request is invalid: ${firstIssue.message}`);
 }
 
-async function validateBatchArgvUploadMetadata(
-  rawSteps: readonly unknown[],
-  dependencies: CliDependencies,
-): Promise<void> {
+async function validateBatchArgvUploadMetadata(rawSteps: readonly unknown[], dependencies: CliDependencies): Promise<void> {
   let plannedBytes = 0;
   for (const [index, rawStep] of rawSteps.entries()) {
-    if (
-      !Array.isArray(rawStep) ||
-      !rawStep.every((value): value is string => typeof value === "string") ||
-      rawStep[0] !== "upload"
-    ) {
+    if (!Array.isArray(rawStep) || !rawStep.every((value): value is string => typeof value === "string") || rawStep[0] !== "upload") {
       continue;
     }
 
@@ -128,21 +97,14 @@ function parseBatchUploadArguments(argv: readonly string[], index: number) {
     return parseUploadArguments(argv.slice(1));
   } catch (error) {
     if (error instanceof CliUsageError) {
-      throw new CliUsageError(`Invalid batch argv step ${index}: ${error.message}`);
+      throw new CliUsageError(`Invalid batch argv step ${String(index)}: ${error.message}`);
     }
     throw error;
   }
 }
 
-async function readBatchSteps(
-  args: ParsedBatchArguments,
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<BatchStep[]> {
-  const input =
-    args.inputSource === "stdin"
-      ? await (dependencies.readStdin?.() ?? readProcessStdin())
-      : (args.input ?? "");
+async function readBatchSteps(args: ParsedBatchArguments, dependencies: CliDependencies, context: CliRequestBuildContext): Promise<BatchStep[]> {
+  const input = args.inputSource === "stdin" ? await (dependencies.readStdin?.() ?? readProcessStdin()) : (args.input ?? "");
   let raw: unknown;
   try {
     raw = JSON.parse(input);
@@ -174,26 +136,21 @@ async function readBatchSteps(
   return steps;
 }
 
-async function parseBatchStep(
-  rawStep: unknown,
-  index: number,
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<BatchStep> {
+async function parseBatchStep(rawStep: unknown, index: number, dependencies: CliDependencies, context: CliRequestBuildContext): Promise<BatchStep> {
   if (Array.isArray(rawStep)) {
     if (!rawStep.every((value): value is string => typeof value === "string")) {
-      throw new CliUsageError(`Batch argv step ${index} must contain only strings.`);
+      throw new CliUsageError(`Batch argv step ${String(index)} must contain only strings.`);
     }
     return batchStepFromArgv(rawStep, index, dependencies, context);
   }
 
   if (!isRecord(rawStep)) {
-    throw new CliUsageError(`Batch step ${index} must be an argv array or command object.`);
+    throw new CliUsageError(`Batch step ${String(index)} must be an argv array or command object.`);
   }
 
   const command = rawStep.command;
   if (typeof command !== "string" || !isBatchableCommandId(command)) {
-    throw new CliUsageError(`Invalid batch command at step ${index}.`);
+    throw new CliUsageError(`Invalid batch command at step ${String(index)}.`);
   }
 
   return {
@@ -202,14 +159,9 @@ async function parseBatchStep(
   };
 }
 
-async function batchStepFromArgv(
-  argv: readonly string[],
-  index: number,
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<BatchStep> {
+async function batchStepFromArgv(argv: readonly string[], index: number, dependencies: CliDependencies, context: CliRequestBuildContext): Promise<BatchStep> {
   if (batchArgvReadsStdin(argv)) {
-    throw new CliUsageError(`Batch argv step ${index} cannot read from stdin.`);
+    throw new CliUsageError(`Batch argv step ${String(index)} cannot read from stdin.`);
   }
 
   let request: RequestEnvelope;
@@ -217,16 +169,16 @@ async function batchStepFromArgv(
     request = await context.buildRequestForArgv(argv, dependencies, context);
   } catch (error) {
     if (error instanceof InvalidBatchArgvCommandError) {
-      throw new CliUsageError(`Invalid batch argv command at step ${index}.`);
+      throw new CliUsageError(`Invalid batch argv command at step ${String(index)}.`);
     }
     if (error instanceof CliUsageError) {
-      throw new CliUsageError(`Invalid batch argv step ${index}: ${error.message}`);
+      throw new CliUsageError(`Invalid batch argv step ${String(index)}: ${error.message}`);
     }
     throw error;
   }
 
   if (!isBatchableCommandId(request.command)) {
-    throw new CliUsageError(`Invalid batch command at step ${index}.`);
+    throw new CliUsageError(`Invalid batch command at step ${String(index)}.`);
   }
 
   return {
@@ -248,8 +200,7 @@ function stripImplicitBatchTarget(command: CommandId, params: unknown, argv: rea
     return params;
   }
 
-  const { target: _target, ...paramsWithoutImplicitTarget } = params;
-  return paramsWithoutImplicitTarget;
+  return Object.fromEntries(Object.entries(params).filter(([key]) => key !== "target"));
 }
 
 function isImplicitBatchDefaultTargetCommand(command: CommandId): boolean {

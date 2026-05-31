@@ -2,26 +2,22 @@ import { readFile, unlink } from "node:fs/promises";
 import { createHash, randomBytes as nodeRandomBytes, randomUUID } from "node:crypto";
 import { join, posix, win32 } from "node:path";
 import { z } from "zod";
-import {
-  type PersistedJsonFileError,
-  isPersistedJsonFileError,
-  parsePersistedJson,
-} from "./persisted-json.js";
+import { type PersistedJsonFileError, isPersistedJsonFileError, parsePersistedJson } from "./persisted-json.js";
 import { withFileLock, writeFileAtomically } from "./reliability.js";
 
-export type PairState = {
+export interface PairState {
   readonly schemaVersion: 1;
   readonly hostId: string;
   readonly extensionId: string;
   readonly tokenHash: string;
   readonly approvedAt: string;
   readonly generation: number;
-};
+}
 
-export type HostIdentity = {
+export interface HostIdentity {
   readonly hostId: string;
   readonly extensionId: string;
-};
+}
 
 export const pairStateSchema = z
   .object({
@@ -54,11 +50,11 @@ export type PairStateStatus =
       readonly error: PersistedJsonFileError;
     };
 
-export type HostIdentityStore = {
+export interface HostIdentityStore {
   readonly filePath: string;
   read(): Promise<HostIdentity | null>;
   write(identity: HostIdentity): Promise<void>;
-};
+}
 
 export type PairTokenVerification =
   | {
@@ -66,37 +62,31 @@ export type PairTokenVerification =
     }
   | {
       readonly ok: false;
-      readonly code:
-        | "NOT_APPROVED"
-        | "TOKEN_REQUIRED"
-        | "TOKEN_MISMATCH"
-        | "HOST_ID_MISMATCH"
-        | "EXTENSION_ID_MISMATCH"
-        | "PAIR_STATE_INVALID";
+      readonly code: "NOT_APPROVED" | "TOKEN_REQUIRED" | "TOKEN_MISMATCH" | "HOST_ID_MISMATCH" | "EXTENSION_ID_MISMATCH" | "PAIR_STATE_INVALID";
       readonly message: string;
     };
 
-export type PairTokenRotation = {
+export interface PairTokenRotation {
   readonly state: PairState;
   readonly token: string;
-};
+}
 
-export type PairStateStore = {
+export interface PairStateStore {
   readonly filePath?: string;
   read(): Promise<PairState | null>;
   write(state: PairState): Promise<void>;
   clear(): Promise<void>;
-};
+}
 
-export type PairStateDependencies = {
+export interface PairStateDependencies {
   readonly now?: () => Date;
   readonly randomBytes?: () => Buffer;
-};
+}
 
-export type HostIdentityOptions = {
+export interface HostIdentityOptions {
   readonly extensionId: string;
   readonly generateId?: () => string;
-};
+}
 
 export function createHostIdentity(options: HostIdentityOptions): HostIdentity {
   return {
@@ -105,10 +95,7 @@ export function createHostIdentity(options: HostIdentityOptions): HostIdentity {
   };
 }
 
-export async function getOrCreateHostIdentity(
-  store: HostIdentityStore,
-  options: HostIdentityOptions,
-): Promise<HostIdentity> {
+export async function getOrCreateHostIdentity(store: HostIdentityStore, options: HostIdentityOptions): Promise<HostIdentity> {
   return withFileLock(`${store.filePath}.lock`, async () => {
     let stored: HostIdentity | null;
     try {
@@ -129,10 +116,7 @@ export async function getOrCreateHostIdentity(
   });
 }
 
-export function approvePairing(
-  hostIdentity: HostIdentity,
-  dependencies: PairStateDependencies = {},
-): PairTokenRotation {
+export function approvePairing(hostIdentity: HostIdentity, dependencies: PairStateDependencies = {}): PairTokenRotation {
   return createPairTokenRotation(
     {
       schemaVersion: 1,
@@ -146,18 +130,11 @@ export function approvePairing(
   );
 }
 
-export function rotatePairToken(
-  currentState: PairState,
-  dependencies: PairStateDependencies = {},
-): PairTokenRotation {
+export function rotatePairToken(currentState: PairState, dependencies: PairStateDependencies = {}): PairTokenRotation {
   return createPairTokenRotation(currentState, dependencies);
 }
 
-export function verifyPairToken(
-  state: PairState | null,
-  hostIdentity: HostIdentity,
-  token: string | undefined,
-): PairTokenVerification {
+export function verifyPairToken(state: PairState | null, hostIdentity: HostIdentity, token: string | undefined): PairTokenVerification {
   if (state === null) {
     return {
       ok: false,
@@ -213,17 +190,12 @@ export async function readPairStateStatus(store: PairStateStore): Promise<PairSt
   }
 }
 
-export function verifyPairStateStatus(
-  state: PairStateStatus,
-  hostIdentity: HostIdentity,
-  token: string | undefined,
-): PairTokenVerification {
+export function verifyPairStateStatus(state: PairStateStatus, hostIdentity: HostIdentity, token: string | undefined): PairTokenVerification {
   if (state.status === "invalid") {
     return {
       ok: false,
       code: "PAIR_STATE_INVALID",
-      message:
-        "Stored pair state is invalid. Reset approval from the extension popup or run `firefox-cli unpair`, then approve firefox-cli again.",
+      message: "Stored pair state is invalid. Reset approval from the extension popup or run `firefox-cli unpair`, then approve firefox-cli again.",
     };
   }
 
@@ -365,12 +337,7 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("base64url");
 }
 
-function getAppStateFilePath(
-  rootDir: string,
-  platform: NodeJS.Platform,
-  filename: string,
-  options: { readonly appDataDir?: string },
-): string {
+function getAppStateFilePath(rootDir: string, platform: NodeJS.Platform, filename: string, options: { readonly appDataDir?: string }): string {
   if (platform === "darwin") {
     return join(rootDir, "Library/Application Support/firefox-cli", filename);
   }

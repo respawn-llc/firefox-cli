@@ -2,6 +2,7 @@ import type { z } from "zod";
 
 import { createBatchSchemas } from "../batch.js";
 import { targetSelectorSchema } from "../target.js";
+import type { ActionKind } from "../actions.js";
 import type {
   CliRouteEntry,
   CliRouteMetadata,
@@ -9,6 +10,7 @@ import type {
   CommandCompatibilityMetadata,
   CommandFrameScopeMetadata,
   CommandProtocolRequirement,
+  CommandSchemaEntry,
   CommandSecurityMetadata,
 } from "../metadata.js";
 import { actionsCommandEntries } from "./actions.js";
@@ -30,8 +32,7 @@ const nonBatchCommandSchemas = assembleCommandRegistry(
 
 type NonBatchCommandId = keyof typeof nonBatchCommandSchemas;
 
-const isNonBatchCommandId = (command: string): command is NonBatchCommandId =>
-  Object.hasOwn(nonBatchCommandSchemas, command);
+const isNonBatchCommandId = (command: string): command is NonBatchCommandId => Object.hasOwn(nonBatchCommandSchemas, command);
 
 const batchSchemas = createBatchSchemas({
   hasCommand: isNonBatchCommandId,
@@ -96,10 +97,10 @@ export function getCliRoutes(): readonly CliRouteMetadata[] {
   return getCliRouteEntries().map((entry) => entry.route);
 }
 
-export function getCliRouteEntries(): readonly CliRouteEntry<CommandId>[] {
+export function getCliRouteEntries(): readonly CliRouteEntry[] {
   return Object.entries(commandSchemas).flatMap(([command, schema]) =>
     schema.cliRoutes.map((route) => ({
-      command: command as CommandId,
+      command,
       route,
     })),
   );
@@ -133,7 +134,7 @@ export function commandAcceptsBatchTimeout(command: string): command is CommandI
   return batch.timeoutRebase === true;
 }
 
-export function isActionCommand(command: string): command is import("../actions.js").ActionKind {
+export function isActionCommand(command: string): command is ActionKind {
   return isCommandId(command) && commandSchemas[command].action;
 }
 
@@ -146,8 +147,8 @@ export function isContentCommand(command: string): command is ContentCommandId {
 }
 
 export function getCommandSecurityMetadata(command: CommandId): CommandSecurityMetadata {
-  const entry = commandSchemas[command];
-  const metadata = "security" in entry ? (entry.security as CommandSecurityMetadata | undefined) : undefined;
+  const entry: CommandSchemaEntry = commandSchemas[command];
+  const metadata = entry.security;
   if (metadata !== undefined) {
     return metadata;
   }
@@ -155,16 +156,14 @@ export function getCommandSecurityMetadata(command: CommandId): CommandSecurityM
 }
 
 export function getCommandCompatibilityMetadata(command: CommandId): CommandCompatibilityMetadata {
-  const entry = commandSchemas[command];
-  const metadata =
-    "compatibility" in entry ? (entry.compatibility as CommandCompatibilityMetadata | undefined) : undefined;
+  const entry: CommandSchemaEntry = commandSchemas[command];
+  const metadata = entry.compatibility;
   return metadata ?? { requirements: [] };
 }
 
 export function getCommandFrameScopeMetadata(command: CommandId): CommandFrameScopeMetadata {
-  const entry = commandSchemas[command];
-  const metadata =
-    "frameScope" in entry ? (entry.frameScope as CommandFrameScopeMetadata | undefined) : undefined;
+  const entry: CommandSchemaEntry = commandSchemas[command];
+  const metadata = entry.frameScope;
   if (metadata !== undefined) {
     return metadata;
   }
@@ -181,10 +180,7 @@ export function getCommandFrameScopeMetadata(command: CommandId): CommandFrameSc
   };
 }
 
-export function getRequestProtocolRequirement(request: {
-  readonly command: CommandId;
-  readonly params: unknown;
-}): CommandProtocolRequirement | undefined {
+export function getRequestProtocolRequirement(request: { readonly command: CommandId; readonly params: unknown }): CommandProtocolRequirement | undefined {
   const requirements = getCommandCompatibilityMetadata(request.command).requirements.filter((requirement) =>
     protocolRequirementMatchesParams(requirement, request.params),
   );
@@ -200,10 +196,7 @@ export function isPrivilegeSensitiveCommand(command: CommandId): boolean {
   return getCommandSecurityMetadata(command).level !== "normal";
 }
 
-export function isPrivilegeSensitiveRequest(request: {
-  readonly command: CommandId;
-  readonly params: unknown;
-}): boolean {
+export function isPrivilegeSensitiveRequest(request: { readonly command: CommandId; readonly params: unknown }): boolean {
   const metadata = getCommandSecurityMetadata(request.command);
   if (metadata.level === "normal") {
     return false;
@@ -215,17 +208,12 @@ export function isPrivilegeSensitiveRequest(request: {
   return isConditionallySensitiveRequest(request);
 }
 
-function isConditionallySensitiveRequest(request: {
-  readonly command: CommandId;
-  readonly params: unknown;
-}): boolean {
+function isConditionallySensitiveRequest(request: { readonly command: CommandId; readonly params: unknown }): boolean {
   if (request.command !== "wait" || !isRecord(request.params)) {
     return false;
   }
   return (
-    request.params.kind === "function" ||
-    request.params.kind === "download" ||
-    (request.params.kind === "load-state" && request.params.state === "networkidle")
+    request.params.kind === "function" || request.params.kind === "download" || (request.params.kind === "load-state" && request.params.state === "networkidle")
   );
 }
 
@@ -247,21 +235,27 @@ function valueAtPath(value: unknown, path: readonly string[]): unknown {
   }, value);
 }
 
-function batchStepParamsWithDefaultTarget(command: string, params: unknown): unknown | undefined {
+function batchStepParamsWithDefaultTarget(
+  command: string,
+  params: unknown,
+): { readonly found: true; readonly params: Record<string, unknown> & { readonly target: unknown } } | { readonly found: false } {
   if (!commandAcceptsProtocolBatchDefaultTarget(command) || !isRecord(params)) {
-    return undefined;
+    return { found: false };
   }
 
   if (params.target !== undefined) {
-    return undefined;
+    return { found: false };
   }
 
   return {
-    ...params,
-    target: targetSelectorSchema.parse({
-      window: { kind: "active" },
-      tab: { kind: "active" },
-    }),
+    found: true,
+    params: {
+      ...params,
+      target: targetSelectorSchema.parse({
+        window: { kind: "active" },
+        tab: { kind: "active" },
+      }),
+    },
   };
 }
 

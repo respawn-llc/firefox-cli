@@ -15,9 +15,7 @@ import {
 } from "@firefox-cli/protocol";
 import { isOneOf } from "../parse.js";
 
-export function isGetKind(
-  value: string | undefined,
-): value is "text" | "html" | "value" | "attr" | "title" | "url" | "count" | "box" | "styles" {
+export function isGetKind(value: string | undefined): value is "text" | "html" | "value" | "attr" | "title" | "url" | "count" | "box" | "styles" {
   return isOneOf(getKinds, value);
 }
 
@@ -25,9 +23,7 @@ export function isIsKind(value: string | undefined): value is "visible" | "enabl
   return isOneOf(isKinds, value);
 }
 
-export function isElementActionCommand(
-  value: string | undefined,
-): value is "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview" {
+export function isElementActionCommand(value: string | undefined): value is "click" | "dblclick" | "focus" | "hover" | "check" | "uncheck" | "scrollintoview" {
   return (
     value === "click" ||
     value === "dblclick" ||
@@ -43,9 +39,7 @@ export function isScrollDirection(value: string | undefined): value is "up" | "d
   return isOneOf(scrollDirections, value);
 }
 
-export function isFindKind(
-  value: string | undefined,
-): value is "role" | "text" | "label" | "placeholder" | "alt" | "title" | "testid" {
+export function isFindKind(value: string | undefined): value is "role" | "text" | "label" | "placeholder" | "alt" | "title" | "testid" {
   return isOneOf(findKinds, value);
 }
 

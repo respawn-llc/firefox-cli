@@ -60,9 +60,7 @@ export class BufferCursor {
       throw new Error(`Invalid buffer cursor read length: ${String(byteLength)}`);
     }
     if (byteLength > this.#availableBytes) {
-      throw new Error(
-        `Buffer cursor read requires ${String(byteLength)} bytes, only ${String(this.#availableBytes)} available.`,
-      );
+      throw new Error(`Buffer cursor read requires ${String(byteLength)} bytes, only ${String(this.#availableBytes)} available.`);
     }
   }
 

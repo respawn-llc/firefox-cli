@@ -1,7 +1,7 @@
 import type { NetworkResult } from "@firefox-cli/protocol";
 import { createGlobMatcher } from "./glob.js";
 
-export type NetworkRequestRecord = {
+export interface NetworkRequestRecord {
   readonly id: string;
   readonly tabId: number;
   readonly url: string;
@@ -10,26 +10,26 @@ export type NetworkRequestRecord = {
   readonly statusCode?: number;
   readonly startedAt: number;
   readonly completedAt?: number;
-};
+}
 
-export type NetworkRequestStart = {
+export interface NetworkRequestStart {
   readonly requestId: string | number;
   readonly tabId?: number;
   readonly url?: string;
   readonly method?: string;
   readonly type?: string;
-};
+}
 
-export type NetworkRequestEnd = {
+export interface NetworkRequestEnd {
   readonly requestId: string | number;
   readonly statusCode?: number;
-};
+}
 
-export type NetworkTrackerOptions = {
+export interface NetworkTrackerOptions {
   readonly maxCompletedRequestsPerTab?: number;
   readonly maxActiveRequestAgeMs?: number;
   readonly now?: () => number;
-};
+}
 
 export class NetworkRequestTracker {
   readonly #maxCompletedRequestsPerTab: number;
@@ -84,10 +84,7 @@ export class NetworkRequestTracker {
     return completed;
   }
 
-  list(options: {
-    readonly tabId: number;
-    readonly urlGlob?: string;
-  }): NonNullable<NetworkResult["requests"]> {
+  list(options: { readonly tabId: number; readonly urlGlob?: string }): NonNullable<NetworkResult["requests"]> {
     this.pruneStaleActiveRequests();
     const matchesUrl = options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     return this.#recordsForTab(options.tabId)
@@ -141,11 +138,7 @@ export class NetworkRequestTracker {
 
   hasTabState(tabId: number): boolean {
     this.pruneStaleActiveRequests();
-    return (
-      this.hasActiveRequests(tabId) ||
-      (this.#completedByTabId.get(tabId)?.length ?? 0) > 0 ||
-      this.#lastActivityByTabId.has(tabId)
-    );
+    return this.hasActiveRequests(tabId) || (this.#completedByTabId.get(tabId)?.length ?? 0) > 0 || this.#lastActivityByTabId.has(tabId);
   }
 
   pruneStaleActiveRequests(maxAgeMs: number = this.#maxActiveRequestAgeMs): number {
@@ -163,18 +156,12 @@ export class NetworkRequestTracker {
   }
 
   #recordsForTab(tabId: number): readonly NetworkRequestRecord[] {
-    return [
-      ...(this.#completedByTabId.get(tabId) ?? []),
-      ...[...this.#activeByRequestId.values()].filter((request) => request.tabId === tabId),
-    ];
+    return [...(this.#completedByTabId.get(tabId) ?? []), ...[...this.#activeByRequestId.values()].filter((request) => request.tabId === tabId)];
   }
 
   #recordCompletedRequest(request: NetworkRequestRecord): void {
     const completedForTab = [...(this.#completedByTabId.get(request.tabId) ?? []), request];
-    this.#completedByTabId.set(
-      request.tabId,
-      pruneCompletedHistory(completedForTab, this.#maxCompletedRequestsPerTab),
-    );
+    this.#completedByTabId.set(request.tabId, pruneCompletedHistory(completedForTab, this.#maxCompletedRequestsPerTab));
     this.#lastActivityByTabId.set(request.tabId, request.completedAt ?? this.#now());
   }
 
@@ -182,11 +169,7 @@ export class NetworkRequestTracker {
     if ((this.#completedByTabId.get(tabId)?.length ?? 0) === 0) {
       this.#completedByTabId.delete(tabId);
     }
-    if (
-      !this.#lastActivityByTabId.has(tabId) ||
-      this.#hasActiveRequestsForTab(tabId) ||
-      (this.#completedByTabId.get(tabId)?.length ?? 0) > 0
-    ) {
+    if (!this.#lastActivityByTabId.has(tabId) || this.#hasActiveRequestsForTab(tabId) || (this.#completedByTabId.get(tabId)?.length ?? 0) > 0) {
       return;
     }
     this.#lastActivityByTabId.delete(tabId);
@@ -197,10 +180,7 @@ export class NetworkRequestTracker {
   }
 }
 
-function pruneCompletedHistory(
-  records: readonly NetworkRequestRecord[],
-  maxCompletedRequestsPerTab: number,
-): NetworkRequestRecord[] {
+function pruneCompletedHistory(records: readonly NetworkRequestRecord[], maxCompletedRequestsPerTab: number): NetworkRequestRecord[] {
   const extraCount = records.length - maxCompletedRequestsPerTab;
   return extraCount <= 0 ? [...records] : records.slice(extraCount);
 }
@@ -215,18 +195,10 @@ function isTrackableUrl(url: string | undefined): url is string {
   }
 
   const scheme = /^[a-z][a-z0-9+.-]*:/iu.exec(url)?.[0]?.toLowerCase();
-  return (
-    scheme !== undefined &&
-    scheme !== "moz-extension:" &&
-    scheme !== "about:" &&
-    scheme !== "chrome:" &&
-    scheme !== "resource:"
-  );
+  return scheme !== undefined && scheme !== "moz-extension:" && scheme !== "about:" && scheme !== "chrome:" && scheme !== "resource:";
 }
 
-function toNetworkRequestSummary(
-  request: NetworkRequestRecord,
-): NonNullable<NetworkResult["requests"]>[number] {
+function toNetworkRequestSummary(request: NetworkRequestRecord): NonNullable<NetworkResult["requests"]>[number] {
   return {
     id: request.id,
     url: request.url,

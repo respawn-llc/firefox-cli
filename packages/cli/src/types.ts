@@ -2,11 +2,11 @@ import type { CliRouteMetadata, CommandId, RequestEnvelope, ResponseEnvelope } f
 
 export type CliExitCode = 0 | 1;
 
-export type CliResult = {
+export interface CliResult {
   readonly exitCode: CliExitCode;
   readonly stdout: string;
   readonly stderr: string;
-};
+}
 
 export class CliUsageError extends Error {
   constructor(message: string) {
@@ -22,7 +22,7 @@ export class InvalidBatchArgvCommandError extends CliUsageError {
   }
 }
 
-export type CliDependencies = {
+export interface CliDependencies {
   readonly version: string;
   readonly platform: NodeJS.Platform;
   readonly arch: NodeJS.Architecture;
@@ -37,21 +37,21 @@ export type CliDependencies = {
   statUploadFile?(path: string): Promise<CliUploadFileStat>;
   readUploadFile?(path: string, limits: UploadReadLimits): Promise<Uint8Array>;
   clearPairState?(): Promise<void>;
-};
+}
 
-export type CliUploadFileStat = {
+export interface CliUploadFileStat {
   readonly size: number;
   readonly isFile: boolean;
-};
+}
 
-export type UploadReadLimits = {
+export interface UploadReadLimits {
   readonly maxFileBytes: number;
   readonly maxRemainingTotalBytes: number;
-};
+}
 
-export type UploadBudget = {
+export interface UploadBudget {
   bytes: number;
-};
+}
 
 export type BuildRequestForArgv = (
   argv: readonly string[],
@@ -59,11 +59,11 @@ export type BuildRequestForArgv = (
   context: CliRequestBuildContext,
 ) => Promise<RequestEnvelope> | RequestEnvelope;
 
-export type CliRequestBuildContext = {
+export interface CliRequestBuildContext {
   readonly uploadBudget: UploadBudget;
   readonly buildRequestForArgv: BuildRequestForArgv;
   readonly batchMode?: boolean;
-};
+}
 
 export type CliRequestBuilder = (
   args: readonly string[],
@@ -71,20 +71,20 @@ export type CliRequestBuilder = (
   context: CliRequestBuildContext,
 ) => Promise<RequestEnvelope> | RequestEnvelope;
 
-export type CliPayloadParserSpec = {
+export interface CliPayloadParserSpec {
   readonly payloadStartPositionals: number;
   readonly minPositionals: number;
   readonly variadicAfterMin?: boolean;
-};
+}
 
-export type CliRouteParserSpec = {
+export interface CliRouteParserSpec {
   readonly label: string;
   readonly flags: readonly string[];
   readonly valueOptions: readonly string[];
   readonly optionalValueOptions?: readonly string[];
   readonly payload?: CliPayloadParserSpec;
   readonly allowDashDashPayload?: boolean;
-};
+}
 
 export type CliResponseFormatterKind =
   | "capabilities"
@@ -107,12 +107,9 @@ export type CliResponseFormatterKind =
   | "action"
   | "json-object";
 
-export type CliResponseFormatter<C extends CommandId = CommandId> = (
-  response: ResponseEnvelope<C>,
-  json: boolean,
-) => CliResult;
+export type CliResponseFormatter<C extends CommandId = CommandId> = (response: ResponseEnvelope<C>, json: boolean) => CliResult;
 
-export type CliRouteBinding<C extends CommandId = CommandId> = {
+export interface CliRouteBinding<C extends CommandId = CommandId> {
   readonly route: CliRouteMetadata;
   readonly command: C;
   readonly help: string;
@@ -120,4 +117,4 @@ export type CliRouteBinding<C extends CommandId = CommandId> = {
   readonly formatterKind: CliResponseFormatterKind;
   readonly formatter: CliResponseFormatter<C>;
   readonly buildRequest: CliRequestBuilder;
-};
+}

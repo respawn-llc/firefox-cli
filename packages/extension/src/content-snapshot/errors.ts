@@ -39,19 +39,13 @@ export function createContentErrorResponse(id: string, error: unknown): Response
   });
 }
 
-export function createContentErrorResponseForRequest<C extends CommandId>(
-  request: RequestEnvelope<C>,
-  error: unknown,
-): ResponseEnvelope<C> {
+export function createContentErrorResponseForRequest<C extends CommandId>(request: RequestEnvelope<C>, error: unknown): ResponseEnvelope<C> {
   return createErrorResponseForRequest(request, contentError(error));
 }
 
 function contentError(error: unknown) {
   return {
-    code:
-      error instanceof ContentSnapshotError || error instanceof ElementRefRegistryError
-        ? error.code
-        : "SCRIPT_INJECTION_FAILED",
+    code: error instanceof ContentSnapshotError || error instanceof ElementRefRegistryError ? error.code : "SCRIPT_INJECTION_FAILED",
     message: error instanceof Error ? error.message : String(error),
   };
 }

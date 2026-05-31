@@ -1,11 +1,7 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import type { BackgroundBrowserAdapter } from "./background-controller.js";
 import { createBrowserCommandDeadline } from "./browser-command/deadline.js";
-import {
-  createContentScriptInjectionState,
-  deliverContentScriptRequest,
-  type ContentScriptInjectionState,
-} from "./content-script-delivery.js";
+import { createContentScriptInjectionState, deliverContentScriptRequest, type ContentScriptInjectionState } from "./content-script-delivery.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import { createGlobMatcher } from "./glob.js";
 import type { NetworkObservationService } from "./network-observation-service.js";
@@ -58,13 +54,11 @@ export function createBackgroundBrowserAdapter(options: {
           ...(windowOptions.url === undefined ? {} : { url: windowOptions.url }),
         }),
       ),
-    focusWindow: async (windowId) =>
-      toWindowSnapshot(await options.browser.windows.update(windowId, { focused: true })),
+    focusWindow: async (windowId) => toWindowSnapshot(await options.browser.windows.update(windowId, { focused: true })),
     closeWindow: async (windowId) => {
       await options.browser.windows.remove(windowId);
     },
-    navigateTab: async (tabId, url) =>
-      toTabSummary(await options.browser.tabs.update(tabId, { active: true, url })),
+    navigateTab: async (tabId, url) => toTabSummary(await options.browser.tabs.update(tabId, { active: true, url })),
     goBack: async (tabId) => {
       await options.browser.tabs.goBack(tabId);
       return toTabSummary(await options.browser.tabs.get(tabId));
@@ -77,7 +71,7 @@ export function createBackgroundBrowserAdapter(options: {
       await options.browser.tabs.reload(tabId);
       return toTabSummary(await options.browser.tabs.get(tabId));
     },
-    captureVisibleTab: (windowId, captureOptions) =>
+    captureVisibleTab: async (windowId, captureOptions) =>
       options.browser.tabs.captureVisibleTab(windowId, {
         format: captureOptions.format,
         ...(captureOptions.quality === undefined ? {} : { quality: captureOptions.quality }),
@@ -94,13 +88,10 @@ export function createBackgroundBrowserAdapter(options: {
     waitForDownload: async (waitOptions) => {
       const deadline = createBrowserCommandDeadline(waitOptions.timeoutMs);
       const timeoutMessage = () => "Timed out waiting for download.";
-      const matchesFilename =
-        waitOptions.filenameGlob === undefined ? undefined : createGlobMatcher(waitOptions.filenameGlob);
-      while (true) {
+      const matchesFilename = waitOptions.filenameGlob === undefined ? undefined : createGlobMatcher(waitOptions.filenameGlob);
+      for (;;) {
         const downloads = await deadline.run(
-          options.browser.downloads.search(
-            waitOptions.downloadId === undefined ? {} : { id: waitOptions.downloadId },
-          ),
+          options.browser.downloads.search(waitOptions.downloadId === undefined ? {} : { id: waitOptions.downloadId }),
           timeoutMessage,
         );
         const match = downloads.find(
@@ -164,7 +155,7 @@ export function createBackgroundBrowserAdapter(options: {
       const deadline = createBrowserCommandDeadline(networkOptions.timeoutMs);
       const timeoutMessage = () => "Timed out waiting for network idle.";
       await options.networkObservation.observeTab(networkOptions.tabId, async (tracker) => {
-        while (true) {
+        for (;;) {
           if (
             tracker.isIdle({
               tabId: networkOptions.tabId,
@@ -190,8 +181,7 @@ export function createBackgroundBrowserAdapter(options: {
     sendContentRequest: async (tabId, request) => {
       return deliverContentScriptRequest(
         {
-          sendMessage: (targetTabId, contentRequest) =>
-            options.browser.tabs.sendMessage(targetTabId, contentRequest),
+          sendMessage: async (targetTabId, contentRequest) => options.browser.tabs.sendMessage(targetTabId, contentRequest),
           injectContentScript: async (targetTabId) => {
             await options.browser.scripting.executeScript({
               target: { tabId: targetTabId, allFrames: false },
@@ -227,11 +217,7 @@ export function createBackgroundBrowserAdapter(options: {
   };
 }
 
-function toDownloadResult(item: {
-  readonly id?: number;
-  readonly filename?: string;
-  readonly state?: string;
-}) {
+function toDownloadResult(item: { readonly id?: number; readonly filename?: string; readonly state?: string }) {
   if (item.id === undefined) {
     throw new Error("Firefox did not return a download ID.");
   }

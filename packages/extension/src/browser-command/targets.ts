@@ -1,21 +1,13 @@
 import type { ResolvedTarget, TabSummary, TargetSelector, WindowSummary } from "@firefox-cli/protocol";
 import { BrowserCommandError } from "./errors.js";
-import type {
-  BackgroundBrowserAdapter,
-  BrowserWindowSnapshot,
-  OrderedWindow,
-  ResolvedBrowserTarget,
-} from "./types.js";
+import type { BackgroundBrowserAdapter, BrowserWindowSnapshot, OrderedWindow, ResolvedBrowserTarget } from "./types.js";
 
-export async function getOrderedWindows(
-  adapter: BackgroundBrowserAdapter,
-): Promise<readonly OrderedWindow[]> {
+export async function getOrderedWindows(adapter: BackgroundBrowserAdapter): Promise<readonly OrderedWindow[]> {
   return toOrderedWindows(await adapter.listWindows());
 }
 
 export function toOrderedWindows(windows: readonly BrowserWindowSnapshot[]): readonly OrderedWindow[] {
   return [...windows]
-    .filter((window) => window.id !== undefined)
     .sort((a, b) => Number(b.focused) - Number(a.focused) || a.id - b.id)
     .map((window, index) => ({
       ...window,
@@ -29,19 +21,11 @@ export function resolveTarget(
   selector: TargetSelector | undefined,
   options: { readonly allowPrivate?: boolean } = {},
 ): ResolvedBrowserTarget {
-  const tabById =
-    selector?.tab?.kind === "id" && selector.window === undefined
-      ? findTabById(windows, selector.tab.id)
-      : undefined;
+  const tabById = findTargetedTabById(windows, selector);
   const window = tabById?.window ?? resolveWindow(windows, selector?.window);
   const tab = tabById?.tab ?? resolveTab(window, selector?.tab);
 
-  if (options.allowPrivate !== true && (window.private === true || tab.private === true)) {
-    throw new BrowserCommandError(
-      "UNSUPPORTED_CAPABILITY",
-      "Private window commands require private browsing permission.",
-    );
-  }
+  assertTargetPermission(window, tab, options);
 
   return {
     window,
@@ -50,10 +34,21 @@ export function resolveTarget(
   };
 }
 
-export function resolveWindow(
+function findTargetedTabById(
   windows: readonly OrderedWindow[],
-  selector: TargetSelector["window"] | undefined,
-): OrderedWindow {
+  selector: TargetSelector | undefined,
+): { readonly window: OrderedWindow; readonly tab: TabSummary } | undefined {
+  return selector?.tab?.kind === "id" && selector.window === undefined ? findTabById(windows, selector.tab.id) : undefined;
+}
+
+function assertTargetPermission(window: OrderedWindow, tab: TabSummary, options: { readonly allowPrivate?: boolean }): void {
+  if (options.allowPrivate === true || (window.private !== true && tab.private !== true)) {
+    return;
+  }
+  throw new BrowserCommandError("UNSUPPORTED_CAPABILITY", "Private window commands require private browsing permission.");
+}
+
+export function resolveWindow(windows: readonly OrderedWindow[], selector: TargetSelector["window"] | undefined): OrderedWindow {
   if (windows.length === 0) {
     throw new BrowserCommandError("NO_ACTIVE_TAB", "Firefox has no normal browser windows.");
   }
@@ -72,10 +67,7 @@ export function resolveWindow(
     return first;
   }
 
-  const window =
-    selector.kind === "id"
-      ? findWindowById(windows, selector.id)
-      : windows.find((candidate) => candidate.index === selector.index);
+  const window = selector.kind === "id" ? findWindowById(windows, selector.id) : windows.find((candidate) => candidate.index === selector.index);
   if (window === undefined) {
     throw new BrowserCommandError("INVALID_TARGET", "Requested Firefox window was not found.");
   }
@@ -85,10 +77,7 @@ export function resolveWindow(
 
 export function assertMutableWindow(window: OrderedWindow): void {
   if (window.private === true) {
-    throw new BrowserCommandError(
-      "UNSUPPORTED_CAPABILITY",
-      "Private window commands require private browsing permission.",
-    );
+    throw new BrowserCommandError("UNSUPPORTED_CAPABILITY", "Private window commands require private browsing permission.");
   }
 }
 
@@ -116,17 +105,11 @@ export function resolveTab(window: OrderedWindow, selector: TargetSelector["tab"
   return tab;
 }
 
-export async function resolveFreshTarget(
-  adapter: BackgroundBrowserAdapter,
-  selector: TargetSelector,
-): Promise<ResolvedTarget> {
+export async function resolveFreshTarget(adapter: BackgroundBrowserAdapter, selector: TargetSelector): Promise<ResolvedTarget> {
   return resolveTarget(await getOrderedWindows(adapter), selector).target;
 }
 
-export function findTabById(
-  windows: readonly OrderedWindow[],
-  tabId: number,
-): { readonly window: OrderedWindow; readonly tab: TabSummary } | undefined {
+export function findTabById(windows: readonly OrderedWindow[], tabId: number): { readonly window: OrderedWindow; readonly tab: TabSummary } | undefined {
   for (const window of windows) {
     const tab = window.tabs.find((candidate) => candidate.id === tabId);
     if (tab !== undefined) {
@@ -137,10 +120,7 @@ export function findTabById(
   return undefined;
 }
 
-export function findWindowById(
-  windows: readonly OrderedWindow[],
-  windowId: number,
-): OrderedWindow | undefined {
+export function findWindowById(windows: readonly OrderedWindow[], windowId: number): OrderedWindow | undefined {
   return windows.find((candidate) => candidate.id === windowId);
 }
 

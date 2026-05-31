@@ -1,15 +1,12 @@
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
-export type SafeRegularFile = {
+export interface SafeRegularFile {
   readonly relativePath: string;
   readonly absolutePath: string;
-};
+}
 
-export async function listRegularFilesUnder(
-  root: string,
-  label: string,
-): Promise<readonly SafeRegularFile[]> {
+export async function listRegularFilesUnder(root: string, label: string): Promise<readonly SafeRegularFile[]> {
   const rootState = await resolveSafeDirectory(root, label);
   const files = await listRegularFilesInDirectory(rootState, "", label);
   return [...files].sort((left, right) => left.relativePath.localeCompare(right.relativePath));
@@ -20,11 +17,7 @@ export async function readRegularFile(path: string, label: string): Promise<Buff
   return readFile(path);
 }
 
-export async function readOptionalRegularFileUnder(
-  root: string,
-  relativePath: string,
-  label: string,
-): Promise<Buffer | undefined> {
+export async function readOptionalRegularFileUnder(root: string, relativePath: string, label: string): Promise<Buffer | undefined> {
   try {
     return await readRegularFileUnder(root, relativePath, label);
   } catch (error) {
@@ -35,11 +28,7 @@ export async function readOptionalRegularFileUnder(
   }
 }
 
-export async function readRegularFileUnder(
-  root: string,
-  relativePath: string,
-  label: string,
-): Promise<Buffer> {
+export async function readRegularFileUnder(root: string, relativePath: string, label: string): Promise<Buffer> {
   const rootState = await resolveSafeDirectory(root, `${label} root`);
   const absolutePath = resolve(rootState.absolutePath, relativePath);
   rejectUnsafeRelativePath(relativePath, label);
@@ -77,10 +66,7 @@ async function listRegularFilesInDirectory(
   return nested.flat();
 }
 
-async function resolveSafeDirectory(
-  path: string,
-  label: string,
-): Promise<{ readonly absolutePath: string; readonly realPath: string }> {
+async function resolveSafeDirectory(path: string, label: string): Promise<{ readonly absolutePath: string; readonly realPath: string }> {
   const absolutePath = resolve(path);
   const info = await lstat(absolutePath);
   if (info.isSymbolicLink()) {
@@ -92,11 +78,7 @@ async function resolveSafeDirectory(
   return { absolutePath, realPath: await realpath(absolutePath) };
 }
 
-async function resolveSafeFile(
-  path: string,
-  label: string,
-  realRoot?: string,
-): Promise<{ readonly absolutePath: string; readonly realPath: string }> {
+async function resolveSafeFile(path: string, label: string, realRoot?: string): Promise<{ readonly absolutePath: string; readonly realPath: string }> {
   const absolutePath = resolve(path);
   const info = await lstat(absolutePath);
   if (info.isSymbolicLink()) {

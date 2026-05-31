@@ -26,12 +26,8 @@ describe("snapshot semantics", () => {
     );
 
     expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#aria-label"))).toBe("ARIA label");
-    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#labelled-by"))).toBe(
-      "First Second",
-    );
-    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#explicit"))).toBe(
-      "Explicit label",
-    );
+    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#labelled-by"))).toBe("First Second");
+    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#explicit"))).toBe("Explicit label");
     expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#wrapped"))).toBe("Wrapped label");
     expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#image"))).toBe("Alt text");
     expect(defaultSnapshotSemantics.getRole(required(document, "#range"))).toBe("slider");
@@ -52,13 +48,7 @@ describe("snapshot semantics", () => {
     );
 
     expect(defaultSnapshotSemantics.isVisible(required(document, "#visible"))).toBe(true);
-    for (const selector of [
-      "#hidden-ancestor",
-      "#aria-hidden-ancestor",
-      "#display-none",
-      "#visibility-hidden",
-      "#hidden-input",
-    ]) {
+    for (const selector of ["#hidden-ancestor", "#aria-hidden-ancestor", "#display-none", "#visibility-hidden", "#hidden-input"]) {
       expect(defaultSnapshotSemantics.isVisible(required(document, selector))).toBe(false);
     }
 
@@ -159,9 +149,7 @@ describe("snapshot semantics", () => {
 
     expect(defaultSnapshotSemantics.describeFrame(simple)).toBe("iframe#child");
     expect(defaultSnapshotSemantics.describeFrame(idFrame)).toBe(`iframe[id="${escapeCssString(unsafeId)}"]`);
-    expect(defaultSnapshotSemantics.describeFrame(namedFrame)).toBe(
-      `iframe[name="${escapeCssString(unsafeName)}"]`,
-    );
+    expect(defaultSnapshotSemantics.describeFrame(namedFrame)).toBe(`iframe[name="${escapeCssString(unsafeName)}"]`);
     expect(defaultSnapshotSemantics.describeFrame(anonymousFrame)).toBe("iframe:nth-of-type(4)");
   });
 });

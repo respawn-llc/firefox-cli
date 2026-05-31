@@ -14,9 +14,7 @@ export class PersistedJsonFileError extends Error {
     readonly label: string;
     readonly reason: string;
   }) {
-    super(
-      `${options.label} ${options.kind === "invalid-json" ? "is not valid JSON" : "has invalid shape"}: ${options.reason}`,
-    );
+    super(`${options.label} ${options.kind === "invalid-json" ? "is not valid JSON" : "has invalid shape"}: ${options.reason}`);
     this.name = "PersistedJsonFileError";
     this.kind = options.kind;
     this.filePath = options.filePath;
@@ -39,7 +37,7 @@ export function parsePersistedJson<T>(
 ): T {
   let raw: unknown;
   try {
-    raw = JSON.parse(content) as unknown;
+    raw = JSON.parse(content);
   } catch (error) {
     throw new PersistedJsonFileError({
       kind: "invalid-json",

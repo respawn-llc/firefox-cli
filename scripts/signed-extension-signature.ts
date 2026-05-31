@@ -2,27 +2,20 @@ import { X509Certificate } from "node:crypto";
 import { mkdtemp, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  mozillaAmoProductionSignerExpectation,
-  type SignedExtensionSignerExpectation,
-} from "./signed-extension-policy.js";
+import { mozillaAmoProductionSignerExpectation, type SignedExtensionSignerExpectation } from "./signed-extension-policy.js";
 import { runProcess, type ProcessResult } from "./process-runner.js";
 
-export type SignedExtensionSignatureVerifier = (
-  input: SignedExtensionSignatureVerificationInput,
-) => Promise<void>;
+export type SignedExtensionSignatureVerifier = (input: SignedExtensionSignatureVerificationInput) => Promise<void>;
 
-export type SignedExtensionSignatureVerificationInput = {
+export interface SignedExtensionSignatureVerificationInput {
   readonly signatureData: Buffer;
   readonly signedContent: Buffer;
   readonly expectation?: SignedExtensionSignerExpectation;
   readonly opensslBinary?: string;
   readonly run?: typeof runProcess;
-};
+}
 
-export async function verifySignedExtensionSignature(
-  input: SignedExtensionSignatureVerificationInput,
-): Promise<void> {
+export async function verifySignedExtensionSignature(input: SignedExtensionSignatureVerificationInput): Promise<void> {
   const expectation = input.expectation ?? mozillaAmoProductionSignerExpectation;
   const run = input.run ?? runProcess;
   const opensslBinary = input.opensslBinary ?? "openssl";
@@ -95,7 +88,7 @@ export async function verifySignedExtensionSignature(
 }
 
 async function cleanupTempFiles(files: readonly string[], directory: string): Promise<void> {
-  await Promise.all(files.map((file) => unlink(file).catch(() => undefined)));
+  await Promise.all(files.map(async (file) => unlink(file).catch(() => undefined)));
   await rmdir(directory).catch(() => undefined);
 }
 
@@ -107,9 +100,7 @@ function parsePemCertificates(content: string): readonly X509Certificate[] {
 function verifySignerIdentity(signer: X509Certificate, expectation: SignedExtensionSignerExpectation): void {
   for (const expectedSubject of expectation.subjectIncludes) {
     if (!signer.subject.includes(expectedSubject)) {
-      throw new Error(
-        `Signed extension signer subject ${signer.subject} does not include ${expectedSubject}`,
-      );
+      throw new Error(`Signed extension signer subject ${signer.subject} does not include ${expectedSubject}`);
     }
   }
 

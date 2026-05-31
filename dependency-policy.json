@@ -4,12 +4,7 @@
   "trustedDependenciesAllowlist": [],
   "directDependencyAllowlist": {
     "firefox-cli-workspace": {
-      "dependencies": [
-        "@firefox-cli/cli",
-        "@firefox-cli/native-host",
-        "@firefox-cli/protocol",
-        "@firefox-cli/test-support"
-      ],
+      "dependencies": ["@firefox-cli/cli", "@firefox-cli/native-host", "@firefox-cli/protocol", "@firefox-cli/test-support"],
       "devDependencies": [
         "@biomejs/biome",
         "@eslint/js",

@@ -5,12 +5,12 @@ import { syncVersion } from "./sync-version.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
-export type PreparedReleaseVersion = {
+export interface PreparedReleaseVersion {
   readonly previousVersion: string;
   readonly version: string;
   readonly tag: string;
   readonly changedFiles: readonly string[];
-};
+}
 
 export async function prepareReleaseVersion(
   options: { readonly root?: string; readonly targetVersion?: string; readonly unavailableTags?: readonly string[]; readonly tagPrefix?: string } = {},
@@ -70,7 +70,7 @@ function parsePatchVersion(version: string): {
 }
 
 function formatPatchVersion(version: { readonly major: number; readonly minor: number; readonly patch: number }): string {
-  return `${version.major}.${version.minor}.${version.patch}`;
+  return `${String(version.major)}.${String(version.minor)}.${String(version.patch)}`;
 }
 
 async function readPackageJson(path: string): Promise<Record<string, unknown>> {
@@ -78,7 +78,7 @@ async function readPackageJson(path: string): Promise<Record<string, unknown>> {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${path} must contain a JSON object.`);
   }
-  return parsed as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(parsed));
 }
 
 function readPackageVersion(packageJson: Record<string, unknown>, path: string): string {
@@ -115,9 +115,8 @@ function parseTargetVersionArg(argv: readonly string[]): string | undefined {
 }
 
 if (import.meta.main) {
-  const result = await prepareReleaseVersion({
-    targetVersion: parseTargetVersionArg(process.argv.slice(2)),
-  });
+  const targetVersion = parseTargetVersionArg(process.argv.slice(2));
+  const result = await prepareReleaseVersion(targetVersion === undefined ? {} : { targetVersion });
   const output = JSON.stringify(result, null, 2);
   console.log(output);
 
@@ -125,12 +124,12 @@ if (import.meta.main) {
   if (githubOutput !== undefined && githubOutput.length > 0) {
     await writeFile(
       githubOutput,
-      [
+      `${[
         `version=${result.version}`,
         `tag=${result.tag}`,
         `changed=${result.changedFiles.length > 0 ? "true" : "false"}`,
         `changed_files=${result.changedFiles.join(" ")}`,
-      ].join("\n") + "\n",
+      ].join("\n")}\n`,
       { flag: "a" },
     );
   }

@@ -17,9 +17,7 @@ describe("copyExtensionAssets", () => {
     const { sourceDir, outputDir } = await createExtensionAssetFixture();
     await writeFile(join(sourceDir, "manifest.json"), "{");
 
-    await expect(copyExtensionAssets({ sourceDir, outputDir, version: "1.2.3" })).rejects.toThrow(
-      "Invalid source extension manifest JSON",
-    );
+    await expect(copyExtensionAssets({ sourceDir, outputDir, version: "1.2.3" })).rejects.toThrow("Invalid source extension manifest JSON");
   });
 
   it("rejects wrong-shape source extension manifests", async () => {
@@ -36,9 +34,7 @@ describe("copyExtensionAssets", () => {
       }),
     );
 
-    await expect(copyExtensionAssets({ sourceDir, outputDir, version: "1.2.3" })).rejects.toThrow(
-      "Invalid source extension manifest",
-    );
+    await expect(copyExtensionAssets({ sourceDir, outputDir, version: "1.2.3" })).rejects.toThrow("Invalid source extension manifest");
   });
 });
 

@@ -4,7 +4,7 @@ import { getElementValue } from "./snapshot-semantics.js";
 
 export function getElementText(element: Element): string {
   const value = getElementValue(element);
-  return value ?? collapseWhitespace(element.textContent ?? "");
+  return value ?? collapseWhitespace(element.textContent);
 }
 
 export function setElementText(element: Element, text: string): void {

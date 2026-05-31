@@ -17,9 +17,7 @@ describe("phase 2 E2E planning", () => {
       kind: "unix-socket",
       path: join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
     });
-    expect(plan.manifestPlan.manifestPath).toBe(
-      `/tmp/fc-home/Library/Application Support/Mozilla/NativeMessagingHosts/${NATIVE_HOST_NAME}.json`,
-    );
+    expect(plan.manifestPlan.manifestPath).toBe(`/tmp/fc-home/Library/Application Support/Mozilla/NativeMessagingHosts/${NATIVE_HOST_NAME}.json`);
     expect(plan.env).toMatchObject({
       HOME: "/tmp/fc-home",
       USERPROFILE: "/tmp/fc-home",
@@ -40,9 +38,7 @@ describe("phase 2 E2E planning", () => {
       kind: "unix-socket",
       path: join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
     });
-    expect(plan.manifestPlan.manifestPath).toBe(
-      `/tmp/fc-home/.mozilla/native-messaging-hosts/${NATIVE_HOST_NAME}.json`,
-    );
+    expect(plan.manifestPlan.manifestPath).toBe(`/tmp/fc-home/.mozilla/native-messaging-hosts/${NATIVE_HOST_NAME}.json`);
   });
 
   it("uses Windows APPDATA for state and native manifest planning", () => {

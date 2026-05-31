@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifySourceFile,
-  evaluateSourceSizes,
-  runSourceSizeCheck,
-  sourceSizePolicy,
-  type SourceFileSize,
-} from "../source-size-check.js";
+import { classifySourceFile, evaluateSourceSizes, runSourceSizeCheck, sourceSizePolicy, type SourceFileSize } from "../source-size-check.js";
 
 describe("source size check", () => {
   it("classifies runtime, tests, disposable E2E, and generated paths", () => {
@@ -22,9 +16,7 @@ describe("source size check", () => {
     const writes: string[] = [];
     await expect(
       runSourceSizeCheck({
-        files: [
-          productionFile("packages/cli/src/route-registry.ts", sourceSizePolicy.productionMaxLines + 1),
-        ],
+        files: [productionFile("packages/cli/src/route-registry.ts", sourceSizePolicy.productionMaxLines + 1)],
         write: (message) => writes.push(message),
       }),
     ).rejects.toThrow("Production source size check failed");
@@ -42,17 +34,14 @@ describe("source size check", () => {
     });
 
     expect(report.productionViolations).toEqual([]);
-    expect(report.oversizedTestSupport).toEqual([
-      testSupportFile("packages/cli/src/cli.test.ts", sourceSizePolicy.testSupportReviewTargetLines + 1),
-    ]);
+    expect(report.oversizedTestSupport).toEqual([testSupportFile("packages/cli/src/cli.test.ts", sourceSizePolicy.testSupportReviewTargetLines + 1)]);
   });
 
   it("sorts production violations by descending line count", () => {
     expect(
-      evaluateSourceSizes(
-        [productionFile("packages/a/src/a.ts", 801), productionFile("packages/b/src/b.ts", 900)],
-        sourceSizePolicy,
-      ).productionViolations.map((file) => file.path),
+      evaluateSourceSizes([productionFile("packages/a/src/a.ts", 801), productionFile("packages/b/src/b.ts", 900)], sourceSizePolicy).productionViolations.map(
+        (file) => file.path,
+      ),
     ).toEqual(["packages/b/src/b.ts", "packages/a/src/a.ts"]);
   });
 });
