@@ -157,8 +157,9 @@ type BrowserWebRequestEvent = {
       readonly method?: string;
       readonly type?: string;
       readonly statusCode?: number;
+      readonly tabId?: number;
     }) => void,
-    filter: { readonly urls: readonly string[] },
+    filter: { readonly urls: readonly string[]; readonly tabId?: number },
   ): void;
   removeListener(
     listener: (details: {
@@ -167,6 +168,7 @@ type BrowserWebRequestEvent = {
       readonly method?: string;
       readonly type?: string;
       readonly statusCode?: number;
+      readonly tabId?: number;
     }) => void,
   ): void;
 };

@@ -1,29 +1,14 @@
-import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import {
   FirefoxCliBackgroundController,
   type BackgroundStorageAdapter,
 } from "./background-controller.js";
 import { createBackgroundBrowserAdapter } from "./background-browser-adapter.js";
 import { createContentScriptInjectionState } from "./content-script-delivery.js";
+import { NetworkObservationService } from "./network-observation-service.js";
 import { NetworkRequestTracker } from "./network-tracker.js";
 
 type RuntimeMessage = { readonly type?: string };
 type RuntimeMessageListener = (message: RuntimeMessage) => Promise<unknown>;
-type WebRequestDetails = {
-  readonly requestId: string | number;
-  readonly url: string;
-  readonly method?: string;
-  readonly type?: string;
-  readonly statusCode?: number;
-  readonly tabId?: number;
-};
-type WebRequestEvent = {
-  addListener(
-    listener: (details: WebRequestDetails) => void,
-    filter: { readonly urls: readonly string[] },
-  ): void;
-  removeListener(listener: (details: WebRequestDetails) => void): void;
-};
 
 export type BackgroundBrowserApi = typeof browser;
 
@@ -43,13 +28,19 @@ export function startBackground(options: {
   };
   readonly clipboard?: Pick<typeof navigator.clipboard, "readText" | "writeText">;
   readonly networkTracker?: NetworkRequestTracker;
+  readonly networkObservation?: NetworkObservationService;
 }): BackgroundLifecycle {
-  const networkTracker = options.networkTracker ?? new NetworkRequestTracker();
+  const networkObservation =
+    options.networkObservation ??
+    new NetworkObservationService({
+      browser: options.browser,
+      tracker: options.networkTracker ?? new NetworkRequestTracker(),
+    });
   const contentScriptState = createContentScriptInjectionState();
   const controller = new FirefoxCliBackgroundController({
     browserAdapter: createBackgroundBrowserAdapter({
       browser: options.browser,
-      networkTracker,
+      networkObservation,
       contentScriptState,
       ...(options.clipboard === undefined ? {} : { clipboard: options.clipboard }),
     }),
@@ -71,73 +62,22 @@ export function startBackground(options: {
 
   const runtimeListener: RuntimeMessageListener = (message) =>
     controller.handleRuntimeMessage(message);
-  const onBeforeRequest = (details: WebRequestDetails) => {
-    networkTracker.recordStart({
-      requestId: details.requestId,
-      ...(details.tabId === undefined ? {} : { tabId: details.tabId }),
-      url: details.url,
-      ...(details.method === undefined ? {} : { method: details.method }),
-      ...(details.type === undefined ? {} : { type: details.type }),
-    });
-  };
-  const markNetworkComplete = (details: WebRequestDetails) => {
-    networkTracker.recordEnd(details);
-  };
-  const webRequestRegistrations: {
-    readonly event: WebRequestEvent;
-    readonly listener: (details: WebRequestDetails) => void;
-  }[] = [];
   const onTabRemoved = (tabId: number) => {
-    networkTracker.pruneTab(tabId);
+    networkObservation.pruneTab(tabId);
     contentScriptState.forgetTab(tabId);
   };
 
   controller.start();
   options.browser.runtime.onMessage.addListener(runtimeListener);
   options.browser.tabs.onRemoved?.addListener(onTabRemoved);
-  addWebRequestListener(
-    options.browser.webRequest?.onBeforeRequest,
-    onBeforeRequest,
-    webRequestRegistrations,
-  );
-  addWebRequestListener(
-    options.browser.webRequest?.onCompleted,
-    markNetworkComplete,
-    webRequestRegistrations,
-  );
-  addWebRequestListener(
-    options.browser.webRequest?.onErrorOccurred,
-    markNetworkComplete,
-    webRequestRegistrations,
-  );
 
   return {
     controller,
     dispose: () => {
       options.browser.runtime.onMessage.removeListener(runtimeListener);
-      for (const registration of webRequestRegistrations) {
-        registration.event.removeListener(registration.listener);
-      }
-      webRequestRegistrations.length = 0;
+      networkObservation.dispose();
       options.browser.tabs.onRemoved?.removeListener(onTabRemoved);
       controller.stop();
     },
   };
-}
-
-function addWebRequestListener(
-  event: WebRequestEvent | undefined,
-  listener: (details: WebRequestDetails) => void,
-  registrations: {
-    readonly event: WebRequestEvent;
-    readonly listener: (details: WebRequestDetails) => void;
-  }[],
-): void {
-  if (event === undefined) {
-    return;
-  }
-  event.addListener(listener, {
-    urls: getExtensionPermissionRequirements().webRequestListenerOrigins,
-  });
-  registrations.push({ event, listener });
 }

@@ -8,11 +8,11 @@ import {
 } from "./content-script-delivery.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import { createGlobMatcher } from "./glob.js";
-import type { NetworkRequestTracker } from "./network-tracker.js";
+import type { NetworkObservationService } from "./network-observation-service.js";
 
 export function createBackgroundBrowserAdapter(options: {
   readonly browser: typeof browser;
-  readonly networkTracker: NetworkRequestTracker;
+  readonly networkObservation: NetworkObservationService;
   readonly clipboard?: Pick<typeof navigator.clipboard, "readText" | "writeText">;
   readonly contentScriptState?: ContentScriptInjectionState;
 }): BackgroundBrowserAdapter {
@@ -146,31 +146,40 @@ export function createBackgroundBrowserAdapter(options: {
       await options.browser.cookies.remove(cookieOptions);
     },
     listNetworkRequests: async (networkOptions) =>
-      options.networkTracker.list({
-        tabId: networkOptions.tabId,
-        ...(networkOptions.urlGlob === undefined ? {} : { urlGlob: networkOptions.urlGlob }),
-      }),
-    clearNetworkRequests: async (networkOptions) => {
-      options.networkTracker.clear({
-        tabId: networkOptions.tabId,
-        ...(networkOptions.urlGlob === undefined ? {} : { urlGlob: networkOptions.urlGlob }),
-      });
-    },
+      options.networkObservation.observeTab(networkOptions.tabId, (tracker) =>
+        tracker.list({
+          tabId: networkOptions.tabId,
+          ...(networkOptions.urlGlob === undefined ? {} : { urlGlob: networkOptions.urlGlob }),
+        }),
+      ),
+    clearNetworkRequests: async (networkOptions) =>
+      options.networkObservation.observeTab(
+        networkOptions.tabId,
+        (tracker) => {
+          tracker.clear({
+            tabId: networkOptions.tabId,
+            ...(networkOptions.urlGlob === undefined ? {} : { urlGlob: networkOptions.urlGlob }),
+          });
+        },
+        { retainWhenEmpty: false },
+      ),
     waitForNetworkIdle: async (networkOptions) => {
       const deadline = createBrowserCommandDeadline(networkOptions.timeoutMs);
       const timeoutMessage = () => "Timed out waiting for network idle.";
-      while (true) {
-        if (
-          options.networkTracker.isIdle({
-            tabId: networkOptions.tabId,
-            idleMs: networkOptions.idleMs,
-          })
-        ) {
-          return;
+      await options.networkObservation.observeTab(networkOptions.tabId, async (tracker) => {
+        while (true) {
+          if (
+            tracker.isIdle({
+              tabId: networkOptions.tabId,
+              idleMs: networkOptions.idleMs,
+            })
+          ) {
+            return;
+          }
+          deadline.throwIfExpired(timeoutMessage);
+          await deadline.sleep(100, timeoutMessage);
         }
-        deadline.throwIfExpired(timeoutMessage);
-        await deadline.sleep(100, timeoutMessage);
-      }
+      });
     },
     resizeWindow: async (windowId, size) => {
       await options.browser.windows.update(windowId, size);

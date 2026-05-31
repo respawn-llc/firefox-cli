@@ -45,10 +45,10 @@ export class NetworkRequestTracker {
     this.#now = options.now ?? (() => Date.now());
   }
 
-  recordStart(details: NetworkRequestStart): void {
+  recordStart(details: NetworkRequestStart): NetworkRequestRecord | undefined {
     this.pruneStaleActiveRequests();
     if (!isTrackableTabId(details.tabId) || !isTrackableUrl(details.url)) {
-      return;
+      return undefined;
     }
 
     const now = this.#now();
@@ -62,14 +62,15 @@ export class NetworkRequestTracker {
     };
     this.#activeByRequestId.set(record.id, record);
     this.#lastActivityByTabId.set(record.tabId, now);
+    return record;
   }
 
-  recordEnd(details: NetworkRequestEnd): void {
+  recordEnd(details: NetworkRequestEnd): NetworkRequestRecord | undefined {
     this.pruneStaleActiveRequests();
     const id = String(details.requestId);
     const active = this.#activeByRequestId.get(id);
     if (active === undefined) {
-      return;
+      return undefined;
     }
 
     this.#activeByRequestId.delete(id);
@@ -80,6 +81,7 @@ export class NetworkRequestTracker {
       completedAt: now,
     };
     this.#recordCompletedRequest(completed);
+    return completed;
   }
 
   list(options: {
@@ -108,6 +110,7 @@ export class NetworkRequestTracker {
       options.tabId,
       completed.filter((request) => matchesUrl !== undefined && !matchesUrl(request.url)),
     );
+    this.#deleteEmptyTabState(options.tabId);
   }
 
   isIdle(options: { readonly tabId: number; readonly idleMs: number }): boolean {
@@ -131,6 +134,20 @@ export class NetworkRequestTracker {
     }
     this.#completedByTabId.delete(tabId);
     this.#lastActivityByTabId.delete(tabId);
+  }
+
+  hasActiveRequests(tabId: number): boolean {
+    this.pruneStaleActiveRequests();
+    return this.#hasActiveRequestsForTab(tabId);
+  }
+
+  hasTabState(tabId: number): boolean {
+    this.pruneStaleActiveRequests();
+    return (
+      this.hasActiveRequests(tabId) ||
+      (this.#completedByTabId.get(tabId)?.length ?? 0) > 0 ||
+      this.#lastActivityByTabId.has(tabId)
+    );
   }
 
   pruneStaleActiveRequests(maxAgeMs: number = this.#maxActiveRequestAgeMs): number {
@@ -161,6 +178,24 @@ export class NetworkRequestTracker {
       pruneCompletedHistory(completedForTab, this.#maxCompletedRequestsPerTab),
     );
     this.#lastActivityByTabId.set(request.tabId, request.completedAt ?? this.#now());
+  }
+
+  #deleteEmptyTabState(tabId: number): void {
+    if ((this.#completedByTabId.get(tabId)?.length ?? 0) === 0) {
+      this.#completedByTabId.delete(tabId);
+    }
+    if (
+      !this.#lastActivityByTabId.has(tabId) ||
+      this.#hasActiveRequestsForTab(tabId) ||
+      (this.#completedByTabId.get(tabId)?.length ?? 0) > 0
+    ) {
+      return;
+    }
+    this.#lastActivityByTabId.delete(tabId);
+  }
+
+  #hasActiveRequestsForTab(tabId: number): boolean {
+    return [...this.#activeByRequestId.values()].some((request) => request.tabId === tabId);
   }
 }
 

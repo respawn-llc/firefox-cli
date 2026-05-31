@@ -3,19 +3,21 @@ import { describe, expect, it } from "vitest";
 import { startBackground, type BackgroundBrowserApi } from "./background-bootstrap.js";
 import { createBackgroundBrowserAdapter } from "./background-browser-adapter.js";
 import type { NativePortLike } from "./background-controller.js";
+import { NetworkObservationService } from "./network-observation-service.js";
 import { NetworkRequestTracker } from "./network-tracker.js";
 
 describe("background bootstrap", () => {
-  it("registers and disposes runtime and webRequest listeners", () => {
+  it("registers runtime eagerly and webRequest listeners lazily by target tab", async () => {
     const port = new FakeNativePort();
     const browser = createFakeBrowserApi(port);
     const networkTracker = new NetworkRequestTracker({ now: () => 1000 });
+    const networkObservation = new NetworkObservationService({ browser, tracker: networkTracker });
 
     const lifecycle = startBackground({
       browser,
       manifest: { version: "0.0.0" },
       controllerOptions: { reconnectDelaysMs: [] },
-      networkTracker,
+      networkObservation,
     });
 
     const runtimeOnMessage = browser.runtime.onMessage as unknown as FakeEvent<{
@@ -26,19 +28,23 @@ describe("background bootstrap", () => {
       readonly tabId?: number;
       readonly url: string;
     }>;
-    expect(onBeforeRequest.filters()).toEqual([{ urls: ["<all_urls>"] }]);
     expect(runtimeOnMessage.listenerCount()).toBe(1);
-    expect(onBeforeRequest.listenerCount()).toBe(1);
+    expect(onBeforeRequest.listenerCount()).toBe(0);
     expect((browser.tabs.onRemoved as unknown as FakeEvent<number>).listenerCount()).toBe(1);
 
-    onBeforeRequest.emit({
-      requestId: "before-dispose",
-      tabId: 7,
-      url: "https://example.test/app",
+    await networkObservation.observeTab(7, () => {
+      expect(onBeforeRequest.filters()).toEqual([{ urls: ["<all_urls>"], tabId: 7 }]);
+      expect(onBeforeRequest.listenerCount()).toBe(1);
+      onBeforeRequest.emit({
+        requestId: "before-dispose",
+        tabId: 7,
+        url: "https://example.test/app",
+      });
     });
     expect(networkTracker.list({ tabId: 7 })).toHaveLength(1);
     (browser.tabs.onRemoved as unknown as FakeEvent<number>).emit(7);
     expect(networkTracker.list({ tabId: 7 })).toEqual([]);
+    expect(onBeforeRequest.listenerCount()).toBe(0);
 
     lifecycle.dispose();
     expect(runtimeOnMessage.listenerCount()).toBe(0);
@@ -57,7 +63,8 @@ describe("background bootstrap", () => {
     const port = new FakeNativePort();
     const browser = createFakeBrowserApi(port);
     const networkTracker = new NetworkRequestTracker();
-    const adapter = createBackgroundBrowserAdapter({ browser, networkTracker });
+    const networkObservation = new NetworkObservationService({ browser, tracker: networkTracker });
+    const adapter = createBackgroundBrowserAdapter({ browser, networkObservation });
 
     (browser.tabs as unknown as { failNextSendMessage: boolean }).failNextSendMessage = true;
     await adapter.sendContentRequest(42, createRequest("snapshot", {}, "snapshot-1"));
@@ -79,7 +86,8 @@ describe("background bootstrap", () => {
     const port = new FakeNativePort();
     const browser = createFakeBrowserApi(port);
     const networkTracker = new NetworkRequestTracker();
-    const adapter = createBackgroundBrowserAdapter({ browser, networkTracker });
+    const networkObservation = new NetworkObservationService({ browser, tracker: networkTracker });
+    const adapter = createBackgroundBrowserAdapter({ browser, networkObservation });
 
     (browser.tabs as unknown as { response: unknown }).response = {
       protocolVersion: 1,
@@ -102,7 +110,8 @@ describe("background bootstrap", () => {
     const port = new FakeNativePort();
     const browser = createFakeBrowserApi(port);
     const networkTracker = new NetworkRequestTracker();
-    const adapter = createBackgroundBrowserAdapter({ browser, networkTracker });
+    const networkObservation = new NetworkObservationService({ browser, tracker: networkTracker });
+    const adapter = createBackgroundBrowserAdapter({ browser, networkObservation });
 
     (browser.tabs as unknown as { sendMessageFailure: Error }).sendMessageFailure = new Error(
       "Cannot access a restricted Firefox page",
@@ -217,7 +226,7 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
 
 type FakeEvent<T, TResult = void> = ReturnType<typeof createEvent<T, TResult>>;
 type FakeWebRequestEvent<T> = FakeEvent<T> & {
-  filters(): readonly { readonly urls: readonly string[] }[];
+  filters(): readonly { readonly urls: readonly string[]; readonly tabId?: number }[];
 };
 
 function createEvent<T, TResult = void>() {
@@ -242,22 +251,43 @@ function createEvent<T, TResult = void>() {
 }
 
 function createWebRequestEvent() {
-  const event = createEvent<{
+  type Details = {
     readonly requestId: string | number;
     readonly tabId?: number;
     readonly url: string;
     readonly statusCode?: number;
-  }>();
-  const filters: { readonly urls: readonly string[] }[] = [];
+  };
+  const listeners: {
+    readonly listener: (details: Details) => void;
+    readonly filter: { readonly urls: readonly string[]; readonly tabId?: number };
+  }[] = [];
   return {
-    ...event,
     addListener(
-      listener: Parameters<typeof event.addListener>[0],
-      filter: { readonly urls: readonly string[] },
-    ) {
-      filters.push(filter);
-      event.addListener(listener);
+      listener: (details: Details) => void,
+      filter: { readonly urls: readonly string[]; readonly tabId?: number },
+    ): void {
+      listeners.push({ listener, filter });
     },
-    filters: () => filters,
+    removeListener(listener: (details: Details) => void): void {
+      const index = listeners.findIndex((registration) => registration.listener === listener);
+      if (index >= 0) {
+        listeners.splice(index, 1);
+      }
+    },
+    emit(details: Details): readonly undefined[] {
+      return listeners
+        .filter(
+          (registration) =>
+            registration.filter.tabId === undefined || registration.filter.tabId === details.tabId,
+        )
+        .map((registration) => {
+          registration.listener(details);
+          return undefined;
+        });
+    },
+    listenerCount(): number {
+      return listeners.length;
+    },
+    filters: () => listeners.map((registration) => registration.filter),
   };
 }
