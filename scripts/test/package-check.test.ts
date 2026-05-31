@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import rootPackage from "../../package.json" with { type: "json" };
 import { createTempDir } from "@firefox-cli/test-support";
 import { getBinaryName, getPlatformKey, type PlatformInput } from "@firefox-cli/native-host";
@@ -11,13 +11,34 @@ import {
   packagedSignedExtensionProvenanceFile,
 } from "../extension-artifact-provenance.js";
 import { verifyPackageLayout } from "../package-check.js";
+import {
+  verifySignedExtensionSignature,
+  type SignedExtensionSignatureVerifier,
+} from "../signed-extension-signature.js";
 import { createZipFixture, type ZipFixtureEntryInput } from "./zip-test-utils.js";
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
+import {
+  createPkcs7Signature,
+  createTestSigningMaterial,
+  type TestSigningMaterial,
+} from "./signature-test-utils.js";
 
 const platform: PlatformInput = {
   platform: "linux",
   arch: "x64",
 };
+const bypassSignatureVerifier: SignedExtensionSignatureVerifier = async () => undefined;
+let signingMaterial: TestSigningMaterial;
+
+beforeAll(async () => {
+  signingMaterial = await createTestSigningMaterial();
+});
+
+const testSignatureVerifier: SignedExtensionSignatureVerifier = (input) =>
+  verifySignedExtensionSignature({
+    ...input,
+    expectation: signingMaterial.expectation,
+  });
 
 describe("verifyPackageLayout", () => {
   it("accepts a complete development package layout", async () => {
@@ -42,20 +63,26 @@ describe("verifyPackageLayout", () => {
     await writeMatchingXpi(packageRoot, {
       compressionMethod: 8,
       eocdComment: "release candidate",
+      realSignature: true,
       signed: true,
       useDataDescriptor: true,
     });
 
-    await verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true });
+    await verifyPackageLayout({
+      packageRoot,
+      platform,
+      requireSignedXpi: true,
+      signedExtensionSignatureVerifier: testSignatureVerifier,
+    });
   });
 
   it("requires signed XPI provenance for release checks", async () => {
     const packageRoot = await createPackageRoot();
     await writeMatchingXpi(packageRoot, { writeProvenance: false });
 
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("Expected signed extension provenance");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "Expected signed extension provenance",
+    );
   });
 
   it("rejects signed XPI provenance that does not match the packaged XPI", async () => {
@@ -64,36 +91,67 @@ describe("verifyPackageLayout", () => {
       provenanceOverrides: { xpiSha256: "0".repeat(64) },
     });
 
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("provenance digest");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "provenance digest",
+    );
+  });
+
+  it("rejects signed XPI provenance with the wrong packaged XPI name", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeMatchingXpi(packageRoot, {
+      provenanceOverrides: { xpiFile: `firefox-cli-${rootPackage.version}.xpi` },
+    });
+
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "provenance XPI file",
+    );
+  });
+
+  it("rejects signed XPI provenance with the wrong signing channel", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeMatchingXpi(packageRoot, {
+      provenanceOverrides: { channel: "listed" },
+    });
+
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "provenance channel",
+    );
   });
 
   it("rejects renamed unsigned ZIPs for signed release checks", async () => {
     const packageRoot = await createPackageRoot();
     await writeMatchingXpi(packageRoot, { signed: false });
 
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("Expected signed extension XPI signature metadata");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "Expected signed extension XPI signature metadata",
+    );
   });
 
   it("rejects renamed unsigned ZIPs when present in default package checks", async () => {
     const packageRoot = await createPackageRoot();
     await writeMatchingXpi(packageRoot, { signed: false });
 
-    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
-      "Expected signed extension XPI signature metadata",
-    );
+    await expect(
+      verifyPackageLayout(createPackageCheckOptions(packageRoot, false)),
+    ).rejects.toThrow("Expected signed extension XPI signature metadata");
+  });
+
+  it("runs real PKCS7 verification by default for present signed XPIs", async () => {
+    const packageRoot = await createPackageRoot();
+    await writeMatchingXpi(packageRoot);
+
+    await expect(
+      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
+    ).rejects.toThrow("PKCS7 verification failed");
   });
 
   it("rejects malformed present XPIs instead of falling back to the development extension", async () => {
     const packageRoot = await createPackageRoot();
     await writeFile(join(packageRoot, "extension/firefox-cli.xpi"), "not a zip");
 
-    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
-      "missing end of central directory",
-    );
+    await expect(
+      verifyPackageLayout(createPackageCheckOptions(packageRoot, false)),
+    ).rejects.toThrow("missing end of central directory");
   });
 
   it("rejects invalid signed-XPI metadata for signed release checks", async () => {
@@ -116,7 +174,7 @@ describe("verifyPackageLayout", () => {
       await writeMatchingXpi(packageRoot, { signatureEntries });
 
       await expect(
-        verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
+        verifyPackageLayout(createPackageCheckOptions(packageRoot, true)),
       ).rejects.toThrow("signed extension metadata");
     }
   });
@@ -132,9 +190,9 @@ describe("verifyPackageLayout", () => {
       },
     });
 
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("digest");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+      "digest",
+    );
   });
 
   for (const requireSignedXpi of [false, true] as const) {
@@ -216,7 +274,7 @@ describe("verifyPackageLayout", () => {
     );
     await writeMatchingXpi(packageRoot);
 
-    await verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true });
+    await verifyPackageLayout(createPackageCheckOptions(packageRoot, true));
   });
 
   it("rejects malformed and wrong-shape package manifests", async () => {
@@ -393,8 +451,13 @@ async function createPackageRoot(
 
 function createPackageCheckOptions(packageRoot: string, requireSignedXpi: boolean) {
   return requireSignedXpi
-    ? { packageRoot, platform, requireSignedXpi: true }
-    : { packageRoot, platform };
+    ? {
+        packageRoot,
+        platform,
+        requireSignedXpi: true,
+        signedExtensionSignatureVerifier: bypassSignatureVerifier,
+      }
+    : { packageRoot, platform, signedExtensionSignatureVerifier: bypassSignatureVerifier };
 }
 
 async function writeMatchingXpi(
@@ -404,6 +467,7 @@ async function writeMatchingXpi(
     readonly eocdComment?: string;
     readonly manifestOverride?: Record<string, unknown>;
     readonly payloadOverrides?: Record<string, string | Buffer | undefined>;
+    readonly realSignature?: boolean;
     readonly signed?: boolean;
     readonly signatureEntries?: Record<string, string | Buffer>;
     readonly useDataDescriptor?: boolean;
@@ -438,7 +502,7 @@ async function writeMatchingXpi(
       ? {}
       : { useDataDescriptor: options.useDataDescriptor }),
   }));
-  const signatureEntries = createSignatureEntries(options, payload);
+  const signatureEntries = await createSignatureEntries(options, payload);
   const fixture = createZipFixture(
     [...payloadEntries, ...signatureEntries],
     options.eocdComment === undefined ? {} : { eocdComment: options.eocdComment },
@@ -467,13 +531,14 @@ async function writeMatchingXpi(
   }
 }
 
-function createSignatureEntries(
+async function createSignatureEntries(
   options: {
+    readonly realSignature?: boolean;
     readonly signatureEntries?: Record<string, string | Buffer>;
     readonly signed?: boolean;
   },
   payload: ReadonlyMap<string, Buffer>,
-): readonly ZipFixtureEntryInput[] {
+): Promise<readonly ZipFixtureEntryInput[]> {
   if (options.signatureEntries !== undefined) {
     return Object.entries(options.signatureEntries).map(([name, data]) => ({
       name,
@@ -484,10 +549,15 @@ function createSignatureEntries(
     return [];
   }
   const manifestFile = createSignedManifest(payload);
+  const signatureFile = createSignatureFile(manifestFile);
+  const signatureData =
+    options.realSignature === true
+      ? await createPkcs7Signature(signatureFile, signingMaterial)
+      : Buffer.from([0x30, 0x03, 0x02, 0x01, 0x00]);
   return [
     { name: "META-INF/manifest.mf", data: manifestFile },
-    { name: "META-INF/mozilla.sf", data: createSignatureFile(manifestFile) },
-    { name: "META-INF/mozilla.rsa", data: Buffer.from([0x30, 0x03, 0x02, 0x01, 0x00]) },
+    { name: "META-INF/mozilla.sf", data: signatureFile },
+    { name: "META-INF/mozilla.rsa", data: signatureData },
   ];
 }
 

@@ -1,19 +1,8 @@
 import { createHash } from "node:crypto";
 import { relative, resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
+import { resolvePackagedBinary, type PlatformInput } from "@firefox-cli/native-host";
 import {
-  FIREFOX_CLI_EXTENSION_ID,
-  resolvePackagedBinary,
-  type PlatformInput,
-} from "@firefox-cli/native-host";
-import {
-  getExtensionPermissionRequirements,
-  type FirefoxDataCollectionPermission,
-  type FirefoxManifestPermission,
-} from "@firefox-cli/protocol";
-import {
-  hashFile,
-  hashPayloadMap,
   packagedSignedExtensionProvenanceFile,
   readSignedExtensionProvenance,
 } from "./extension-artifact-provenance.js";
@@ -21,13 +10,20 @@ import {
   extensionManifestSchema,
   parseJsonManifestContent,
   packageManifestSchema,
-  type ExtensionManifest,
 } from "./manifest-validation.js";
+import { verifyExpectedExtensionManifest } from "./extension-manifest-check.js";
 import {
-  listRegularFilesUnder,
-  readOptionalRegularFileUnder,
-  readRegularFileUnder,
-} from "./safe-extension-files.js";
+  readDevelopmentExtensionPayload,
+  verifyExtensionBundlePayload,
+  verifyPayloadMatchesDevelopmentBundle,
+} from "./extension-payload-check.js";
+import { readOptionalRegularFileUnder, readRegularFileUnder } from "./safe-extension-files.js";
+import { verifySignedExtensionArtifactTrust } from "./signed-extension-artifact.js";
+import {
+  packagedSignedExtensionXpiFile,
+  type SignedExtensionChannel,
+} from "./signed-extension-policy.js";
+import type { SignedExtensionSignatureVerifier } from "./signed-extension-signature.js";
 import { readZipArchive } from "./zip-archive.js";
 
 const SIGNED_EXTENSION_REQUIRED_METADATA = [
@@ -54,6 +50,8 @@ export type PackageCheckOptions = {
   readonly packageRoot: string;
   readonly platform?: PlatformInput;
   readonly requireSignedXpi?: boolean;
+  readonly signedExtensionChannel?: SignedExtensionChannel;
+  readonly signedExtensionSignatureVerifier?: SignedExtensionSignatureVerifier;
 };
 
 export async function verifyPackageLayout(
@@ -106,10 +104,10 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
 }
 
 async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<void> {
-  const signedXpiPath = resolve(options.packageRoot, "extension/firefox-cli.xpi");
+  const signedXpiPath = resolve(options.packageRoot, `extension/${packagedSignedExtensionXpiFile}`);
   const signedXpi = await readOptionalRegularFileUnder(
     options.packageRoot,
-    "extension/firefox-cli.xpi",
+    `extension/${packagedSignedExtensionXpiFile}`,
     "signed extension XPI",
   );
 
@@ -118,6 +116,12 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
       packageRoot: options.packageRoot,
       artifactPath: signedXpiPath,
       archiveData: signedXpi,
+      ...(options.signedExtensionChannel === undefined
+        ? {}
+        : { expectedChannel: options.signedExtensionChannel }),
+      ...(options.signedExtensionSignatureVerifier === undefined
+        ? {}
+        : { verifySignature: options.signedExtensionSignatureVerifier }),
     });
     return;
   }
@@ -147,6 +151,8 @@ async function verifySignedExtensionArtifact(input: {
   readonly packageRoot: string;
   readonly artifactPath: string;
   readonly archiveData: Buffer;
+  readonly expectedChannel?: SignedExtensionChannel;
+  readonly verifySignature?: SignedExtensionSignatureVerifier;
 }): Promise<void> {
   const archive = readZipArchive(input.archiveData);
   const signatureEntries = new Map<string, Buffer>();
@@ -167,7 +173,23 @@ async function verifySignedExtensionArtifact(input: {
 
   verifySignedExtensionMetadata(signatureEntries);
   verifySignedExtensionDigests(signatureEntries, xpiPayload);
-  await verifySignedExtensionProvenance(input.packageRoot, input.artifactPath, xpiPayload);
+  const provenancePath = resolve(
+    input.packageRoot,
+    "extension",
+    packagedSignedExtensionProvenanceFile,
+  );
+  const provenance = await readSignedExtensionProvenance(provenancePath).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Expected signed extension provenance at ${provenancePath}: ${message}`);
+  });
+  await verifySignedExtensionArtifactTrust({
+    artifactPath: input.artifactPath,
+    provenance,
+    signatureEntries,
+    xpiPayload,
+    ...(input.expectedChannel === undefined ? {} : { expectedChannel: input.expectedChannel }),
+    ...(input.verifySignature === undefined ? {} : { verifySignature: input.verifySignature }),
+  });
 
   const manifestData = xpiPayload.get("manifest.json");
   if (manifestData === undefined) {
@@ -183,30 +205,6 @@ async function verifySignedExtensionArtifact(input: {
   verifyExpectedExtensionManifest(manifest);
   await verifyExtensionBundlePayload(xpiPayload);
   await verifyPayloadMatchesDevelopmentBundle(input.packageRoot, xpiPayload);
-}
-
-async function verifySignedExtensionProvenance(
-  packageRoot: string,
-  artifactPath: string,
-  xpiPayload: ReadonlyMap<string, Buffer>,
-): Promise<void> {
-  const provenancePath = resolve(packageRoot, "extension", packagedSignedExtensionProvenanceFile);
-  const provenance = await readSignedExtensionProvenance(provenancePath).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Expected signed extension provenance at ${provenancePath}: ${message}`);
-  });
-
-  if (provenance.packageVersion !== rootPackage.version) {
-    throw new Error(
-      `Expected signed extension provenance version ${rootPackage.version}, received ${provenance.packageVersion}`,
-    );
-  }
-  if (provenance.xpiSha256 !== (await hashFile(artifactPath))) {
-    throw new Error("Signed extension provenance digest does not match packaged XPI.");
-  }
-  if (provenance.sourceSha256 !== hashPayloadMap(xpiPayload)) {
-    throw new Error("Signed extension provenance source digest does not match packaged XPI.");
-  }
 }
 
 function verifySignedExtensionMetadata(entries: ReadonlyMap<string, Buffer>): void {
@@ -389,168 +387,6 @@ function verifyDigestHeader(
   }
 
   throw new Error(`Expected signed extension SHA-256 digest for ${label}`);
-}
-
-function verifyExpectedExtensionManifest(manifest: ExtensionManifest): void {
-  const requirements = getExtensionPermissionRequirements();
-  if (manifest.name !== "firefox-cli") {
-    throw new Error(`Expected extension name firefox-cli, received ${manifest.name}`);
-  }
-  if (manifest.version !== rootPackage.version) {
-    throw new Error(
-      `Expected extension version ${rootPackage.version}, received ${manifest.version ?? "<missing>"}`,
-    );
-  }
-  if (manifest.browser_specific_settings?.gecko.id !== FIREFOX_CLI_EXTENSION_ID) {
-    throw new Error(
-      `Expected extension ID ${FIREFOX_CLI_EXTENSION_ID}, received ${
-        manifest.browser_specific_settings?.gecko.id ?? "<missing>"
-      }`,
-    );
-  }
-  if (
-    manifest.browser_specific_settings?.gecko.strict_min_version !==
-    requirements.firefoxStrictMinVersion
-  ) {
-    throw new Error(
-      `Expected extension Firefox minimum version ${requirements.firefoxStrictMinVersion}, received ${
-        manifest.browser_specific_settings?.gecko.strict_min_version ?? "<missing>"
-      }`,
-    );
-  }
-  if (manifest.background?.scripts?.join(",") !== "background.js") {
-    throw new Error("Expected extension background script to be background.js");
-  }
-  if (manifest.action?.default_popup !== "popup.html") {
-    throw new Error("Expected extension popup to be popup.html");
-  }
-
-  assertExactSet(
-    manifest.permissions,
-    requirements.manifestPermissions,
-    "extension manifest permissions",
-  );
-  assertExactSet(
-    manifest.host_permissions ?? [],
-    requirements.hostPermissions,
-    "extension host permissions",
-  );
-  assertExactSet(
-    manifest.browser_specific_settings?.gecko.data_collection_permissions?.required ?? [],
-    requirements.dataCollection.required,
-    "extension required data collection permissions",
-  );
-  assertExactSet(
-    manifest.browser_specific_settings?.gecko.data_collection_permissions?.optional ?? [],
-    requirements.dataCollection.optional,
-    "extension optional data collection permissions",
-  );
-}
-
-function assertExactSet<
-  T extends FirefoxManifestPermission | FirefoxDataCollectionPermission | string,
->(actual: readonly T[], expected: readonly T[], label: string): void {
-  const actualSorted = [...actual].sort((left, right) => left.localeCompare(right));
-  const expectedSorted = [...expected].sort((left, right) => left.localeCompare(right));
-  if (
-    actualSorted.length !== expectedSorted.length ||
-    actualSorted.some((value, index) => value !== expectedSorted[index])
-  ) {
-    throw new Error(
-      `Expected ${label} ${expectedSorted.join(", ")}, received ${
-        actualSorted.length === 0 ? "<none>" : actualSorted.join(", ")
-      }`,
-    );
-  }
-}
-
-async function verifyExtensionBundlePayload(payload: ReadonlyMap<string, Buffer>): Promise<void> {
-  const requiredFiles = [
-    "manifest.json",
-    "background.js",
-    "content.js",
-    "popup.js",
-    "popup.html",
-    "popup.css",
-  ] as const;
-  for (const artifact of requiredFiles) {
-    if (!payload.has(artifact)) {
-      throw new Error(`Expected extension artifact: ${artifact}`);
-    }
-  }
-
-  const unexpectedJs = [...payload.keys()]
-    .filter((file) => file.endsWith(".js"))
-    .filter((file) => !["background.js", "content.js", "popup.js"].includes(file));
-  if (unexpectedJs.length > 0) {
-    throw new Error(`Unexpected extension JavaScript artifacts: ${unexpectedJs.join(", ")}`);
-  }
-
-  await Promise.all(
-    ["background.js", "content.js", "popup.js"].map(async (artifact) => {
-      const source = payload.get(artifact)?.toString("utf8") ?? "";
-      if (
-        source.includes('from"./') ||
-        source.includes('from "./') ||
-        source.includes('import"./') ||
-        source.includes('import "./') ||
-        source.includes("import(")
-      ) {
-        throw new Error(`Expected standalone extension script without chunk imports: ${artifact}`);
-      }
-    }),
-  );
-}
-
-async function verifyPayloadMatchesDevelopmentBundle(
-  packageRoot: string,
-  xpiPayload: ReadonlyMap<string, Buffer>,
-): Promise<void> {
-  const developmentPayload = await readDevelopmentExtensionPayload(packageRoot);
-  const developmentFiles = [...developmentPayload.keys()].sort();
-  const xpiFiles = [...xpiPayload.keys()].sort();
-  const missingFiles = developmentFiles.filter((file) => !xpiPayload.has(file));
-  const unexpectedFiles = xpiFiles.filter((file) => !developmentPayload.has(file));
-
-  if (missingFiles.length > 0) {
-    throw new Error(`Signed extension XPI is missing package files: ${missingFiles.join(", ")}`);
-  }
-  if (unexpectedFiles.length > 0) {
-    throw new Error(
-      `Signed extension XPI contains files outside the package payload: ${unexpectedFiles.join(", ")}`,
-    );
-  }
-
-  for (const [file, expected] of developmentPayload) {
-    const actual = xpiPayload.get(file);
-    if (actual === undefined || !actual.equals(expected)) {
-      throw new Error(`Signed extension XPI payload differs from package file: ${file}`);
-    }
-  }
-}
-
-async function readDevelopmentExtensionPayload(
-  packageRoot: string,
-): Promise<ReadonlyMap<string, Buffer>> {
-  const extensionRoot = resolve(packageRoot, "extension/development");
-  const packageOnlyFiles = new Set(["README.md", `firefox-cli-${rootPackage.version}.zip`]);
-  const files = (
-    await listRegularFilesUnder(extensionRoot, "development extension payload")
-  ).filter((file) => !packageOnlyFiles.has(file.relativePath));
-  const payload = await Promise.all(
-    files.map(
-      async (file) =>
-        [
-          file.relativePath,
-          await readRegularFileUnder(
-            extensionRoot,
-            file.relativePath,
-            "development extension payload",
-          ),
-        ] as const,
-    ),
-  );
-  return new Map(payload);
 }
 
 if (import.meta.main) {

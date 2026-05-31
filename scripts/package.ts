@@ -7,6 +7,12 @@ import {
   signedExtensionProvenanceArtifactName,
 } from "./extension-artifact-provenance.js";
 import { resetGeneratedArtifact } from "./generated-artifacts.js";
+import {
+  packagedSignedExtensionProvenanceJson,
+  readValidatedSignedExtensionSource,
+  SignedExtensionSourceNotFoundError,
+} from "./package-signed-extension.js";
+import { packagedSignedExtensionXpiFile } from "./signed-extension-policy.js";
 
 const packageRoot = resolve("dist/package");
 const platformKey = getPlatformKey();
@@ -91,22 +97,32 @@ async function copySignedExtensionXpi(path: string): Promise<void> {
       : resolve(envPath);
 
   try {
-    await cp(sourcePath, resolve(path, "extension/firefox-cli.xpi"));
+    const source = await readValidatedSignedExtensionSource({
+      sourceXpiPath: sourcePath,
+      provenancePath: signedExtensionProvenanceSourcePath(sourcePath),
+    });
+    await writeFile(resolve(path, "extension", packagedSignedExtensionXpiFile), source.xpiData);
+    await writeFile(
+      resolve(path, "extension", packagedSignedExtensionProvenanceFile),
+      packagedSignedExtensionProvenanceJson(source.provenance),
+    );
   } catch (error) {
+    if (
+      (envPath === undefined || envPath.length === 0) &&
+      error instanceof SignedExtensionSourceNotFoundError
+    ) {
+      return;
+    }
     if (envPath !== undefined && envPath.length > 0) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to copy FIREFOX_CLI_SIGNED_XPI from ${sourcePath}: ${message}`);
     }
-    return;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to copy signed extension XPI from ${sourcePath}: ${message}`);
   }
-
-  await copySignedExtensionProvenance(path, sourcePath);
 }
 
-async function copySignedExtensionProvenance(
-  packagePath: string,
-  signedXpiPath: string,
-): Promise<void> {
+function signedExtensionProvenanceSourcePath(signedXpiPath: string): string {
   const envPath = process.env.FIREFOX_CLI_SIGNED_XPI_PROVENANCE;
   const defaultPath =
     process.env.FIREFOX_CLI_SIGNED_XPI === undefined ||
@@ -116,6 +132,5 @@ async function copySignedExtensionProvenance(
           signedExtensionProvenanceArtifactName(rootPackage.version),
         )
       : `${signedXpiPath}.provenance.json`;
-  const sourcePath = envPath === undefined || envPath.length === 0 ? defaultPath : resolve(envPath);
-  await cp(sourcePath, resolve(packagePath, "extension", packagedSignedExtensionProvenanceFile));
+  return envPath === undefined || envPath.length === 0 ? defaultPath : resolve(envPath);
 }
