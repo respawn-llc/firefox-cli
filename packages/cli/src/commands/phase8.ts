@@ -1,18 +1,10 @@
 import { resolve } from "node:path";
 import type { RequestEnvelope } from "@firefox-cli/protocol";
-import {
-  getPositionals,
-  optionalTarget,
-  parsePositiveIntegerValue,
-  parseTargetOptions,
-} from "../parse.js";
+import { getPositionals, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
 
-export function buildPdfRequest(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-): RequestEnvelope {
+export function buildPdfRequest(argv: readonly string[], dependencies: CliDependencies): RequestEnvelope {
   const path = getPositionals(argv.slice(1))[0];
   if (path === undefined) {
     throw new CliUsageError("Missing PDF path.");

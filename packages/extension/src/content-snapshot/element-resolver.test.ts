@@ -12,10 +12,7 @@ import {
 } from "../content-snapshot/log-capture.js";
 import { createContentElementResolver } from "./element-resolver.js";
 
-type TestContentOptions = Omit<
-  Parameters<typeof handleRawContentScriptRequest>[1],
-  "logCapture"
-> & {
+type TestContentOptions = Omit<Parameters<typeof handleRawContentScriptRequest>[1], "logCapture"> & {
   readonly logCapture?: ContentLogCaptureService;
 };
 

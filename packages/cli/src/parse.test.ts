@@ -22,9 +22,7 @@ describe("CLI argument parsing helpers", () => {
   });
 
   it("can preserve unknown option-like payloads for command builders that own validation", () => {
-    expect(
-      parsePositionalsAndOptions(["--unknown", "payload"], { preserveUnknownOptions: true }),
-    ).toEqual({
+    expect(parsePositionalsAndOptions(["--unknown", "payload"], { preserveUnknownOptions: true })).toEqual({
       positionals: ["--unknown", "payload"],
       optionArgs: [],
     });

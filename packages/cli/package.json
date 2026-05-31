@@ -9,5 +9,11 @@
   "dependencies": {
     "@firefox-cli/native-host": "workspace:*",
     "@firefox-cli/protocol": "workspace:*"
+  },
+  "scripts": {
+    "format": "biome format .",
+    "lint": "eslint .",
+    "test": "vitest run src/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --pretty false --noEmit"
   }
 }

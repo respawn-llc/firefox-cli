@@ -90,10 +90,7 @@ export async function verifySignedExtensionSignature(
     }
     verifySignerIdentity(signer, expectation);
   } finally {
-    await cleanupTempFiles(
-      [signaturePath, contentPath, outputPath, signerPath, trustRootsPath],
-      tempRoot,
-    );
+    await cleanupTempFiles([signaturePath, contentPath, outputPath, signerPath, trustRootsPath], tempRoot);
   }
 }
 
@@ -107,10 +104,7 @@ function parsePemCertificates(content: string): readonly X509Certificate[] {
   return (matches ?? []).map((pem) => new X509Certificate(pem));
 }
 
-function verifySignerIdentity(
-  signer: X509Certificate,
-  expectation: SignedExtensionSignerExpectation,
-): void {
+function verifySignerIdentity(signer: X509Certificate, expectation: SignedExtensionSignerExpectation): void {
   for (const expectedSubject of expectation.subjectIncludes) {
     if (!signer.subject.includes(expectedSubject)) {
       throw new Error(
@@ -121,9 +115,7 @@ function verifySignerIdentity(
 
   for (const expectedIssuer of expectation.issuerIncludes) {
     if (!signer.issuer.includes(expectedIssuer)) {
-      throw new Error(
-        `Signed extension signer issuer ${signer.issuer} does not include ${expectedIssuer}`,
-      );
+      throw new Error(`Signed extension signer issuer ${signer.issuer} does not include ${expectedIssuer}`);
     }
   }
 }

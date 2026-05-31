@@ -13,12 +13,7 @@ import {
   parsePositionalsAndOptions,
   parseTargetOptions,
 } from "./parse.js";
-import {
-  CliUsageError,
-  type CliDependencies,
-  type UploadBudget,
-  type UploadReadLimits,
-} from "./types.js";
+import { CliUsageError, type CliDependencies, type UploadBudget, type UploadReadLimits } from "./types.js";
 
 export type ParsedUploadArguments = {
   readonly elementTarget: string;
@@ -169,9 +164,7 @@ async function readUploadFileBytes(
         throw uploadFileTooLarge(plan.inputPath, totalBytes);
       }
       if (totalBytes > limits.maxRemainingTotalBytes) {
-        throw uploadTotalTooLarge(
-          MAX_UPLOAD_TOTAL_BYTES - limits.maxRemainingTotalBytes + totalBytes,
-        );
+        throw uploadTotalTooLarge(MAX_UPLOAD_TOTAL_BYTES - limits.maxRemainingTotalBytes + totalBytes);
       }
       chunks.push(bytes);
     }

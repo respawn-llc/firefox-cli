@@ -66,8 +66,7 @@ export function createGetResult(
       return {
         ...base,
         kind: params.kind,
-        value:
-          params.selector === undefined ? 1 : queryAllElements(document, params.selector).length,
+        value: params.selector === undefined ? 1 : queryAllElements(document, params.selector).length,
       };
     case "box":
       return {

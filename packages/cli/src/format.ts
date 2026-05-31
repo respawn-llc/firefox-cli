@@ -87,10 +87,7 @@ const formatWindowList: CliResponseFormatter<"windows.list"> = (response, json) 
       );
 };
 
-const formatWindowTarget: CliResponseFormatter<"window.new" | "window.select"> = (
-  response,
-  json,
-) => {
+const formatWindowTarget: CliResponseFormatter<"window.new" | "window.select"> = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
@@ -150,9 +147,7 @@ const formatIs: CliResponseFormatter<"is"> = (response, json) => {
     return error(formatProtocolError(response.error));
   }
 
-  return json
-    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
-    : ok(`${response.result.value}\n`);
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${response.result.value}\n`);
 };
 
 const formatWait: CliResponseFormatter<"wait"> = (response, json) => {
@@ -326,9 +321,7 @@ function formatEvalResult(result: EvalResult): string {
 
 function formatScreenshotResult(result: ScreenshotResult): string {
   const dimensions =
-    result.width === undefined || result.height === undefined
-      ? ""
-      : ` ${result.width}x${result.height}`;
+    result.width === undefined || result.height === undefined ? "" : ` ${result.width}x${result.height}`;
   return `${result.path} ${result.bytes} bytes${dimensions}`;
 }
 

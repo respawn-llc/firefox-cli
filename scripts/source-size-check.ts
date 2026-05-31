@@ -36,13 +36,10 @@ export const sourceSizePolicy: SourceSizePolicy = {
 const sourceRoots = ["packages", "scripts"] as const;
 const ignoredDirectoryNames = new Set(["dist", "node_modules", ".git"]);
 
-export async function runSourceSizeCheck(
-  options: SourceSizeCheckOptions = {},
-): Promise<SourceSizeReport> {
+export async function runSourceSizeCheck(options: SourceSizeCheckOptions = {}): Promise<SourceSizeReport> {
   const policy = options.policy ?? sourceSizePolicy;
   const write = options.write ?? console.log;
-  const files =
-    options.files ?? (await collectSourceFileSizes(resolve(options.rootDir ?? process.cwd())));
+  const files = options.files ?? (await collectSourceFileSizes(resolve(options.rootDir ?? process.cwd())));
   const report = evaluateSourceSizes(files, policy);
 
   if (report.productionViolations.length > 0) {
@@ -76,9 +73,7 @@ export function evaluateSourceSizes(
       .filter((file) => file.kind === "production" && file.lines > policy.productionMaxLines)
       .sort(compareFiles),
     oversizedTestSupport: checkedFiles
-      .filter(
-        (file) => file.kind === "test-support" && file.lines > policy.testSupportReviewTargetLines,
-      )
+      .filter((file) => file.kind === "test-support" && file.lines > policy.testSupportReviewTargetLines)
       .sort(compareFiles),
   };
 }
@@ -110,24 +105,16 @@ export function classifySourceFile(path: string): SourceFileKind {
 }
 
 async function collectSourceFileSizes(rootDir: string): Promise<readonly SourceFileSize[]> {
-  const files = await Promise.all(
-    sourceRoots.map((sourceRoot) => collectSourceRoot(rootDir, sourceRoot)),
-  );
+  const files = await Promise.all(sourceRoots.map((sourceRoot) => collectSourceRoot(rootDir, sourceRoot)));
   return files.flat();
 }
 
-async function collectSourceRoot(
-  rootDir: string,
-  sourceRoot: string,
-): Promise<readonly SourceFileSize[]> {
+async function collectSourceRoot(rootDir: string, sourceRoot: string): Promise<readonly SourceFileSize[]> {
   const root = resolve(rootDir, sourceRoot);
   return collectDirectory(rootDir, root);
 }
 
-async function collectDirectory(
-  rootDir: string,
-  directory: string,
-): Promise<readonly SourceFileSize[]> {
+async function collectDirectory(rootDir: string, directory: string): Promise<readonly SourceFileSize[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(
     entries.map(async (entry) => {

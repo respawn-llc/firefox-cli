@@ -39,9 +39,7 @@ export function isElementActionCommand(
   );
 }
 
-export function isScrollDirection(
-  value: string | undefined,
-): value is "up" | "down" | "left" | "right" {
+export function isScrollDirection(value: string | undefined): value is "up" | "down" | "left" | "right" {
   return isOneOf(scrollDirections, value);
 }
 
@@ -51,9 +49,7 @@ export function isFindKind(
   return isOneOf(findKinds, value);
 }
 
-export function isScreenshotFormat(
-  value: string | undefined,
-): value is (typeof screenshotFormats)[number] {
+export function isScreenshotFormat(value: string | undefined): value is (typeof screenshotFormats)[number] {
   return isOneOf(screenshotFormats, value);
 }
 
@@ -61,9 +57,7 @@ export function isDialogAction(value: string | undefined): value is (typeof dial
   return isOneOf(dialogActions, value);
 }
 
-export function isClipboardAction(
-  value: string | undefined,
-): value is (typeof clipboardActions)[number] {
+export function isClipboardAction(value: string | undefined): value is (typeof clipboardActions)[number] {
   return isOneOf(clipboardActions, value);
 }
 
@@ -75,15 +69,11 @@ export function isStorageArea(value: string | undefined): value is (typeof stora
   return isOneOf(storageAreas, value);
 }
 
-export function isStorageAction(
-  value: string | undefined,
-): value is (typeof storageActions)[number] {
+export function isStorageAction(value: string | undefined): value is (typeof storageActions)[number] {
   return isOneOf(storageActions, value);
 }
 
-export function isNetworkAction(
-  value: string | undefined,
-): value is (typeof networkActions)[number] {
+export function isNetworkAction(value: string | undefined): value is (typeof networkActions)[number] {
   return isOneOf(networkActions, value);
 }
 

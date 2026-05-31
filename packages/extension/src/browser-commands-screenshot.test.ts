@@ -10,9 +10,7 @@ import {
 
 describe("browser screenshot command handling", () => {
   it("captures the active visible tab as PNG metadata with internal image bytes", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-1"),
@@ -102,9 +100,7 @@ describe("browser screenshot command handling", () => {
   });
 
   it("enforces screenshot byte limits after visible capture", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -125,9 +121,7 @@ describe("browser screenshot command handling", () => {
   });
 
   it("maps screenshot capture failures to capture errors", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.captureFailure = new Error("capture permission denied");
 
     const response = await handleBrowserRequest(
@@ -170,9 +164,7 @@ describe("browser screenshot command handling", () => {
   });
 
   it("maps screenshot capture timeouts", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.captureDelayMs = 100;
 
     const response = await handleBrowserRequest(
@@ -193,9 +185,7 @@ describe("browser screenshot command handling", () => {
   });
 
   it("rejects non-PNG screenshot data URLs from Firefox", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.screenshotDataUrl = "data:image/jpeg;base64,AAAA";
 
     const response = await handleBrowserRequest(

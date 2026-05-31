@@ -41,13 +41,9 @@ export function dragAction(options: ActionOptions, params: DragParams): ContentA
   };
 }
 
-export function directMouseAction(
-  options: ActionOptions,
-  params: MouseParams,
-): ContentActionResult {
+export function directMouseAction(options: ActionOptions, params: MouseParams): ContentActionResult {
   const resolution = resolveOptionalElement(options, params);
-  const element =
-    resolution?.element ?? options.document.elementFromPoint(params.x ?? 0, params.y ?? 0);
+  const element = resolution?.element ?? options.document.elementFromPoint(params.x ?? 0, params.y ?? 0);
   if (element === null) {
     throw options.createError("SELECTOR_NOT_FOUND", "Mouse target was not found.");
   }
@@ -72,10 +68,7 @@ export function directMouseAction(
   };
 }
 
-export function keyEventAction(
-  options: ActionOptions,
-  params: KeyEventParams,
-): ContentActionResult {
+export function keyEventAction(options: ActionOptions, params: KeyEventParams): ContentActionResult {
   const resolution = resolveOptionalElement(options, params);
   const element = resolution?.element ?? requireFocusedElement(options);
   dispatchKeyboardEvent(element, options.command, params.key);

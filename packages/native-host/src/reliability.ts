@@ -95,8 +95,7 @@ export async function withFileLock<T>(
   const deadline = now() + timeoutMs;
   const sleep = options.sleep ?? delay;
   const isProcessAlive = options.isProcessAlive ?? isPidAlive;
-  const ownerUid =
-    options.uid ?? (typeof process.getuid === "function" ? process.getuid() : undefined);
+  const ownerUid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : undefined);
   const owner: LockOwner = {
     pid: options.pid ?? process.pid,
     ...(ownerUid === undefined ? {} : { uid: ownerUid }),

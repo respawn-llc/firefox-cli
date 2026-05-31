@@ -12,7 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "baseUrl": ".",
     "paths": {
       "@firefox-cli/cli": ["packages/cli/src/index.ts"],
@@ -20,6 +20,8 @@
       "@firefox-cli/protocol": ["packages/protocol/src/index.ts"],
       "@firefox-cli/test-support": ["packages/test-support/src/index.ts"]
     },
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": false,
+    "noFallthroughCasesInSwitch": true
   }
 }

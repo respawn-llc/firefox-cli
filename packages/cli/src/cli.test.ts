@@ -90,8 +90,7 @@ describe("runCli", () => {
     expect(output).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr:
-        "Not approved: Approve firefox-cli in the extension popup before running CLI commands.\n",
+      stderr: "Not approved: Approve firefox-cli in the extension popup before running CLI commands.\n",
     });
   });
 
@@ -427,9 +426,7 @@ describe("runCli", () => {
 
     expect(output.exitCode).toBe(1);
     expect(output.stdout).toContain("Extension connection: version-mismatch");
-    expect(output.stdout).toContain(
-      "Upgrade/rebuild firefox-cli, the native host, and the extension",
-    );
+    expect(output.stdout).toContain("Upgrade/rebuild firefox-cli, the native host, and the extension");
   });
 
   it("reports pairing mismatches from doctor without treating the extension as disconnected", async () => {
@@ -1241,9 +1238,7 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Missing wait target or condition.\n",
     });
-    await expect(
-      runCli(["wait", "#main", "--state", "complete"], baseDependencies()),
-    ).resolves.toEqual({
+    await expect(runCli(["wait", "#main", "--state", "complete"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
       stderr: "Invalid wait state: complete\n",
@@ -1260,9 +1255,7 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Only element waits accept --generation.\n",
     });
-    await expect(
-      runCli(["wait", "--text", "Ready", "--state"], baseDependencies()),
-    ).resolves.toEqual({
+    await expect(runCli(["wait", "--text", "Ready", "--state"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
       stderr: "Missing value for --state.\n",
@@ -1272,9 +1265,7 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Missing value for --text.\n",
     });
-    await expect(
-      runCli(["wait", "--text", "Ready", "--new-tab"], baseDependencies()),
-    ).resolves.toEqual({
+    await expect(runCli(["wait", "--text", "Ready", "--new-tab"], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
       stderr: "Unsupported wait option: --new-tab\n",
@@ -1288,17 +1279,7 @@ describe("runCli", () => {
 
   it("runs eval from argv with target, timeout, and result-size options", async () => {
     const output = await runCli(
-      [
-        "eval",
-        "document.title",
-        "--timeout",
-        "1000",
-        "--max-output",
-        "2000",
-        "--tab",
-        "id:42",
-        "--json",
-      ],
+      ["eval", "document.title", "--timeout", "1000", "--max-output", "2000", "--tab", "id:42", "--json"],
       {
         ...baseDependencies(),
         sendRequest: async (request) => {
@@ -1362,27 +1343,24 @@ describe("runCli", () => {
       stderr: "",
     });
 
-    const base64 = await runCli(
-      ["eval", "-b", Buffer.from("const value = 1;").toString("base64")],
-      {
-        ...baseDependencies(),
-        sendRequest: async (request) => {
-          expect(request).toMatchObject({
-            command: "eval",
-            params: {
-              script: "const value = 1;",
-              source: "base64",
-            },
-          });
-          return createOkResponse(request, {
-            value: {
-              type: "undefined",
-            },
-            elapsedMs: 1,
-          });
-        },
+    const base64 = await runCli(["eval", "-b", Buffer.from("const value = 1;").toString("base64")], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "eval",
+          params: {
+            script: "const value = 1;",
+            source: "base64",
+          },
+        });
+        return createOkResponse(request, {
+          value: {
+            type: "undefined",
+          },
+          elapsedMs: 1,
+        });
       },
-    );
+    });
     expect(base64).toEqual({
       exitCode: 0,
       stdout: "undefined\n",
@@ -1712,32 +1690,29 @@ describe("runCli", () => {
         return createOkResponse(request, { action: "write", ok: true });
       },
     });
-    const batchOutput = await runCli(
-      ["batch", JSON.stringify([["dialog", "accept", "--proceed"]])],
-      {
-        ...baseDependencies(),
-        sendRequest: async (request) => {
-          expect(request).toMatchObject({
-            command: "batch",
-            params: {
-              steps: [{ command: "dialog", params: { action: "accept", promptText: "--proceed" } }],
+    const batchOutput = await runCli(["batch", JSON.stringify([["dialog", "accept", "--proceed"]])], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "batch",
+          params: {
+            steps: [{ command: "dialog", params: { action: "accept", promptText: "--proceed" } }],
+          },
+        });
+        return createOkResponse(request, {
+          ok: true,
+          steps: [
+            {
+              index: 0,
+              command: "dialog",
+              ok: true,
+              result: { action: "accept", handled: true },
             },
-          });
-          return createOkResponse(request, {
-            ok: true,
-            steps: [
-              {
-                index: 0,
-                command: "dialog",
-                ok: true,
-                result: { action: "accept", handled: true },
-              },
-            ],
-            elapsedMs: 1,
-          });
-        },
+          ],
+          elapsedMs: 1,
+        });
       },
-    );
+    });
 
     expect(dialogOutput).toEqual({
       exitCode: 0,
@@ -1895,9 +1870,7 @@ describe("runCli", () => {
       stdout: "",
       stderr: "Batch requires at least one step.\n",
     });
-    await expect(
-      runCli(["batch", JSON.stringify([["setup"]])], baseDependencies()),
-    ).resolves.toEqual({
+    await expect(runCli(["batch", JSON.stringify([["setup"]])], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
       stderr: "Invalid batch argv command at step 0.\n",
@@ -2456,11 +2429,7 @@ describe("runCli", () => {
     let readCalls = 0;
     let requestCalls = 0;
     const output = await runCli(
-      [
-        "upload",
-        "#file",
-        ...Array.from({ length: MAX_UPLOAD_FILES + 1 }, (_, index) => `${index}.bin`),
-      ],
+      ["upload", "#file", ...Array.from({ length: MAX_UPLOAD_FILES + 1 }, (_, index) => `${index}.bin`)],
       {
         ...baseDependencies(),
         statUploadFile: async () => {
@@ -2711,9 +2680,7 @@ describe("runCli", () => {
   });
 
   it("preserves command-specific usage errors for malformed batch argv subcommands", async () => {
-    await expect(
-      runCli(["batch", JSON.stringify([["set", "foo"]])], baseDependencies()),
-    ).resolves.toEqual({
+    await expect(runCli(["batch", JSON.stringify([["set", "foo"]])], baseDependencies())).resolves.toEqual({
       exitCode: 1,
       stdout: "",
       stderr: "Invalid batch argv step 0: Missing or invalid set command.\n",

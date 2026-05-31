@@ -117,12 +117,7 @@ export function classifyContentScriptDeliveryError(error: unknown): ContentScrip
     return "not-loaded";
   }
   if (
-    includesAny(message, [
-      "restricted firefox page",
-      "restricted page",
-      "privileged page",
-      "cannot access",
-    ])
+    includesAny(message, ["restricted firefox page", "restricted page", "privileged page", "cannot access"])
   ) {
     return "restricted-page";
   }

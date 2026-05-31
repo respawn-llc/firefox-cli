@@ -1,9 +1,4 @@
-import type {
-  ResolvedTarget,
-  TabSummary,
-  TargetSelector,
-  WindowSummary,
-} from "@firefox-cli/protocol";
+import type { ResolvedTarget, TabSummary, TargetSelector, WindowSummary } from "@firefox-cli/protocol";
 import { BrowserCommandError } from "./errors.js";
 import type {
   BackgroundBrowserAdapter,
@@ -18,9 +13,7 @@ export async function getOrderedWindows(
   return toOrderedWindows(await adapter.listWindows());
 }
 
-export function toOrderedWindows(
-  windows: readonly BrowserWindowSnapshot[],
-): readonly OrderedWindow[] {
+export function toOrderedWindows(windows: readonly BrowserWindowSnapshot[]): readonly OrderedWindow[] {
   return [...windows]
     .filter((window) => window.id !== undefined)
     .sort((a, b) => Number(b.focused) - Number(a.focused) || a.id - b.id)
@@ -99,10 +92,7 @@ export function assertMutableWindow(window: OrderedWindow): void {
   }
 }
 
-export function resolveTab(
-  window: OrderedWindow,
-  selector: TargetSelector["tab"] | undefined,
-): TabSummary {
+export function resolveTab(window: OrderedWindow, selector: TargetSelector["tab"] | undefined): TabSummary {
   if (window.tabs.length === 0) {
     throw new BrowserCommandError("NO_ACTIVE_TAB", "Firefox window has no tabs.");
   }

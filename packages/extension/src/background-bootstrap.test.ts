@@ -70,8 +70,7 @@ describe("background bootstrap", () => {
     await adapter.sendContentRequest(42, createRequest("snapshot", {}, "snapshot-1"));
     await adapter.executeEval(42, { script: "1 + 1", timeoutMs: 1000, maxResultBytes: 1024 });
 
-    const scriptingCalls = (browser.scripting as unknown as { readonly calls: readonly unknown[] })
-      .calls;
+    const scriptingCalls = (browser.scripting as unknown as { readonly calls: readonly unknown[] }).calls;
     expect(scriptingCalls[0]).toMatchObject({
       target: { tabId: 42, allFrames: false },
       files: ["content.js"],
@@ -101,8 +100,7 @@ describe("background bootstrap", () => {
 
     await adapter.sendContentRequest(42, createRequest("snapshot", {}, "snapshot-1"));
 
-    const scriptingCalls = (browser.scripting as unknown as { readonly calls: readonly unknown[] })
-      .calls;
+    const scriptingCalls = (browser.scripting as unknown as { readonly calls: readonly unknown[] }).calls;
     expect(scriptingCalls).toEqual([]);
   });
 
@@ -124,9 +122,7 @@ describe("background bootstrap", () => {
       stage: "send",
       retried: false,
     });
-    expect((browser.scripting as unknown as { readonly calls: readonly unknown[] }).calls).toEqual(
-      [],
-    );
+    expect((browser.scripting as unknown as { readonly calls: readonly unknown[] }).calls).toEqual([]);
   });
 });
 

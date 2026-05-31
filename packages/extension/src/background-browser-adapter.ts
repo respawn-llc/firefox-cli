@@ -22,8 +22,7 @@ export function createBackgroundBrowserAdapter(options: {
   };
   const contentScriptState = options.contentScriptState ?? createContentScriptInjectionState();
   return {
-    hasRequiredHostAccess: async () =>
-      options.browser.permissions?.contains(requiredHostAccess) ?? true,
+    hasRequiredHostAccess: async () => options.browser.permissions?.contains(requiredHostAccess) ?? true,
     listWindows: async () => {
       const windows = await options.browser.windows.getAll({ populate: true });
       return windows.filter(hasWindowId).map((window) => ({
@@ -96,9 +95,7 @@ export function createBackgroundBrowserAdapter(options: {
       const deadline = createBrowserCommandDeadline(waitOptions.timeoutMs);
       const timeoutMessage = () => "Timed out waiting for download.";
       const matchesFilename =
-        waitOptions.filenameGlob === undefined
-          ? undefined
-          : createGlobMatcher(waitOptions.filenameGlob);
+        waitOptions.filenameGlob === undefined ? undefined : createGlobMatcher(waitOptions.filenameGlob);
       while (true) {
         const downloads = await deadline.run(
           options.browser.downloads.search(

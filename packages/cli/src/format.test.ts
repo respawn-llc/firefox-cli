@@ -1,8 +1,4 @@
-import {
-  createErrorResponseForRequest,
-  createOkResponse,
-  createRequest,
-} from "@firefox-cli/protocol";
+import { createErrorResponseForRequest, createOkResponse, createRequest } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { cliResponseFormatters, formatCliResponse } from "./format.js";
 

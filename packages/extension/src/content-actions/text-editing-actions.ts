@@ -1,10 +1,6 @@
 import type { KeyboardTextActionParams, TextActionParams } from "@firefox-cli/protocol";
 import type { ActionOptions, ContentActionResult } from "../content-action-types.js";
-import {
-  assertActionableElement,
-  elementActionResult,
-  resolveRequiredElement,
-} from "./action-targets.js";
+import { assertActionableElement, elementActionResult, resolveRequiredElement } from "./action-targets.js";
 import { dispatchInputEvents, focusElement } from "./dom-events.js";
 import { insertText, requireEditable, requireFocusedElement, setEditableText } from "./editable.js";
 

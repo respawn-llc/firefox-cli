@@ -174,10 +174,7 @@ function parseCentralDirectory(
     ) {
       throw new ZipArchiveError("Unsupported ZIP64 archive.");
     }
-    if (
-      compressionMethod !== ZIP_COMPRESSION_STORED &&
-      compressionMethod !== ZIP_COMPRESSION_DEFLATE
-    ) {
+    if (compressionMethod !== ZIP_COMPRESSION_STORED && compressionMethod !== ZIP_COMPRESSION_DEFLATE) {
       throw new ZipArchiveError(`Unsupported ZIP compression method: ${compressionMethod}.`);
     }
 
@@ -260,9 +257,7 @@ function readLocalDataOffset(
     throw new ZipArchiveError("Malformed ZIP archive: local compression method mismatch.");
   }
 
-  const localName = data
-    .subarray(localNameStart, localNameStart + localFileNameLength)
-    .toString("utf8");
+  const localName = data.subarray(localNameStart, localNameStart + localFileNameLength).toString("utf8");
   if (localName !== input.centralName) {
     throw new ZipArchiveError("Malformed ZIP archive: local entry name mismatch.");
   }
@@ -308,12 +303,7 @@ function validateEntryName(name: string): void {
   if (name.length === 0) {
     throw new ZipArchiveError("Unsafe ZIP entry path: <empty>");
   }
-  if (
-    name.includes("\0") ||
-    name.includes("\\") ||
-    name.startsWith("/") ||
-    /^[A-Za-z]:/.test(name)
-  ) {
+  if (name.includes("\0") || name.includes("\\") || name.startsWith("/") || /^[A-Za-z]:/.test(name)) {
     throw new ZipArchiveError(`Unsafe ZIP entry path: ${name}`);
   }
 

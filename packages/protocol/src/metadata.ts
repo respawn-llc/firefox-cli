@@ -6,10 +6,7 @@ export type CommandOwner = "native-host" | "extension";
 export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
 export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
 export type CommandTimeoutPolicy = "none" | "command" | "batch";
-export type CommandFrameScope =
-  | "not-applicable"
-  | "main-frame-only"
-  | "main-frame-with-iframe-diagnostics";
+export type CommandFrameScope = "not-applicable" | "main-frame-only" | "main-frame-with-iframe-diagnostics";
 export type CommandFrameScopeMetadata = {
   readonly scope: CommandFrameScope;
   readonly reason: string;

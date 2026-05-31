@@ -35,9 +35,7 @@ export function safeParseBatchStepCommandParams<C extends CommandId>(
   }
 
   const fallbackParams = paramsWithDefaultTarget(params);
-  return fallbackParams === undefined
-    ? parsed
-    : safeParseStrictCommandParams(command, fallbackParams);
+  return fallbackParams === undefined ? parsed : safeParseStrictCommandParams(command, fallbackParams);
 }
 
 export function safeParseCommandResult<C extends CommandId>(

@@ -4,10 +4,9 @@ import { createZipFixture } from "./zip-test-utils.js";
 
 describe("readZipArchive", () => {
   it("reads deflated entries and EOCD comments", () => {
-    const fixture = createZipFixture(
-      [{ name: "manifest.json", data: '{"ok":true}', compressionMethod: 8 }],
-      { eocdComment: "signed xpi comment" },
-    );
+    const fixture = createZipFixture([{ name: "manifest.json", data: '{"ok":true}', compressionMethod: 8 }], {
+      eocdComment: "signed xpi comment",
+    });
 
     const archive = readZipArchive(fixture.data);
 
@@ -46,9 +45,7 @@ describe("readZipArchive", () => {
   });
 
   it("rejects unsupported compression methods", () => {
-    const fixture = createZipFixture([
-      { name: "manifest.json", data: "{}", compressionMethod: 99 },
-    ]);
+    const fixture = createZipFixture([{ name: "manifest.json", data: "{}", compressionMethod: 99 }]);
 
     expect(() => readZipArchive(fixture.data)).toThrow("Unsupported ZIP compression method");
   });

@@ -70,9 +70,7 @@ describe("pair state", () => {
       randomBytes: () => Buffer.from("first-secret"),
     });
 
-    expect(
-      verifyPairToken(approval.state, { ...hostIdentity, hostId: "host-2" }, approval.token),
-    ).toEqual({
+    expect(verifyPairToken(approval.state, { ...hostIdentity, hostId: "host-2" }, approval.token)).toEqual({
       ok: false,
       code: "HOST_ID_MISMATCH",
       message: "Native host identity changed after approval.",

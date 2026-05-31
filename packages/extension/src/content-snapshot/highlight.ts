@@ -70,10 +70,7 @@ function getDocumentState(document: Document): DocumentHighlightState {
   return created;
 }
 
-function restorePreviousElementHighlight(
-  state: DocumentHighlightState,
-  nextElement: HTMLElement,
-): void {
+function restorePreviousElementHighlight(state: DocumentHighlightState, nextElement: HTMLElement): void {
   const previousElement = state.currentElement;
   if (previousElement === undefined || previousElement === nextElement) {
     return;

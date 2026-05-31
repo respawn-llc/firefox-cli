@@ -45,13 +45,7 @@ function parseWaitParams(waitArgs: ParsedWaitArguments): {
   readonly selector?: string;
   readonly ref?: string;
   readonly generationId?: string;
-  readonly state?:
-    | "visible"
-    | "hidden"
-    | "attached"
-    | "domcontentloaded"
-    | "complete"
-    | "networkidle";
+  readonly state?: "visible" | "hidden" | "attached" | "domcontentloaded" | "complete" | "networkidle";
   readonly text?: string;
   readonly urlGlob?: string;
   readonly expression?: string;

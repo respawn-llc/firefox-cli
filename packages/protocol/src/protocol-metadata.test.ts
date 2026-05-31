@@ -10,8 +10,7 @@ describe("protocol command metadata", () => {
   it("documents frame-scope support in command metadata", () => {
     expect(getCommandFrameScopeMetadata("snapshot")).toEqual({
       scope: "main-frame-with-iframe-diagnostics",
-      reason:
-        "Snapshot refs are generated for the main frame; iframe entries are diagnostic/read-only.",
+      reason: "Snapshot refs are generated for the main frame; iframe entries are diagnostic/read-only.",
       future: "docs/iframe-targeting-future.md",
     });
     expect(getCommandFrameScopeMetadata("frame")).toEqual({
@@ -21,8 +20,7 @@ describe("protocol command metadata", () => {
     });
     expect(getCommandFrameScopeMetadata("click")).toEqual({
       scope: "main-frame-only",
-      reason:
-        "This command runs in the resolved tab's main frame; iframe targeting is not implemented.",
+      reason: "This command runs in the resolved tab's main frame; iframe targeting is not implemented.",
       future: "docs/iframe-targeting-future.md",
     });
     expect(getCommandFrameScopeMetadata("eval")).toEqual({
@@ -65,9 +63,7 @@ describe("protocol command metadata", () => {
     });
     expect(commandRequiresExtensionHostAccess("click")).toBe(true);
     expect(commandRequiresExtensionHostAccess("download")).toBe(false);
-    expect(
-      requirements.commands.find((requirement) => requirement.command === "network"),
-    ).toMatchObject({
+    expect(requirements.commands.find((requirement) => requirement.command === "network")).toMatchObject({
       securityReasons: ["network-observation"],
       manifestPermissions: ["webRequest"],
       networkObservation: true,

@@ -24,9 +24,7 @@ describe("generated artifact reset", () => {
     await expect(resetGeneratedArtifact(join(repoRoot, "README.md"), { repoRoot })).rejects.toThrow(
       "outside",
     );
-    await expect(resetGeneratedArtifact(join(repoRoot, "dist"), { repoRoot })).rejects.toThrow(
-      "dist root",
-    );
+    await expect(resetGeneratedArtifact(join(repoRoot, "dist"), { repoRoot })).rejects.toThrow("dist root");
   });
 
   it("resets a generated symlink without trashing the symlink target", async () => {

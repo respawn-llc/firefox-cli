@@ -1,10 +1,5 @@
 import type { RequestEnvelope } from "@firefox-cli/protocol";
-import {
-  getPositionals,
-  normalizeOptionalUrl,
-  optionalTarget,
-  parseTargetOptions,
-} from "../parse.js";
+import { getPositionals, normalizeOptionalUrl, optionalTarget, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError } from "../types.js";
 

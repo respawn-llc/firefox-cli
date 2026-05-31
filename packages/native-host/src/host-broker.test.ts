@@ -86,8 +86,7 @@ describe("NativeHostBroker", () => {
     broker.connectExtension({
       approved: true,
       token: "test-token",
-      send: async (forwarded) =>
-        createOkResponse(forwarded, { capabilities: [...kernelCapabilities] }),
+      send: async (forwarded) => createOkResponse(forwarded, { capabilities: [...kernelCapabilities] }),
     });
 
     const response = await broker.handleCliRequest(JSON.stringify(request));
@@ -135,11 +134,7 @@ describe("NativeHostBroker", () => {
   });
 
   it("writes screenshot bytes and strips internal image data from CLI responses", async () => {
-    const request = createRequest(
-      "screenshot",
-      { path: "/tmp/page.png", format: "png" },
-      "screenshot-1",
-    );
+    const request = createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-1");
     const writes: { readonly path: string; readonly data: readonly number[] }[] = [];
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
@@ -473,9 +468,7 @@ describe("NativeHostBroker", () => {
       send: async (forwarded) => createOkResponse(forwarded, { ok: true }),
     });
 
-    await expect(broker.handleCliRequest(request)).resolves.toEqual(
-      createOkResponse(request, { ok: true }),
-    );
+    await expect(broker.handleCliRequest(request)).resolves.toEqual(createOkResponse(request, { ok: true }));
   });
 
   it("returns an actionable error when the extension is disconnected", async () => {

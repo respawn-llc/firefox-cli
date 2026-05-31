@@ -1,10 +1,5 @@
 import { PassThrough } from "node:stream";
-import {
-  PROTOCOL_VERSION,
-  createOkResponse,
-  createRequest,
-  kernelCapabilities,
-} from "@firefox-cli/protocol";
+import { PROTOCOL_VERSION, createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
@@ -78,9 +73,7 @@ describe("native host session", () => {
 
     expect(forwarded).toEqual(request);
     extensionInput.write(
-      encodeNativeMessageFrame(
-        createOkResponse(forwarded, { capabilities: [...kernelCapabilities] }),
-      ),
+      encodeNativeMessageFrame(createOkResponse(forwarded, { capabilities: [...kernelCapabilities] })),
     );
 
     await expect(response).resolves.toEqual(

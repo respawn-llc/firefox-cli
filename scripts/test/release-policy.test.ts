@@ -12,10 +12,7 @@ describe("release signed-XPI policy", () => {
 
   it("allows an explicit non-release local override", () => {
     expect(
-      resolveReleaseSignedXpiPolicy(
-        ["bun", "scripts/release-check.ts", "--allow-unsigned-local"],
-        {},
-      ),
+      resolveReleaseSignedXpiPolicy(["bun", "scripts/release-check.ts", "--allow-unsigned-local"], {}),
     ).toEqual({
       phase0Mode: false,
       requireSignedXpi: false,

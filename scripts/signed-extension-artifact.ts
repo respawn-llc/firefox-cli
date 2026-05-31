@@ -1,10 +1,6 @@
 import { basename } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
-import {
-  hashFile,
-  hashPayloadMap,
-  type SignedExtensionProvenance,
-} from "./extension-artifact-provenance.js";
+import { hashFile, hashPayloadMap, type SignedExtensionProvenance } from "./extension-artifact-provenance.js";
 import {
   defaultSignedExtensionChannel,
   packagedSignedExtensionXpiFile,
@@ -69,10 +65,7 @@ export async function verifySignedExtensionProvenanceConsistency(input: {
   if (input.provenance.xpiSha256 !== (await hashFile(input.artifactPath))) {
     throw new Error("Signed extension provenance digest does not match packaged XPI.");
   }
-  if (
-    input.xpiPayload !== undefined &&
-    input.provenance.sourceSha256 !== hashPayloadMap(input.xpiPayload)
-  ) {
+  if (input.xpiPayload !== undefined && input.provenance.sourceSha256 !== hashPayloadMap(input.xpiPayload)) {
     throw new Error("Signed extension provenance source digest does not match packaged XPI.");
   }
 }

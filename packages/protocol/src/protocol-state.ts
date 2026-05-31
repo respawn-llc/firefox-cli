@@ -49,10 +49,7 @@ export function isProtocolResponseLike(message: unknown): message is { readonly 
 }
 
 export function getProtocolMessageId(message: unknown): string {
-  return typeof message === "object" &&
-    message !== null &&
-    "id" in message &&
-    typeof message.id === "string"
+  return typeof message === "object" && message !== null && "id" in message && typeof message.id === "string"
     ? message.id
     : "invalid-request";
 }
@@ -68,9 +65,6 @@ export function getProtocolMessageVersion(message: unknown): number {
 
 export function isUnknownRequestCommand(message: unknown, command: string): boolean {
   return (
-    typeof message === "object" &&
-    message !== null &&
-    "command" in message &&
-    message.command === command
+    typeof message === "object" && message !== null && "command" in message && message.command === command
   );
 }

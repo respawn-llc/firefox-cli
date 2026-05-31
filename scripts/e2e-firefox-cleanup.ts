@@ -24,10 +24,7 @@ export function parseDisposableFirefoxProcesses(
   },
 ): readonly DisposableFirefoxProcess[] {
   return parseProcessRows(psOutput).filter((row) => {
-    return (
-      commandLineUsesProfileDir(row.args, options.profileDir) &&
-      isFirefoxExecutableCommand(row.command)
-    );
+    return commandLineUsesProfileDir(row.args, options.profileDir) && isFirefoxExecutableCommand(row.command);
   });
 }
 
@@ -92,10 +89,7 @@ function tokenizeCommandLine(commandLine: string): readonly string[] {
     }
     if (char === "\\") {
       const next = commandLine[index + 1];
-      if (
-        next !== undefined &&
-        (/\s/u.test(next) || next === "\\" || next === "'" || next === '"')
-      ) {
+      if (next !== undefined && (/\s/u.test(next) || next === "\\" || next === "'" || next === '"')) {
         escaping = true;
       } else {
         current += char;

@@ -44,9 +44,7 @@ export type NativeHostSession = {
   stop(): Promise<void>;
 };
 
-export async function startNativeHostSession(
-  options: NativeHostSessionOptions,
-): Promise<NativeHostSession> {
+export async function startNativeHostSession(options: NativeHostSessionOptions): Promise<NativeHostSession> {
   const ipcAuthTokenStore =
     options.ipcAuthTokenStore ?? new FileLocalIpcAuthTokenStore({ stateRoot: options.stateRoot });
   const ipcAuthToken = await getOrCreateLocalIpcAuthToken(ipcAuthTokenStore);

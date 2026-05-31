@@ -13,10 +13,7 @@ import {
   type ContentLogCaptureService,
 } from "./content-snapshot/log-capture.js";
 
-type TestContentOptions = Omit<
-  Parameters<typeof handleRawContentScriptRequest>[1],
-  "logCapture"
-> & {
+type TestContentOptions = Omit<Parameters<typeof handleRawContentScriptRequest>[1], "logCapture"> & {
   readonly logCapture?: ContentLogCaptureService;
 };
 
@@ -49,10 +46,11 @@ describe("content actions", () => {
       clicked += 1;
     });
 
-    const response = handleContentScriptRequest(
-      createRequest("click", { selector: "#save" }, "click-1"),
-      { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
-    );
+    const response = handleContentScriptRequest(createRequest("click", { selector: "#save" }, "click-1"), {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      now: 1000,
+    });
 
     expect(clicked).toBe(1);
     expect(response).toMatchObject({
@@ -102,13 +100,10 @@ describe("content actions", () => {
   });
 
   it("handles dblclick, hover, focus, keyboard inserttext, and swipe interactions", () => {
-    const { window } = new JSDOM(
-      `<button id="save">Save</button><input id="name"><div id="feed"></div>`,
-      {
-        url: "https://example.test/",
-        pretendToBeVisual: true,
-      },
-    );
+    const { window } = new JSDOM(`<button id="save">Save</button><input id="name"><div id="feed"></div>`, {
+      url: "https://example.test/",
+      pretendToBeVisual: true,
+    });
     const save = window.document.querySelector<HTMLButtonElement>("#save");
     const name = window.document.querySelector<HTMLInputElement>("#name");
     const feed = window.document.querySelector<HTMLElement>("#feed");
@@ -144,10 +139,7 @@ describe("content actions", () => {
       handleContentScriptRequest(createRequest("focus", { selector: "#name" }, "a3"), base),
     ).toMatchObject({ ok: true, result: { action: "focus" } });
     expect(
-      handleContentScriptRequest(
-        createRequest("keyboard.inserttext", { text: "Nikita" }, "a4"),
-        base,
-      ),
+      handleContentScriptRequest(createRequest("keyboard.inserttext", { text: "Nikita" }, "a4"), base),
     ).toMatchObject({ ok: true, result: { action: "keyboard.inserttext", valueLength: 6 } });
     expect(
       handleContentScriptRequest(
@@ -243,11 +235,7 @@ describe("content actions", () => {
     ).toMatchObject({ ok: true, result: { action: "upload", valueLength: 1 } });
     expect(
       handleContentScriptRequest(
-        createRequest(
-          "mouse",
-          { action: "down", selector: "#drop", x: 12, y: 34, button: 1 },
-          "m1",
-        ),
+        createRequest("mouse", { action: "down", selector: "#drop", x: 12, y: 34, button: 1 }, "m1"),
         base,
       ),
     ).toMatchObject({ ok: true, result: { action: "mouse" } });
@@ -258,16 +246,10 @@ describe("content actions", () => {
       ),
     ).toMatchObject({ ok: true, result: { action: "mouse" } });
     expect(
-      handleContentScriptRequest(
-        createRequest("keydown", { key: "A", selector: "#keys" }, "key-1"),
-        base,
-      ),
+      handleContentScriptRequest(createRequest("keydown", { key: "A", selector: "#keys" }, "key-1"), base),
     ).toMatchObject({ ok: true, result: { action: "keydown" } });
     expect(
-      handleContentScriptRequest(
-        createRequest("keyup", { key: "A", selector: "#keys" }, "key-2"),
-        base,
-      ),
+      handleContentScriptRequest(createRequest("keyup", { key: "A", selector: "#keys" }, "key-2"), base),
     ).toMatchObject({ ok: true, result: { action: "keyup" } });
 
     expect(file.files?.item(0)?.name).toBe("fixture.txt");
@@ -301,14 +283,8 @@ describe("content actions", () => {
     }
     const originalDataTransfer = window.DataTransfer;
     const originalFileList = window.FileList;
-    const originalEventDataTransfer = Object.getOwnPropertyDescriptor(
-      window.Event.prototype,
-      "dataTransfer",
-    );
-    const originalInputFiles = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      "files",
-    );
+    const originalEventDataTransfer = Object.getOwnPropertyDescriptor(window.Event.prototype, "dataTransfer");
+    const originalInputFiles = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "files");
     let dragStartEvent: Event | undefined;
     source.addEventListener("dragstart", (event) => {
       dragStartEvent = event;
@@ -436,16 +412,18 @@ describe("content actions", () => {
       },
     });
     expect(
-      handleContentScriptRequest(
-        createRequest("fill", { selector: "#disabled", text: "nope" }, "fill-2"),
-        { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
-      ),
+      handleContentScriptRequest(createRequest("fill", { selector: "#disabled", text: "nope" }, "fill-2"), {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      }),
     ).toMatchObject({ ok: false, error: { code: "ELEMENT_DISABLED" } });
     expect(
-      handleContentScriptRequest(
-        createRequest("fill", { selector: "#button", text: "nope" }, "fill-3"),
-        { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
-      ),
+      handleContentScriptRequest(createRequest("fill", { selector: "#button", text: "nope" }, "fill-3"), {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      }),
     ).toMatchObject({ ok: false, error: { code: "NOT_EDITABLE" } });
   });
 
@@ -462,19 +440,21 @@ describe("content actions", () => {
     name.setSelectionRange(3, 3);
 
     expect(
-      handleContentScriptRequest(
-        createRequest("type", { selector: "#name", text: "ita" }, "type-1"),
-        { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
-      ),
+      handleContentScriptRequest(createRequest("type", { selector: "#name", text: "ita" }, "type-1"), {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      }),
     ).toMatchObject({ ok: true, result: { action: "type", valueLength: 3 } });
     expect(name.value).toBe("Nikita");
 
     notes.focus();
     expect(
-      handleContentScriptRequest(
-        createRequest("keyboard.type", { text: "Ship it" }, "keyboard-1"),
-        { document: window.document, registry: new ElementRefRegistry<Element>(), now: 1000 },
-      ),
+      handleContentScriptRequest(createRequest("keyboard.type", { text: "Ship it" }, "keyboard-1"), {
+        document: window.document,
+        registry: new ElementRefRegistry<Element>(),
+        now: 1000,
+      }),
     ).toMatchObject({ ok: true, result: { action: "keyboard.type", valueLength: 7 } });
     expect(notes.value).toBe("Ship it");
   });
@@ -618,12 +598,7 @@ describe("content actions", () => {
     expect(scrolledIntoView).toBe(true);
 
     const registry = new ElementRefRegistry<Element>();
-    const snapshot = createSnapshotResult(
-      window.document,
-      { interactiveOnly: true },
-      registry,
-      1000,
-    );
+    const snapshot = createSnapshotResult(window.document, { interactiveOnly: true }, registry, 1000);
     save.remove();
     const stale = handleContentScriptRequest(
       createRequest("click", { ref: "@e1", generationId: snapshot.generationId }, "click-ref-1"),

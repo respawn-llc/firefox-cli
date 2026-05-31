@@ -70,9 +70,7 @@ describe("NetworkRequestTracker", () => {
 
     tracker.clear({ tabId: 101 });
 
-    expect(tracker.list({ tabId: 101 })).toEqual([
-      { id: "pending", url: "https://example.test/pending" },
-    ]);
+    expect(tracker.list({ tabId: 101 })).toEqual([{ id: "pending", url: "https://example.test/pending" }]);
     expect(tracker.isIdle({ tabId: 101, idleMs: 1 })).toBe(false);
   });
 
@@ -101,9 +99,7 @@ describe("NetworkRequestTracker", () => {
 
     tracker.clear({ tabId: 101, urlGlob: "*api" });
 
-    expect(tracker.list({ tabId: 101 })).toEqual([
-      { id: "asset", url: "https://example.test/app.js" },
-    ]);
+    expect(tracker.list({ tabId: 101 })).toEqual([{ id: "asset", url: "https://example.test/app.js" }]);
   });
 
   it("uses shared glob semantics for URL filters", () => {
@@ -121,9 +117,9 @@ describe("NetworkRequestTracker", () => {
     expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/api?x=1" })).toEqual([
       { id: "query", url: "https://example.test/api?x=1" },
     ]);
-    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/file+name[1].json" })).toEqual(
-      [{ id: "meta", url: "https://example.test/file+name[1].json" }],
-    );
+    expect(tracker.list({ tabId: 101, urlGlob: "https://example.test/file+name[1].json" })).toEqual([
+      { id: "meta", url: "https://example.test/file+name[1].json" },
+    ]);
 
     tracker.clear({ tabId: 101, urlGlob: "https://example.test/api*" });
 

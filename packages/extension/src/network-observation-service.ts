@@ -60,8 +60,7 @@ export class NetworkObservationService {
     this.#browser = options.browser;
     this.tracker = options.tracker ?? new NetworkRequestTracker();
     this.#retentionMs = options.retentionMs ?? DEFAULT_RETENTION_MS;
-    this.#scheduleTimer =
-      options.scheduleTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+    this.#scheduleTimer = options.scheduleTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
     this.#clearTimer =
       options.clearTimer ?? ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>));
   }

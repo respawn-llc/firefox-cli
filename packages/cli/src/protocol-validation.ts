@@ -7,10 +7,7 @@ import {
 } from "@firefox-cli/protocol";
 import { CliUsageError } from "./types.js";
 
-export function createValidatedRequest<C extends CommandId>(
-  command: C,
-  params: unknown,
-): RequestEnvelope<C> {
+export function createValidatedRequest<C extends CommandId>(command: C, params: unknown): RequestEnvelope<C> {
   return createRequest(command, validateCommandParams(command, params));
 }
 

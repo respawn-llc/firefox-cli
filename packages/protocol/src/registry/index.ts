@@ -35,12 +35,9 @@ const isNonBatchCommandId = (command: string): command is NonBatchCommandId =>
 
 const batchSchemas = createBatchSchemas({
   hasCommand: isNonBatchCommandId,
-  isBatchable: (command) =>
-    isNonBatchCommandId(command) && nonBatchCommandSchemas[command].batch.allowed,
-  paramsFor: (command) =>
-    isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].params : undefined,
-  resultFor: (command) =>
-    isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].result : undefined,
+  isBatchable: (command) => isNonBatchCommandId(command) && nonBatchCommandSchemas[command].batch.allowed,
+  paramsFor: (command) => (isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].params : undefined),
+  resultFor: (command) => (isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].result : undefined),
   paramsWithDefaultTarget: (command, params) => batchStepParamsWithDefaultTarget(command, params),
 });
 
@@ -150,22 +147,17 @@ export function isContentCommand(command: string): command is ContentCommandId {
 
 export function getCommandSecurityMetadata(command: CommandId): CommandSecurityMetadata {
   const entry = commandSchemas[command];
-  const metadata =
-    "security" in entry ? (entry.security as CommandSecurityMetadata | undefined) : undefined;
+  const metadata = "security" in entry ? (entry.security as CommandSecurityMetadata | undefined) : undefined;
   if (metadata !== undefined) {
     return metadata;
   }
-  return entry.action
-    ? { level: "sensitive", reasons: ["page-mutation"] }
-    : { level: "normal", reasons: [] };
+  return entry.action ? { level: "sensitive", reasons: ["page-mutation"] } : { level: "normal", reasons: [] };
 }
 
 export function getCommandCompatibilityMetadata(command: CommandId): CommandCompatibilityMetadata {
   const entry = commandSchemas[command];
   const metadata =
-    "compatibility" in entry
-      ? (entry.compatibility as CommandCompatibilityMetadata | undefined)
-      : undefined;
+    "compatibility" in entry ? (entry.compatibility as CommandCompatibilityMetadata | undefined) : undefined;
   return metadata ?? { requirements: [] };
 }
 
@@ -179,8 +171,7 @@ export function getCommandFrameScopeMetadata(command: CommandId): CommandFrameSc
   if (entry.action || entry.content !== "never") {
     return {
       scope: "main-frame-only",
-      reason:
-        "This command runs in the resolved tab's main frame; iframe targeting is not implemented.",
+      reason: "This command runs in the resolved tab's main frame; iframe targeting is not implemented.",
       future: "docs/iframe-targeting-future.md",
     };
   }
@@ -194,8 +185,8 @@ export function getRequestProtocolRequirement(request: {
   readonly command: CommandId;
   readonly params: unknown;
 }): CommandProtocolRequirement | undefined {
-  const requirements = getCommandCompatibilityMetadata(request.command).requirements.filter(
-    (requirement) => protocolRequirementMatchesParams(requirement, request.params),
+  const requirements = getCommandCompatibilityMetadata(request.command).requirements.filter((requirement) =>
+    protocolRequirementMatchesParams(requirement, request.params),
   );
   return requirements.reduce<CommandProtocolRequirement | undefined>((highest, requirement) => {
     if (highest === undefined) {
@@ -238,10 +229,7 @@ function isConditionallySensitiveRequest(request: {
   );
 }
 
-function protocolRequirementMatchesParams(
-  requirement: CommandProtocolRequirement,
-  params: unknown,
-): boolean {
+function protocolRequirementMatchesParams(requirement: CommandProtocolRequirement, params: unknown): boolean {
   const matches = requirement.params?.matches;
   if (matches === undefined) {
     return true;

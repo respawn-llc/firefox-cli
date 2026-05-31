@@ -64,10 +64,7 @@ export type ManagedProcess = {
   stop(options?: StopProcessOptions): Promise<ProcessResult>;
 };
 
-export async function stopProcessTree(
-  pid: number,
-  options: StopProcessOptions = {},
-): Promise<void> {
+export async function stopProcessTree(pid: number, options: StopProcessOptions = {}): Promise<void> {
   if (!isProcessRunning(pid)) {
     return;
   }
@@ -80,12 +77,9 @@ export async function stopProcessTree(
     await signalProcessTree(pid, "force");
   }
   if (!(await waitForProcessExit(pid, options.forceGraceMs ?? DEFAULT_FORCE_GRACE_MS))) {
-    throw new ProcessRunnerError(
-      `Process tree ${String(pid)} did not stop after force termination.`,
-      {
-        pid,
-      },
-    );
+    throw new ProcessRunnerError(`Process tree ${String(pid)} did not stop after force termination.`, {
+      pid,
+    });
   }
 }
 
@@ -110,8 +104,7 @@ export async function runProcess(
           },
           timeoutMessage: () =>
             `${processLabel(command, options)} timed out after ${options.timeoutMs}ms.\n${managed.output()}`,
-          createError: (message) =>
-            new ProcessRunnerError(message, errorDetails({ pid: managed.pid })),
+          createError: (message) => new ProcessRunnerError(message, errorDetails({ pid: managed.pid })),
         });
   const result = await wait;
   const expectedExitCodes = options.expectedExitCodes ?? [0];
@@ -140,12 +133,9 @@ export function startManagedProcess(
   const waitPromise = new Promise<ProcessResult>((resolve, reject) => {
     child.once("error", (error) => {
       reject(
-        new ProcessRunnerError(
-          `${processLabel(command, options)} failed to spawn: ${error.message}`,
-          {
-            ...errorDetails({ pid: child.pid }),
-          },
-        ),
+        new ProcessRunnerError(`${processLabel(command, options)} failed to spawn: ${error.message}`, {
+          ...errorDetails({ pid: child.pid }),
+        }),
       );
     });
     child.once("close", (exitCode, signal) => {
@@ -207,9 +197,7 @@ export function renderCommand(
   redactArgValues: readonly string[] = [],
 ): string {
   const secrets = new Set(redactArgValues.filter((value) => value.length > 0));
-  return [command, ...args]
-    .map((part) => (secrets.has(part) ? "[redacted]" : shellQuote(part)))
-    .join(" ");
+  return [command, ...args].map((part) => (secrets.has(part) ? "[redacted]" : shellQuote(part))).join(" ");
 }
 
 function errorDetails(options: {
@@ -267,10 +255,7 @@ function spawnOptions(options: ProcessRunnerOptions): SpawnOptions {
   };
 }
 
-async function signalProcessTree(
-  pid: number,
-  mode: "interrupt" | "terminate" | "force",
-): Promise<void> {
+async function signalProcessTree(pid: number, mode: "interrupt" | "terminate" | "force"): Promise<void> {
   if (process.platform === "win32") {
     await taskkillProcessTree(pid, mode === "force");
     return;
@@ -352,9 +337,7 @@ function processLabel(command: string, options: ProcessRunnerOptions): string {
 }
 
 function exitDescription(result: ProcessResult): string {
-  return result.signal === null
-    ? `exit code ${String(result.exitCode)}`
-    : `signal ${result.signal}`;
+  return result.signal === null ? `exit code ${String(result.exitCode)}` : `signal ${result.signal}`;
 }
 
 function waitForStop<T>(promise: Promise<T>, ms: number): Promise<T> {

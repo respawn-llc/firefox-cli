@@ -19,12 +19,6 @@ export class BackgroundRequestForwarder {
     approved: boolean,
     protocolSession: ProtocolSession,
   ): Promise<ResponseEnvelope> | ResponseEnvelope {
-    return handleRequest(
-      request,
-      this.#productVersion,
-      approved,
-      this.#browserAdapter,
-      protocolSession,
-    );
+    return handleRequest(request, this.#productVersion, approved, this.#browserAdapter, protocolSession);
   }
 }

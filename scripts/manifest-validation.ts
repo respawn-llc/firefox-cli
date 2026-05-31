@@ -66,9 +66,7 @@ export function parseJsonWithSchema<T>(
 
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(
-      `Invalid ${label} at ${location}: ${parsed.error.issues.map(formatIssue).join("; ")}`,
-    );
+    throw new Error(`Invalid ${label} at ${location}: ${parsed.error.issues.map(formatIssue).join("; ")}`);
   }
 
   return parsed.data;

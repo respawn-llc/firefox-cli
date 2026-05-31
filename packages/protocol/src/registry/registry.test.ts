@@ -84,10 +84,7 @@ type IsExact<A, B> =
       ? true
       : false
     : false;
-type SuccessfulResult<C extends CommandId> = Extract<
-  ResponseEnvelope<C>,
-  { readonly ok: true }
->["result"];
+type SuccessfulResult<C extends CommandId> = Extract<ResponseEnvelope<C>, { readonly ok: true }>["result"];
 type SuccessfulSafeParseData<T> =
   Extract<T, { readonly success: true }> extends { readonly data: infer Data } ? Data : never;
 type ProtocolTypeAssertions = [
@@ -95,12 +92,7 @@ type ProtocolTypeAssertions = [
   Assert<"noop" extends ContentCommandId ? false : true>,
   Assert<IsExact<RequestEnvelope<"get">["params"], GetParams>>,
   Assert<IsExact<SuccessfulResult<"screenshot">, ScreenshotResult>>,
-  Assert<
-    IsExact<
-      SuccessfulSafeParseData<ReturnType<typeof safeParseStrictCommandParams<"get">>>,
-      GetParams
-    >
-  >,
+  Assert<IsExact<SuccessfulSafeParseData<ReturnType<typeof safeParseStrictCommandParams<"get">>>, GetParams>>,
   Assert<
     IsExact<
       SuccessfulSafeParseData<ReturnType<typeof safeParseBatchStepCommandParams<"tab.close">>>,
@@ -136,9 +128,7 @@ describe("command registry assembly", () => {
       },
     });
 
-    expect(() => assembleCommandRegistry(duplicate, duplicate)).toThrow(
-      "Duplicate command id: duplicate",
-    );
+    expect(() => assembleCommandRegistry(duplicate, duplicate)).toThrow("Duplicate command id: duplicate");
   });
 
   it("preserves command-specific public protocol types", () => {

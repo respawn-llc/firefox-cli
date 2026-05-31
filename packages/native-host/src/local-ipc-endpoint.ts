@@ -1,11 +1,7 @@
 import { join } from "node:path";
 import { NATIVE_HOST_NAME } from "./host-launch.js";
 import { createLocalIpcEndpointScope } from "./reliability.js";
-import {
-  LocalIpcError,
-  type LocalIpcEndpoint,
-  type LocalIpcEndpointOptions,
-} from "./local-ipc-types.js";
+import { LocalIpcError, type LocalIpcEndpoint, type LocalIpcEndpointOptions } from "./local-ipc-types.js";
 
 export function planLocalIpcEndpoint(options: LocalIpcEndpointOptions): LocalIpcEndpoint {
   const name = options.name ?? NATIVE_HOST_NAME;

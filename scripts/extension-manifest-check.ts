@@ -24,10 +24,7 @@ export function verifyExpectedExtensionManifest(manifest: ExtensionManifest): vo
       }`,
     );
   }
-  if (
-    manifest.browser_specific_settings?.gecko.strict_min_version !==
-    requirements.firefoxStrictMinVersion
-  ) {
+  if (manifest.browser_specific_settings?.gecko.strict_min_version !== requirements.firefoxStrictMinVersion) {
     throw new Error(
       `Expected extension Firefox minimum version ${requirements.firefoxStrictMinVersion}, received ${
         manifest.browser_specific_settings?.gecko.strict_min_version ?? "<missing>"
@@ -41,16 +38,8 @@ export function verifyExpectedExtensionManifest(manifest: ExtensionManifest): vo
     throw new Error("Expected extension popup to be popup.html");
   }
 
-  assertExactSet(
-    manifest.permissions,
-    requirements.manifestPermissions,
-    "extension manifest permissions",
-  );
-  assertExactSet(
-    manifest.host_permissions ?? [],
-    requirements.hostPermissions,
-    "extension host permissions",
-  );
+  assertExactSet(manifest.permissions, requirements.manifestPermissions, "extension manifest permissions");
+  assertExactSet(manifest.host_permissions ?? [], requirements.hostPermissions, "extension host permissions");
   assertExactSet(
     manifest.browser_specific_settings?.gecko.data_collection_permissions?.required ?? [],
     requirements.dataCollection.required,
@@ -63,9 +52,11 @@ export function verifyExpectedExtensionManifest(manifest: ExtensionManifest): vo
   );
 }
 
-function assertExactSet<
-  T extends FirefoxManifestPermission | FirefoxDataCollectionPermission | string,
->(actual: readonly T[], expected: readonly T[], label: string): void {
+function assertExactSet<T extends FirefoxManifestPermission | FirefoxDataCollectionPermission | string>(
+  actual: readonly T[],
+  expected: readonly T[],
+  label: string,
+): void {
   const actualSorted = [...actual].sort((left, right) => left.localeCompare(right));
   const expectedSorted = [...expected].sort((left, right) => left.localeCompare(right));
   if (

@@ -97,9 +97,7 @@ export async function executeBatch(
       {
         ok: steps.every((candidate) => candidate.ok),
         steps,
-        ...(firstFailedIndex(steps) === undefined
-          ? {}
-          : { firstFailedIndex: firstFailedIndex(steps) }),
+        ...(firstFailedIndex(steps) === undefined ? {} : { firstFailedIndex: firstFailedIndex(steps) }),
         elapsedMs: Math.max(0, Date.now() - startedAt),
       },
       maxResultBytes,
@@ -191,9 +189,7 @@ function parseScreenshotStepResult(step: BatchStepResult): ScreenshotResult {
   return parsed.value.result;
 }
 
-function stripScreenshotImageBytes(
-  result: ScreenshotResult,
-): Omit<ScreenshotResult, "imageBase64"> {
+function stripScreenshotImageBytes(result: ScreenshotResult): Omit<ScreenshotResult, "imageBase64"> {
   const { imageBase64: _imageBase64, ...publicResult } = result;
   return publicResult;
 }

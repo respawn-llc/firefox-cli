@@ -25,21 +25,15 @@ describe("snapshot semantics", () => {
       </main>`,
     );
 
-    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#aria-label"))).toBe(
-      "ARIA label",
-    );
+    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#aria-label"))).toBe("ARIA label");
     expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#labelled-by"))).toBe(
       "First Second",
     );
     expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#explicit"))).toBe(
       "Explicit label",
     );
-    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#wrapped"))).toBe(
-      "Wrapped label",
-    );
-    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#image"))).toBe(
-      "Alt text",
-    );
+    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#wrapped"))).toBe("Wrapped label");
+    expect(defaultSnapshotSemantics.getAccessibleName(required(document, "#image"))).toBe("Alt text");
     expect(defaultSnapshotSemantics.getRole(required(document, "#range"))).toBe("slider");
     expect(defaultSnapshotSemantics.getRole(required(document, "#plain-anchor"))).toBe("generic");
     expect(defaultSnapshotSemantics.getRole(required(document, "#link"))).toBe("link");
@@ -164,9 +158,7 @@ describe("snapshot semantics", () => {
     document.body.append(anonymousFrame);
 
     expect(defaultSnapshotSemantics.describeFrame(simple)).toBe("iframe#child");
-    expect(defaultSnapshotSemantics.describeFrame(idFrame)).toBe(
-      `iframe[id="${escapeCssString(unsafeId)}"]`,
-    );
+    expect(defaultSnapshotSemantics.describeFrame(idFrame)).toBe(`iframe[id="${escapeCssString(unsafeId)}"]`);
     expect(defaultSnapshotSemantics.describeFrame(namedFrame)).toBe(
       `iframe[name="${escapeCssString(unsafeName)}"]`,
     );

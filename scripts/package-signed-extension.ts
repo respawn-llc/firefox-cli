@@ -88,8 +88,6 @@ function isNodeError(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
-export function packagedSignedExtensionProvenanceJson(
-  provenance: SignedExtensionProvenance,
-): string {
+export function packagedSignedExtensionProvenanceJson(provenance: SignedExtensionProvenance): string {
   return `${JSON.stringify(normalizeSignedExtensionProvenanceForPackage(provenance), null, 2)}\n`;
 }

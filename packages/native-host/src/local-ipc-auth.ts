@@ -1,11 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import {
-  createErrorResponse,
-  localProtocolVersionRange,
-  type ResponseEnvelope,
-} from "@firefox-cli/protocol";
+import { createErrorResponse, localProtocolVersionRange, type ResponseEnvelope } from "@firefox-cli/protocol";
 import type { LocalIpcFrameError } from "./local-ipc-frame.js";
 import type { LocalIpcAuthTokenStore } from "./local-ipc-types.js";
 import { withFileLock, writeFileAtomically } from "./reliability.js";
@@ -90,10 +86,7 @@ export function unwrapAuthorizedMessage(
   };
 }
 
-export function wrapAuthorizedMessage(
-  message: unknown,
-  authToken: string | null | undefined,
-): unknown {
+export function wrapAuthorizedMessage(message: unknown, authToken: string | null | undefined): unknown {
   return authToken === undefined || authToken === null ? message : { authToken, message };
 }
 

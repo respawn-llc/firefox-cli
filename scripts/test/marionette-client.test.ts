@@ -30,9 +30,7 @@ describe("Marionette client timing", () => {
     clients.push(client);
     const serverSocket = await socket;
 
-    await expect(client.send("Test:NeverAnswers", {})).rejects.toThrow(
-      "Marionette command timed out",
-    );
+    await expect(client.send("Test:NeverAnswers", {})).rejects.toThrow("Marionette command timed out");
 
     const response = client.send("Test:Answers", {});
     serverSocket.write(marionetteFrame([1, 2, null, { value: 42 }]));

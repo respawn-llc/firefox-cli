@@ -232,17 +232,13 @@ export async function startWorkflowFixtureServer(): Promise<{
   };
 }
 
-export async function runAgentWorkflowE2e(
-  runCliJson: CliJsonRunner,
-  fixtureUrl: string,
-): Promise<void> {
+export async function runAgentWorkflowE2e(runCliJson: CliJsonRunner, fixtureUrl: string): Promise<void> {
   const beforeTabs = await runCliJson<TabListPayload>(["tab", "--json"]).catch(() => ({
     tabs: [],
   }));
   const previousTabIds = new Set(
-    beforeTabs.tabs
-      ?.map((candidate) => candidate.id)
-      .filter((id): id is number => typeof id === "number") ?? [],
+    beforeTabs.tabs?.map((candidate) => candidate.id).filter((id): id is number => typeof id === "number") ??
+      [],
   );
   const created = await runCliJson<TabNewPayload>(["window", "new", fixtureUrl, "--json"]);
   const tab =
@@ -277,14 +273,10 @@ export async function runAgentWorkflowE2e(
     "Submit E2E",
   );
 
-  await expectAction(
-    runCliJson,
-    ["fill", "#email", "user@example.test", "--tab", target, "--json"],
-    {
-      action: "fill",
-      valueLength: 17,
-    },
-  );
+  await expectAction(runCliJson, ["fill", "#email", "user@example.test", "--tab", target, "--json"], {
+    action: "fill",
+    valueLength: 17,
+  });
   await expectAction(runCliJson, ["type", "#name", "Nikita", "--tab", target, "--json"], {
     action: "type",
     valueLength: 6,
@@ -299,11 +291,9 @@ export async function runAgentWorkflowE2e(
   await expectAction(runCliJson, ["check", "#agree", "--tab", target, "--json"], {
     action: "check",
   });
-  const select = await expectAction(
-    runCliJson,
-    ["select", "--tab", target, "--json", "#plan", "pro"],
-    { action: "select" },
-  );
+  const select = await expectAction(runCliJson, ["select", "--tab", target, "--json", "#plan", "pro"], {
+    action: "select",
+  });
   if (select.selectedValues?.join(",") !== "pro") {
     throw new Error(`Expected select to choose pro, got ${JSON.stringify(select)}`);
   }
@@ -347,9 +337,7 @@ async function expectAction(
   }
   if (expected.valueLength !== undefined && payload.valueLength !== expected.valueLength) {
     throw new Error(
-      `Expected ${expected.action} valueLength=${expected.valueLength}, got ${JSON.stringify(
-        payload,
-      )}`,
+      `Expected ${expected.action} valueLength=${expected.valueLength}, got ${JSON.stringify(payload)}`,
     );
   }
   return payload;
@@ -455,9 +443,7 @@ async function expectEvalValue(
   const value = payload.value?.value;
   if (payload.value?.type !== "json" || !deepEqual(value, expected)) {
     throw new Error(
-      `Expected eval ${expression} to equal ${JSON.stringify(expected)}, got ${JSON.stringify(
-        payload,
-      )}`,
+      `Expected eval ${expression} to equal ${JSON.stringify(expected)}, got ${JSON.stringify(payload)}`,
     );
   }
 }
@@ -489,13 +475,9 @@ async function expectPhase8Commands(
 ): Promise<void> {
   await expectCapabilities(runCliJson, ["drag", "download", "network", "set.viewport"]);
   await expectNetworkClear(runCliJson);
-  await expectAction(
-    runCliJson,
-    ["drag", "#drag-source", "#drop-target", "--tab", target, "--json"],
-    {
-      action: "drag",
-    },
-  );
+  await expectAction(runCliJson, ["drag", "#drag-source", "#drop-target", "--tab", target, "--json"], {
+    action: "drag",
+  });
   await expectEvalValue(runCliJson, target, "document.body.dataset.dropped", "true");
 
   const uploadDir = await createTempDir("firefox-cli-e2e-upload");
@@ -572,22 +554,11 @@ async function expectPhase8Commands(
     throw new Error(`Unexpected JPEG screenshot result: ${JSON.stringify(jpeg)}`);
   }
 
-  const download = await runCliJson<DownloadPayload>([
-    "download",
-    `${fixtureUrl}download.txt`,
-    "--json",
-  ]);
+  const download = await runCliJson<DownloadPayload>(["download", `${fixtureUrl}download.txt`, "--json"]);
   if (typeof download.id !== "number") {
     throw new Error(`Expected download id, got ${JSON.stringify(download)}`);
   }
-  await expectWait(runCliJson, [
-    "wait",
-    "--download",
-    String(download.id),
-    "--timeout",
-    "5000",
-    "--json",
-  ]);
+  await expectWait(runCliJson, ["wait", "--download", String(download.id), "--timeout", "5000", "--json"]);
 
   const clipboardWrite = await runCliJson<ClipboardPayload>([
     "clipboard",
@@ -612,13 +583,7 @@ async function expectPhase8Commands(
     "yes",
     "--json",
   ]);
-  const cookieGet = await runCliJson<CookiePayload>([
-    "cookies",
-    "get",
-    fixtureUrl,
-    "phase8",
-    "--json",
-  ]);
+  const cookieGet = await runCliJson<CookiePayload>(["cookies", "get", fixtureUrl, "phase8", "--json"]);
   if (cookieSet.ok !== true || cookieGet.cookie === null || cookieGet.cookie === undefined) {
     throw new Error(
       `Unexpected cookie roundtrip: set=${JSON.stringify(cookieSet)} get=${JSON.stringify(cookieGet)}`,
@@ -646,9 +611,7 @@ async function expectPhase8Commands(
   ]);
   if (storageSet.ok !== true || storageGet.value !== "yes") {
     throw new Error(
-      `Unexpected storage roundtrip: set=${JSON.stringify(
-        storageSet,
-      )} get=${JSON.stringify(storageGet)}`,
+      `Unexpected storage roundtrip: set=${JSON.stringify(storageSet)} get=${JSON.stringify(storageGet)}`,
     );
   }
 
@@ -700,14 +663,7 @@ async function expectPhase8Commands(
     "true",
   );
 
-  const urlDiff = await runCliJson<DiffPayload>([
-    "diff",
-    "url",
-    fixtureUrl,
-    "--tab",
-    target,
-    "--json",
-  ]);
+  const urlDiff = await runCliJson<DiffPayload>(["diff", "url", fixtureUrl, "--tab", target, "--json"]);
   const titleDiff = await runCliJson<DiffPayload>([
     "diff",
     "title",
@@ -736,10 +692,7 @@ async function expectPhase8Commands(
   }
 }
 
-async function expectCapabilities(
-  runCliJson: CliJsonRunner,
-  commands: readonly string[],
-): Promise<void> {
+async function expectCapabilities(runCliJson: CliJsonRunner, commands: readonly string[]): Promise<void> {
   const payload = await runCliJson<CapabilitiesPayload>(["capabilities", "--json"]);
   const capabilities = new Map(
     payload.capabilities?.map((capability) => [capability.command, capability.status]) ?? [],
@@ -774,11 +727,7 @@ async function expectBatch(runCliJson: CliJsonRunner, target: string): Promise<v
     target,
     "--json",
   ]);
-  if (
-    payload.ok !== true ||
-    payload.steps?.length !== 4 ||
-    payload.steps.some((step) => step.ok !== true)
-  ) {
+  if (payload.ok !== true || payload.steps?.length !== 4 || payload.steps.some((step) => step.ok !== true)) {
     throw new Error(`Unexpected batch result: ${JSON.stringify(payload)}`);
   }
   await expectGetValue(

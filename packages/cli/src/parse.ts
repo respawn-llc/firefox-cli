@@ -181,10 +181,7 @@ export function parseTargetValue(value: string | undefined): NonNullable<TargetS
   return prefix === "id" ? { kind: "id", id: parsed } : { kind: "index", index: parsed };
 }
 
-export function parseOptionalTabTarget(
-  value: string | undefined,
-  base: TargetSelector,
-): TargetSelector {
+export function parseOptionalTabTarget(value: string | undefined, base: TargetSelector): TargetSelector {
   if (value !== undefined) {
     return { tab: parseTargetValue(value) };
   }
@@ -192,10 +189,7 @@ export function parseOptionalTabTarget(
   return base.tab === undefined ? { tab: { kind: "active" } } : {};
 }
 
-export function parseOptionalWindowTarget(
-  value: string | undefined,
-  base: TargetSelector,
-): TargetSelector {
+export function parseOptionalWindowTarget(value: string | undefined, base: TargetSelector): TargetSelector {
   if (value !== undefined) {
     return { window: parseTargetValue(value) };
   }
@@ -250,9 +244,7 @@ export function sourceDragTarget(
       ? { sourceSelector: parsed.selector ?? value }
       : { sourceRef: parsed.ref };
   }
-  return parsed.ref === undefined
-    ? { targetSelector: parsed.selector ?? value }
-    : { targetRef: parsed.ref };
+  return parsed.ref === undefined ? { targetSelector: parsed.selector ?? value } : { targetRef: parsed.ref };
 }
 
 export function hasOption(args: readonly string[], option: string): boolean {
@@ -378,10 +370,7 @@ export function readFlagValue(args: readonly string[], index: number, flag: stri
   return value;
 }
 
-export function getOptionValue(
-  args: readonly string[],
-  names: readonly string[],
-): string | undefined {
+export function getOptionValue(args: readonly string[], names: readonly string[]): string | undefined {
   for (let index = 0; index < args.length; index += 1) {
     if (names.includes(args[index] ?? "")) {
       const value = args[index + 1];

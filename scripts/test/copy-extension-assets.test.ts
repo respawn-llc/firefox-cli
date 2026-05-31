@@ -10,9 +10,7 @@ describe("copyExtensionAssets", () => {
 
     await copyExtensionAssets({ sourceDir, outputDir, version: "1.2.3" });
 
-    await expect(readFile(join(outputDir, "manifest.json"), "utf8")).resolves.toContain(
-      '"version": "1.2.3"',
-    );
+    await expect(readFile(join(outputDir, "manifest.json"), "utf8")).resolves.toContain('"version": "1.2.3"');
   });
 
   it("rejects malformed source extension manifest JSON", async () => {

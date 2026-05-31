@@ -72,10 +72,7 @@ function findEditableHost(options: ActionOptions, element: Element): HTMLElement
     return undefined;
   }
 
-  if (
-    element instanceof view.HTMLInputElement &&
-    isEditableInputType(element.getAttribute("type"))
-  ) {
+  if (element instanceof view.HTMLInputElement && isEditableInputType(element.getAttribute("type"))) {
     return element;
   }
 
@@ -109,8 +106,7 @@ function isEditableInputType(type: string | null): boolean {
 function insertTextValue(element: HTMLElement, text: string): void {
   if (isEditableValueElement(element)) {
     const value = element.value;
-    const start =
-      typeof element.selectionStart === "number" ? element.selectionStart : value.length;
+    const start = typeof element.selectionStart === "number" ? element.selectionStart : value.length;
     const end = typeof element.selectionEnd === "number" ? element.selectionEnd : start;
     element.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
     setSelection(element, start + text.length);

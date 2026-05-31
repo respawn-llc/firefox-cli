@@ -21,15 +21,13 @@ export const gatedCapabilities: readonly GatedCapabilitySummary[] = [
   {
     command: "quit",
     status: "unsupported",
-    reason:
-      "quit is unsupported because firefox-cli must not terminate the user's Firefox process.",
+    reason: "quit is unsupported because firefox-cli must not terminate the user's Firefox process.",
     cliCommands: ["quit"],
   },
   {
     command: "exit",
     status: "unsupported",
-    reason:
-      "exit is unsupported because firefox-cli must not terminate the user's Firefox process.",
+    reason: "exit is unsupported because firefox-cli must not terminate the user's Firefox process.",
     cliCommands: ["exit"],
   },
   {

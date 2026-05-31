@@ -3,15 +3,7 @@ import { z } from "zod";
 import { waitElementSummarySchema } from "../content.js";
 import { resolvedTargetSchema, targetSelectorSchema } from "../target.js";
 
-export const findKinds = [
-  "role",
-  "text",
-  "label",
-  "placeholder",
-  "alt",
-  "title",
-  "testid",
-] as const;
+export const findKinds = ["role", "text", "label", "placeholder", "alt", "title", "testid"] as const;
 export const findKindSchema = z.enum(findKinds);
 export type FindKind = z.infer<typeof findKindSchema>;
 

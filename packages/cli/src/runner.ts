@@ -29,10 +29,7 @@ const gatedCapabilitiesByCommand = new Map(
   gatedCapabilities.map((capability) => [capability.command, capability] as const),
 );
 
-export async function runCli(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+export async function runCli(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   try {
     return await runCliOrThrow(args, dependencies);
   } catch (error) {
@@ -48,10 +45,7 @@ export async function runCli(
   }
 }
 
-async function runCliOrThrow(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+async function runCliOrThrow(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   if (args.includes("--version") || args.includes("-V")) {
     return ok(`${dependencies.version}\n`);
   }

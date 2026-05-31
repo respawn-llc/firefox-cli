@@ -22,11 +22,7 @@ export function createFindResult(
   };
 }
 
-function matchesFindParams(
-  element: Element,
-  params: FindParams,
-  semantics: SnapshotSemantics,
-): boolean {
+function matchesFindParams(element: Element, params: FindParams, semantics: SnapshotSemantics): boolean {
   const value = params.value.toLowerCase();
   if (params.kind === "role") {
     return semantics.getRole(element).toLowerCase() === value;

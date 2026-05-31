@@ -35,20 +35,13 @@ import {
   buildStorageRequest,
 } from "./commands/content.js";
 import { buildEvalRequest } from "./commands/eval.js";
-import {
-  buildCapabilitiesRequest,
-  buildNavigationRequest,
-  buildOpenRequest,
-} from "./commands/navigation.js";
+import { buildCapabilitiesRequest, buildNavigationRequest, buildOpenRequest } from "./commands/navigation.js";
 import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { cliResponseFormatters } from "./format.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
-import {
-  parseCliRouteArgv as parseArgvWithRouteContract,
-  routeParserSpecs,
-} from "./argv-contracts.js";
+import { parseCliRouteArgv as parseArgvWithRouteContract, routeParserSpecs } from "./argv-contracts.js";
 import { getPositionals } from "./parse.js";
 import type {
   CliRequestBuilder,
@@ -58,9 +51,7 @@ import type {
 } from "./types.js";
 
 const protocolCliRouteEntries = getCliRouteEntries();
-const protocolCliRouteEntriesById = new Map(
-  protocolCliRouteEntries.map((entry) => [entry.route.id, entry]),
-);
+const protocolCliRouteEntriesById = new Map(protocolCliRouteEntries.map((entry) => [entry.route.id, entry]));
 
 export const unsupportedCliCommands = new Map(
   gatedCapabilities.flatMap((capability) =>
@@ -80,26 +71,10 @@ const routeFormatterSpecs = {
   "tab.new": routeFormatter("tab.new", "tab-target", cliResponseFormatters["tab-target"]),
   "tab.select": routeFormatter("tab.select", "tab-target", cliResponseFormatters["tab-target"]),
   "tab.close": routeFormatter("tab.close", "tab-close", cliResponseFormatters["tab-close"]),
-  "window.list": routeFormatter(
-    "windows.list",
-    "window-list",
-    cliResponseFormatters["window-list"],
-  ),
-  "window.new": routeFormatter(
-    "window.new",
-    "window-target",
-    cliResponseFormatters["window-target"],
-  ),
-  "window.select": routeFormatter(
-    "window.select",
-    "window-target",
-    cliResponseFormatters["window-target"],
-  ),
-  "window.close": routeFormatter(
-    "window.close",
-    "window-close",
-    cliResponseFormatters["window-close"],
-  ),
+  "window.list": routeFormatter("windows.list", "window-list", cliResponseFormatters["window-list"]),
+  "window.new": routeFormatter("window.new", "window-target", cliResponseFormatters["window-target"]),
+  "window.select": routeFormatter("window.select", "window-target", cliResponseFormatters["window-target"]),
+  "window.close": routeFormatter("window.close", "window-close", cliResponseFormatters["window-close"]),
   open: routeFormatter("open", "tab-target", cliResponseFormatters["tab-target"]),
   back: routeFormatter("back", "tab-target", cliResponseFormatters["tab-target"]),
   forward: routeFormatter("forward", "tab-target", cliResponseFormatters["tab-target"]),
@@ -128,11 +103,7 @@ const routeFormatterSpecs = {
   errors: routeFormatter("errors", "json-object", cliResponseFormatters["json-object"]),
   highlight: routeFormatter("highlight", "json-object", cliResponseFormatters["json-object"]),
   pdf: routeFormatter("pdf", "json-object", cliResponseFormatters["json-object"]),
-  "set.viewport": routeFormatter(
-    "set.viewport",
-    "json-object",
-    cliResponseFormatters["json-object"],
-  ),
+  "set.viewport": routeFormatter("set.viewport", "json-object", cliResponseFormatters["json-object"]),
   diff: routeFormatter("diff", "json-object", cliResponseFormatters["json-object"]),
   batch: routeFormatter("batch", "batch", cliResponseFormatters.batch),
   click: routeFormatter("click", "action", cliResponseFormatters.action),
@@ -143,11 +114,7 @@ const routeFormatterSpecs = {
   type: routeFormatter("type", "action", cliResponseFormatters.action),
   press: routeFormatter("press", "action", cliResponseFormatters.action),
   "keyboard.type": routeFormatter("keyboard.type", "action", cliResponseFormatters.action),
-  "keyboard.inserttext": routeFormatter(
-    "keyboard.inserttext",
-    "action",
-    cliResponseFormatters.action,
-  ),
+  "keyboard.inserttext": routeFormatter("keyboard.inserttext", "action", cliResponseFormatters.action),
   check: routeFormatter("check", "action", cliResponseFormatters.action),
   uncheck: routeFormatter("uncheck", "action", cliResponseFormatters.action),
   select: routeFormatter("select", "action", cliResponseFormatters.action),
@@ -198,11 +165,7 @@ function bindCliRoute<RouteId extends keyof RouteFormatterSpecById>(
 }
 
 export const cliRouteBindings = {
-  capabilities: bindCliRoute(
-    "capabilities",
-    "firefox-cli capabilities [--json]",
-    buildCapabilitiesRequest,
-  ),
+  capabilities: bindCliRoute("capabilities", "firefox-cli capabilities [--json]", buildCapabilitiesRequest),
   "tab.list": bindCliRoute("tab.list", "firefox-cli tab [--json]", buildTabsRequest),
   "tab.new": bindCliRoute("tab.new", "firefox-cli tab new [url] [--json]", buildTabsRequest),
   "tab.select": bindCliRoute(
@@ -210,17 +173,9 @@ export const cliRouteBindings = {
     "firefox-cli tab select [target-or-url] [--json]",
     buildTabsRequest,
   ),
-  "tab.close": bindCliRoute(
-    "tab.close",
-    "firefox-cli tab close [target-or-url] [--json]",
-    buildTabsRequest,
-  ),
+  "tab.close": bindCliRoute("tab.close", "firefox-cli tab close [target-or-url] [--json]", buildTabsRequest),
   "window.list": bindCliRoute("window.list", "firefox-cli window [--json]", buildWindowsRequest),
-  "window.new": bindCliRoute(
-    "window.new",
-    "firefox-cli window new [url] [--json]",
-    buildWindowsRequest,
-  ),
+  "window.new": bindCliRoute("window.new", "firefox-cli window new [url] [--json]", buildWindowsRequest),
   "window.select": bindCliRoute(
     "window.select",
     "firefox-cli window select [target-or-url] [--json]",
@@ -244,22 +199,10 @@ export const cliRouteBindings = {
   get: bindCliRoute("get", "firefox-cli get <kind> [selector|@ref] [--json]", buildGetRequest),
   is: bindCliRoute("is", "firefox-cli is <kind> <selector|@ref> [--json]", buildIsRequest),
   wait: bindCliRoute("wait", "firefox-cli wait <condition> [--json]", buildWaitRequest),
-  eval: bindCliRoute(
-    "eval",
-    "firefox-cli eval <js> | --stdin | -b base64 [--json]",
-    buildEvalRequest,
-  ),
-  screenshot: bindCliRoute(
-    "screenshot",
-    "firefox-cli screenshot [path] [--json]",
-    buildScreenshotRequest,
-  ),
+  eval: bindCliRoute("eval", "firefox-cli eval <js> | --stdin | -b base64 [--json]", buildEvalRequest),
+  screenshot: bindCliRoute("screenshot", "firefox-cli screenshot [path] [--json]", buildScreenshotRequest),
   drag: bindCliRoute("drag", "firefox-cli drag <source> <target> [--json]", buildDragRequest),
-  upload: bindCliRoute(
-    "upload",
-    "firefox-cli upload <selector|@ref> <file...> [--json]",
-    buildUploadRequest,
-  ),
+  upload: bindCliRoute("upload", "firefox-cli upload <selector|@ref> <file...> [--json]", buildUploadRequest),
   mouse: bindCliRoute(
     "mouse",
     "firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]",
@@ -270,23 +213,11 @@ export const cliRouteBindings = {
     "firefox-cli keydown <key> [selector|@ref] [--json]",
     buildKeyEventRequest,
   ),
-  keyup: bindCliRoute(
-    "keyup",
-    "firefox-cli keyup <key> [selector|@ref] [--json]",
-    buildKeyEventRequest,
-  ),
+  keyup: bindCliRoute("keyup", "firefox-cli keyup <key> [selector|@ref] [--json]", buildKeyEventRequest),
   find: bindCliRoute("find", "firefox-cli find <kind> <value> [--json]", buildFindRequest),
   frame: bindCliRoute("frame", "firefox-cli frame [--json]", buildFrameRequest),
-  download: bindCliRoute(
-    "download",
-    "firefox-cli download <url> [filename] [--json]",
-    buildDownloadRequest,
-  ),
-  dialog: bindCliRoute(
-    "dialog",
-    "firefox-cli dialog status|accept|dismiss [--json]",
-    buildDialogRequest,
-  ),
+  download: bindCliRoute("download", "firefox-cli download <url> [filename] [--json]", buildDownloadRequest),
+  dialog: bindCliRoute("dialog", "firefox-cli dialog status|accept|dismiss [--json]", buildDialogRequest),
   clipboard: bindCliRoute(
     "clipboard",
     "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]",
@@ -320,46 +251,18 @@ export const cliRouteBindings = {
     "firefox-cli set viewport <width> <height> [--json]",
     buildSetViewportRequest,
   ),
-  diff: bindCliRoute(
-    "diff",
-    "firefox-cli diff url|title|snapshot <expected> [--json]",
-    buildDiffRequest,
-  ),
-  batch: bindCliRoute(
-    "batch",
-    "firefox-cli batch <json> | --stdin [--bail] [--json]",
-    buildBatchRequest,
-  ),
-  click: bindCliRoute(
-    "click",
-    "firefox-cli click <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
+  diff: bindCliRoute("diff", "firefox-cli diff url|title|snapshot <expected> [--json]", buildDiffRequest),
+  batch: bindCliRoute("batch", "firefox-cli batch <json> | --stdin [--bail] [--json]", buildBatchRequest),
+  click: bindCliRoute("click", "firefox-cli click <selector|@ref> [--json]", buildElementActionRequest),
   dblclick: bindCliRoute(
     "dblclick",
     "firefox-cli dblclick <selector|@ref> [--json]",
     buildElementActionRequest,
   ),
-  focus: bindCliRoute(
-    "focus",
-    "firefox-cli focus <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
-  hover: bindCliRoute(
-    "hover",
-    "firefox-cli hover <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
-  fill: bindCliRoute(
-    "fill",
-    "firefox-cli fill <selector|@ref> <text> [--json]",
-    buildTextActionRequest,
-  ),
-  type: bindCliRoute(
-    "type",
-    "firefox-cli type <selector|@ref> <text> [--json]",
-    buildTextActionRequest,
-  ),
+  focus: bindCliRoute("focus", "firefox-cli focus <selector|@ref> [--json]", buildElementActionRequest),
+  hover: bindCliRoute("hover", "firefox-cli hover <selector|@ref> [--json]", buildElementActionRequest),
+  fill: bindCliRoute("fill", "firefox-cli fill <selector|@ref> <text> [--json]", buildTextActionRequest),
+  type: bindCliRoute("type", "firefox-cli type <selector|@ref> <text> [--json]", buildTextActionRequest),
   press: bindCliRoute("press", "firefox-cli press <key> [--json]", buildPressRequest),
   "keyboard.type": bindCliRoute(
     "keyboard.type",
@@ -371,16 +274,8 @@ export const cliRouteBindings = {
     "firefox-cli keyboard inserttext <text> [--json]",
     buildKeyboardRequest,
   ),
-  check: bindCliRoute(
-    "check",
-    "firefox-cli check <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
-  uncheck: bindCliRoute(
-    "uncheck",
-    "firefox-cli uncheck <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
+  check: bindCliRoute("check", "firefox-cli check <selector|@ref> [--json]", buildElementActionRequest),
+  uncheck: bindCliRoute("uncheck", "firefox-cli uncheck <selector|@ref> [--json]", buildElementActionRequest),
   select: bindCliRoute(
     "select",
     "firefox-cli select <selector|@ref> <value...> [--json]",
@@ -425,17 +320,11 @@ export function validateCliRouteArgv(binding: CliRouteBinding, argv: readonly st
   parseCliRouteArgv(binding, argv);
 }
 
-export function cliRouteWantsJsonOutput(
-  binding: CliRouteBinding,
-  argv: readonly string[],
-): boolean {
+export function cliRouteWantsJsonOutput(binding: CliRouteBinding, argv: readonly string[]): boolean {
   return parseCliRouteArgv(binding, argv).json;
 }
 
-function parseCliRouteArgv(
-  binding: CliRouteBinding,
-  argv: readonly string[],
-): { readonly json: boolean } {
+function parseCliRouteArgv(binding: CliRouteBinding, argv: readonly string[]): { readonly json: boolean } {
   return parseArgvWithRouteContract(binding.parser, binding.route.id, argv);
 }
 

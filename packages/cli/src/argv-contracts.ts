@@ -25,16 +25,7 @@ export const routeParserSpecs = {
   get: parser("get", { valueOptions: ["--generation", "--max-output"] }),
   is: parser("is", { valueOptions: ["--generation"] }),
   wait: parser("wait", {
-    valueOptions: [
-      "--text",
-      "--url",
-      "--fn",
-      "--load",
-      "--state",
-      "--generation",
-      "--timeout",
-      "--interval",
-    ],
+    valueOptions: ["--text", "--url", "--fn", "--load", "--state", "--generation", "--timeout", "--interval"],
     optionalValueOptions: ["--download"],
   }),
   eval: parser("eval", {
@@ -44,13 +35,7 @@ export const routeParserSpecs = {
   }),
   screenshot: parser("screenshot", {
     flags: ["--full"],
-    valueOptions: [
-      "--timeout",
-      "--max-output",
-      "--format",
-      "--screenshot-format",
-      "--screenshot-quality",
-    ],
+    valueOptions: ["--timeout", "--max-output", "--format", "--screenshot-format", "--screenshot-quality"],
   }),
   drag: parser("drag"),
   upload: parser("upload", {
@@ -273,10 +258,7 @@ function shouldTreatKnownOptionAsPayload(
   return currentPositionals + Math.max(0, args.length - index - width) < payload.minPositionals;
 }
 
-function canTreatUnknownOptionAsPayload(
-  parserSpec: CliRouteParserSpec,
-  currentPositionals: number,
-): boolean {
+function canTreatUnknownOptionAsPayload(parserSpec: CliRouteParserSpec, currentPositionals: number): boolean {
   const payload = parserSpec.payload;
   return (
     payload !== undefined &&

@@ -20,10 +20,7 @@ export function uploadAction(options: ActionOptions, params: UploadParams): Cont
   assertVisible(options, resolution.element);
   assertEnabled(options, resolution.element);
   const view = requireElementWindow(resolution.element);
-  if (
-    !(resolution.element instanceof view.HTMLInputElement) ||
-    resolution.element.type !== "file"
-  ) {
+  if (!(resolution.element instanceof view.HTMLInputElement) || resolution.element.type !== "file") {
     throw options.createError("ACTION_REJECTED", "Upload action requires a file input.");
   }
   const dataTransfer = createDomDataTransfer(resolution.element);

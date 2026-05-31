@@ -25,10 +25,7 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
       const timeoutMs = request.params.timeoutMs;
       await delay(Math.min(durationMs, timeoutMs ?? durationMs));
       if (timeoutMs !== undefined && durationMs > timeoutMs) {
-        throw new BrowserCommandError(
-          "TIMEOUT",
-          `Timed out after ${timeoutMs}ms waiting ${durationMs}ms.`,
-        );
+        throw new BrowserCommandError("TIMEOUT", `Timed out after ${timeoutMs}ms waiting ${durationMs}ms.`);
       }
       return createOkResponse(request, {
         kind: request.params.kind,
@@ -41,12 +38,8 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
       const startedAt = Date.now();
       const timeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
       const download = await adapter.waitForDownload({
-        ...(request.params.downloadId === undefined
-          ? {}
-          : { downloadId: request.params.downloadId }),
-        ...(request.params.filenameGlob === undefined
-          ? {}
-          : { filenameGlob: request.params.filenameGlob }),
+        ...(request.params.downloadId === undefined ? {} : { downloadId: request.params.downloadId }),
+        ...(request.params.filenameGlob === undefined ? {} : { filenameGlob: request.params.filenameGlob }),
         timeoutMs,
         intervalMs: request.params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS,
       });

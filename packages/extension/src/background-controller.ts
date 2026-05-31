@@ -234,9 +234,7 @@ export class FirefoxCliBackgroundController {
       });
   }
 
-  #sendNativeRequest<C extends CommandId>(
-    request: RequestEnvelope<C>,
-  ): Promise<ResponseEnvelope<C>> {
+  #sendNativeRequest<C extends CommandId>(request: RequestEnvelope<C>): Promise<ResponseEnvelope<C>> {
     if (this.#connection.stopped) {
       return Promise.resolve(
         createErrorResponse(
@@ -263,8 +261,7 @@ export class FirefoxCliBackgroundController {
       ) as Promise<ResponseEnvelope<C>>;
     }
 
-    const session =
-      request.command === "hello" ? undefined : this.#nativeSession.getNegotiatedSession();
+    const session = request.command === "hello" ? undefined : this.#nativeSession.getNegotiatedSession();
     if (session !== undefined && !session.ok) {
       return Promise.resolve(
         createErrorResponse(request.id, session.error, request.protocolVersion),
@@ -342,11 +339,7 @@ export class FirefoxCliBackgroundController {
     const request = this.#nativeSession.parseRequest(message);
     if (!request.ok) {
       const response = this.#nativeSession.createStateErrorResponse(message, request.error);
-      this.#nativeSession.markRequestIncompatibleIfNeeded(
-        message,
-        request.error.code,
-        request.error,
-      );
+      this.#nativeSession.markRequestIncompatibleIfNeeded(message, request.error.code, request.error);
       this.#connection.postMessage(response);
       return;
     }
@@ -358,11 +351,7 @@ export class FirefoxCliBackgroundController {
     }
 
     this.#connection.postMessage(
-      await this.#requestForwarder.forward(
-        request.value,
-        this.#pairing.approved,
-        prepared.protocolSession,
-      ),
+      await this.#requestForwarder.forward(request.value, this.#pairing.approved, prepared.protocolSession),
     );
   }
 

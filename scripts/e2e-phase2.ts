@@ -41,11 +41,7 @@ try {
     throw new Error("Native host stdio was not available.");
   }
   const reader = new NativeMessagingFrameReader(nativeHost.child.stdout);
-  await raceWithProcessFailure(
-    nativeHost,
-    waitForEndpoint(e2ePlan.endpoint),
-    "phase2 native host endpoint",
-  );
+  await raceWithProcessFailure(nativeHost, waitForEndpoint(e2ePlan.endpoint), "phase2 native host endpoint");
   const approve = createRequest("pair.approve", {}, "approve-1");
   nativeHost.child.stdin.write(encodeNativeMessageFrame(approve));
   const approval = (await withTimeout(reader.read(), {

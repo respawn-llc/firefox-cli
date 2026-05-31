@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["bun", "node", "vitest"]
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "../vitest.workspace.ts"]
 }

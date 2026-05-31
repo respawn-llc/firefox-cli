@@ -11,12 +11,7 @@ import { NativeHostBroker } from "./host-broker.js";
 import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
 import { attachNativeMessagingConnection } from "./native-host-runtime.js";
 import { PersistedJsonFileError } from "./persisted-json.js";
-import {
-  approvePairing,
-  verifyPairStateStatus,
-  type PairState,
-  type PairStateStatus,
-} from "./pair-state.js";
+import { approvePairing, verifyPairStateStatus, type PairState, type PairStateStatus } from "./pair-state.js";
 
 describe("native host runtime", () => {
   it("bridges broker requests to the extension over native messaging frames", async () => {
@@ -502,9 +497,7 @@ describe("native host runtime", () => {
         },
       },
     });
-    await expect(
-      broker.handleCliRequest(createRequest("noop", {}, "cli-invalid")),
-    ).resolves.toMatchObject({
+    await expect(broker.handleCliRequest(createRequest("noop", {}, "cli-invalid"))).resolves.toMatchObject({
       id: "cli-invalid",
       ok: false,
       error: { code: "PAIRING_MISMATCH" },

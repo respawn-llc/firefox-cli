@@ -88,10 +88,5 @@ function getRequestProtocolRequirementForSubject(
 function hasSteps(params: unknown): params is {
   readonly steps: readonly { readonly command: string; readonly params: unknown }[];
 } {
-  return (
-    typeof params === "object" &&
-    params !== null &&
-    "steps" in params &&
-    Array.isArray(params.steps)
-  );
+  return typeof params === "object" && params !== null && "steps" in params && Array.isArray(params.steps);
 }

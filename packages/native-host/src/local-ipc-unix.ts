@@ -30,15 +30,9 @@ export async function unlinkStaleUnixSocketAfterProbe(socketPath: string): Promi
     throw error;
   }
   if (!stats.isSocket() || stats.isSymbolicLink()) {
-    throw new LocalIpcError(
-      "SOCKET_FAILED",
-      `IPC endpoint exists but is not a socket: ${socketPath}`,
-    );
+    throw new LocalIpcError("SOCKET_FAILED", `IPC endpoint exists but is not a socket: ${socketPath}`);
   }
-  validateCurrentUserOwner(
-    stats.uid,
-    `IPC endpoint is not owned by the current user: ${socketPath}`,
-  );
+  validateCurrentUserOwner(stats.uid, `IPC endpoint is not owned by the current user: ${socketPath}`);
 
   const probe = await probeUnixSocket(socketPath);
   if (probe === "active") {
@@ -80,10 +74,7 @@ async function validateCurrentUserDirectory(directory: string): Promise<void> {
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
     throw new LocalIpcError("SOCKET_FAILED", `IPC directory is not a real directory: ${directory}`);
   }
-  validateCurrentUserOwner(
-    stats.uid,
-    `IPC directory is not owned by the current user: ${directory}`,
-  );
+  validateCurrentUserOwner(stats.uid, `IPC directory is not owned by the current user: ${directory}`);
   if (process.platform !== "win32" && (stats.mode & 0o777) !== 0o700) {
     await chmod(directory, 0o700);
   }

@@ -72,9 +72,7 @@ export class NativeSessionService {
 
   parseRequest(message: unknown) {
     return parseBoundaryRequest("host-to-extension", message, {
-      ...(this.#state.state === "negotiated"
-        ? { protocolVersion: this.#state.session.protocolVersion }
-        : {}),
+      ...(this.#state.state === "negotiated" ? { protocolVersion: this.#state.session.protocolVersion } : {}),
       hello: {
         local: localProtocolVersionRange,
         expectedPeerComponent: "native-host",

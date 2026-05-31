@@ -5,11 +5,7 @@ import { PRODUCT_NAME, PROTOCOL_MAX_VERSION, PROTOCOL_MIN_VERSION } from "./cons
 export const componentSchema = z.enum(["cli", "native-host", "extension", "content-script"]);
 export type Component = z.infer<typeof componentSchema>;
 
-export const boundarySchema = z.enum([
-  "cli-to-host",
-  "host-to-extension",
-  "extension-to-content-script",
-]);
+export const boundarySchema = z.enum(["cli-to-host", "host-to-extension", "extension-to-content-script"]);
 export type Boundary = z.infer<typeof boundarySchema>;
 
 export const capabilityStatuses = ["mvp", "prototype-gated", "deferred", "unsupported"] as const;
@@ -193,10 +189,7 @@ export function createLocalComponentIdentity(
   };
 }
 
-export function isProtocolVersionInRange(
-  protocolVersion: number,
-  range: ProtocolVersionRange,
-): boolean {
+export function isProtocolVersionInRange(protocolVersion: number, range: ProtocolVersionRange): boolean {
   return protocolVersion >= range.protocolMin && protocolVersion <= range.protocolMax;
 }
 

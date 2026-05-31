@@ -1,9 +1,6 @@
 import { createRequest } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
-import {
-  type ContentScriptDeliveryError,
-  deliverContentScriptRequest,
-} from "./content-script-delivery.js";
+import { type ContentScriptDeliveryError, deliverContentScriptRequest } from "./content-script-delivery.js";
 
 describe("content script delivery", () => {
   it("injects and retries only when the content script is not loaded", async () => {

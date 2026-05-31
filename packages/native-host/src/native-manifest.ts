@@ -99,16 +99,11 @@ export function planNativeMessagingManifest(
   return createManifestPlan(options);
 }
 
-export async function writeNativeMessagingManifest(
-  plan: NativeMessagingManifestPlan,
-): Promise<void> {
+export async function writeNativeMessagingManifest(plan: NativeMessagingManifestPlan): Promise<void> {
   await writeFileAtomically(plan.manifestPath, `${JSON.stringify(plan.manifest, null, 2)}\n`);
 }
 
-export function parseNativeMessagingManifestJson(
-  content: string,
-  filePath: string,
-): NativeMessagingManifest {
+export function parseNativeMessagingManifestJson(content: string, filePath: string): NativeMessagingManifest {
   return parsePersistedJson(content, nativeMessagingManifestSchema, {
     filePath,
     label: "Native messaging manifest",
@@ -155,11 +150,7 @@ function getPerUserManifestPath(
   options: { readonly appDataDir?: string },
 ): string {
   if (platform === "darwin") {
-    return join(
-      homeDir,
-      "Library/Application Support/Mozilla/NativeMessagingHosts",
-      `${name}.json`,
-    );
+    return join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${name}.json`);
   }
 
   if (platform === "linux") {

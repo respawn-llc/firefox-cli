@@ -23,10 +23,7 @@ describe("source size check", () => {
     await expect(
       runSourceSizeCheck({
         files: [
-          productionFile(
-            "packages/cli/src/route-registry.ts",
-            sourceSizePolicy.productionMaxLines + 1,
-          ),
+          productionFile("packages/cli/src/route-registry.ts", sourceSizePolicy.productionMaxLines + 1),
         ],
         write: (message) => writes.push(message),
       }),
@@ -39,20 +36,14 @@ describe("source size check", () => {
     const report = await runSourceSizeCheck({
       files: [
         productionFile("packages/cli/src/route-registry.ts", sourceSizePolicy.productionMaxLines),
-        testSupportFile(
-          "packages/cli/src/cli.test.ts",
-          sourceSizePolicy.testSupportReviewTargetLines + 1,
-        ),
+        testSupportFile("packages/cli/src/cli.test.ts", sourceSizePolicy.testSupportReviewTargetLines + 1),
       ],
       write: () => undefined,
     });
 
     expect(report.productionViolations).toEqual([]);
     expect(report.oversizedTestSupport).toEqual([
-      testSupportFile(
-        "packages/cli/src/cli.test.ts",
-        sourceSizePolicy.testSupportReviewTargetLines + 1,
-      ),
+      testSupportFile("packages/cli/src/cli.test.ts", sourceSizePolicy.testSupportReviewTargetLines + 1),
     ]);
   });
 

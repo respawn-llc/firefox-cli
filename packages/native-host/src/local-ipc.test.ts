@@ -2,12 +2,7 @@ import { dirname, join } from "node:path";
 import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer, Socket, type Server } from "node:net";
 import { createTempDir } from "@firefox-cli/test-support";
-import {
-  PROTOCOL_VERSION,
-  createOkResponse,
-  createRequest,
-  kernelCapabilities,
-} from "@firefox-cli/protocol";
+import { PROTOCOL_VERSION, createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { FIREFOX_CLI_EXTENSION_ID } from "./host-launch.js";
 import { NativeHostBroker } from "./host-broker.js";
@@ -148,9 +143,7 @@ describe("local IPC", () => {
         message: "Local IPC authentication failed.",
       },
     });
-    await expect(
-      sendLocalIpcRequest(endpoint, request, { authToken: "wrong-token" }),
-    ).resolves.toEqual({
+    await expect(sendLocalIpcRequest(endpoint, request, { authToken: "wrong-token" })).resolves.toEqual({
       protocolVersion: request.protocolVersion,
       id: request.id,
       ok: false,
@@ -196,10 +189,7 @@ describe("local IPC", () => {
     servers.push(server);
     await server.start();
 
-    const response = await sendOversizedRawLocalIpcMessage(
-      endpoint,
-      MAX_LOCAL_IPC_MESSAGE_BYTES + 1,
-    );
+    const response = await sendOversizedRawLocalIpcMessage(endpoint, MAX_LOCAL_IPC_MESSAGE_BYTES + 1);
 
     expect(handled).toBe(false);
     expect(response).toMatchObject({
@@ -527,9 +517,7 @@ describe("local IPC", () => {
     });
     const request = createRequest("noop", {}, "timeout-negotiated");
 
-    await expect(
-      sendNegotiatedLocalIpcRequest(endpoint, request, { timeoutMs: 10 }),
-    ).resolves.toMatchObject({
+    await expect(sendNegotiatedLocalIpcRequest(endpoint, request, { timeoutMs: 10 })).resolves.toMatchObject({
       id: request.id,
       ok: false,
       error: { code: "TIMEOUT" },

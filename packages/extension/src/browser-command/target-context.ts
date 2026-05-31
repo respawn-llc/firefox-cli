@@ -27,9 +27,7 @@ export type BrowserTargetContext = {
   invalidate(): void;
 };
 
-export function createBrowserTargetContext(
-  adapter: BackgroundBrowserAdapter,
-): BrowserTargetContext {
+export function createBrowserTargetContext(adapter: BackgroundBrowserAdapter): BrowserTargetContext {
   let windows: Promise<readonly OrderedWindow[]> | undefined;
 
   const readWindows = () => {
@@ -49,15 +47,12 @@ export function createBrowserTargetContext(
     getWindows,
     resolveTarget: async (selector, options = {}) =>
       resolveTarget(await getWindows(options), selector, resolveTargetOptions(options)),
-    resolveWindow: async (selector, options = {}) =>
-      resolveWindow(await getWindows(options), selector),
+    resolveWindow: async (selector, options = {}) => resolveWindow(await getWindows(options), selector),
     resolveFreshTarget: async (selector, options = {}) => {
       windows = undefined;
-      return resolveTarget(await getWindows(options), selector, resolveTargetOptions(options))
-        .target;
+      return resolveTarget(await getWindows(options), selector, resolveTargetOptions(options)).target;
     },
-    findWindowById: async (windowId, options = {}) =>
-      findWindowById(await getWindows(options), windowId),
+    findWindowById: async (windowId, options = {}) => findWindowById(await getWindows(options), windowId),
     invalidate: () => {
       windows = undefined;
     },

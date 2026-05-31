@@ -49,9 +49,7 @@ export function createStorageResult(
   },
 ): StorageResult {
   const storage =
-    params.area === "local"
-      ? document.defaultView?.localStorage
-      : document.defaultView?.sessionStorage;
+    params.area === "local" ? document.defaultView?.localStorage : document.defaultView?.sessionStorage;
   if (storage === undefined) {
     throw new ContentSnapshotError("ACTION_REJECTED", "Storage is unavailable.");
   }

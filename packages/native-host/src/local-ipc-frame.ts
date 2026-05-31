@@ -1,9 +1,5 @@
 import type { Socket } from "node:net";
-import {
-  createErrorResponse,
-  type ProtocolError,
-  type ResponseEnvelope,
-} from "@firefox-cli/protocol";
+import { createErrorResponse, type ProtocolError, type ResponseEnvelope } from "@firefox-cli/protocol";
 import { BufferCursor } from "./buffer-cursor.js";
 import { MAX_NATIVE_MESSAGE_OUTGOING_BYTES } from "./native-messaging-frame.js";
 

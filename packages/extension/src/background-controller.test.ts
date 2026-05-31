@@ -222,11 +222,7 @@ describe("FirefoxCliBackgroundController", () => {
     controller.start();
     await completeNativeHello(port);
 
-    const request = createRequest(
-      "eval",
-      { script: "document.title", source: "argv" },
-      "sensitive-request",
-    );
+    const request = createRequest("eval", { script: "document.title", source: "argv" }, "sensitive-request");
     expect(isPrivilegeSensitiveRequest(request)).toBe(true);
     port.emitMessage(request);
     await flushPromises();
