@@ -1,7 +1,9 @@
-import type { z } from "zod";
-
 import type { ProtocolError, ParseResult } from "./core.js";
-import { targetSelectorSchema } from "./target.js";
+import {
+  safeParseBatchStepCommandParams,
+  safeParseCommandResult,
+  safeParseStrictCommandParams,
+} from "./command-validation.js";
 import type {
   CommandParams,
   CommandResult,
@@ -11,8 +13,6 @@ import type {
 import {
   batchStepResultSchema,
   batchStepSchema,
-  commandAcceptsProtocolBatchDefaultTarget,
-  commandSchemas,
   isBatchableCommandId,
   type CommandId,
 } from "./registry/index.js";
@@ -53,16 +53,6 @@ type CommandHandlerMapFactory<Args extends readonly unknown[]> = <
 ) => CommandHandlerMap<Commands[number], Args>;
 
 type AnyCommandHandlerMap = Partial<Record<CommandId, unknown>>;
-type SafeParse<T> =
-  | {
-      readonly success: true;
-      readonly data: T;
-    }
-  | {
-      readonly success: false;
-      readonly error: z.ZodError;
-    };
-
 type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) extends (
   value: infer Intersection,
 ) => void
@@ -108,7 +98,7 @@ export function dispatchCommandHandler<Commands extends CommandId, Args extends 
   request: RequestEnvelope<Commands>,
   ...args: Args
 ): Promise<ResponseEnvelope<Commands>> | ResponseEnvelope<Commands> {
-  const handler = handlers[request.command as Commands] as CommandHandler<Commands, Args>;
+  const handler = getCommandHandler(handlers, request.command);
   return handler(request, ...args);
 }
 
@@ -137,7 +127,7 @@ export function parseBatchStepAs<C extends CommandId>(
     });
   }
 
-  const params = parseCommandParams(command, parsed.data.params);
+  const params = safeParseBatchStepCommandParams(command, parsed.data.params);
   if (!params.success) {
     return failure("INVALID_ENVELOPE", "Batch step params are invalid.", {
       command,
@@ -185,7 +175,7 @@ export function parseBatchStepResultAs<C extends CommandId>(
     };
   }
 
-  const result = parseCommandResult(command, parsed.data.result);
+  const result = safeParseCommandResult(command, parsed.data.result);
   if (!result.success) {
     return failure("INVALID_RESPONSE", "Batch step result is invalid.", {
       command,
@@ -208,7 +198,7 @@ export function parseCommandParamsAs<C extends CommandId>(
   command: C,
   params: unknown,
 ): ParseResult<CommandParams<C>> {
-  const parsed = parseCommandParams(command, params);
+  const parsed = safeParseStrictCommandParams(command, params);
   if (!parsed.success) {
     return failure("INVALID_ENVELOPE", "Command params are invalid.", {
       command,
@@ -218,49 +208,11 @@ export function parseCommandParamsAs<C extends CommandId>(
   return { ok: true, value: parsed.data };
 }
 
-function parseCommandParams<C extends CommandId>(
-  command: C,
-  params: unknown,
-): SafeParse<CommandParams<C>> {
-  const schema = commandSchemas[command].params;
-  const parsed = schema.safeParse(params);
-  if (parsed.success || !commandAcceptsProtocolBatchDefaultTarget(command)) {
-    return parsed as SafeParse<CommandParams<C>>;
-  }
-
-  const fallbackParams = paramsWithDefaultTarget(params);
-  return (fallbackParams === undefined ? parsed : schema.safeParse(fallbackParams)) as SafeParse<
-    CommandParams<C>
-  >;
-}
-
-function parseCommandResult<C extends CommandId>(
-  command: C,
-  result: unknown,
-): SafeParse<CommandResult<C>> {
-  return commandSchemas[command].result.safeParse(result) as SafeParse<CommandResult<C>>;
-}
-
-function paramsWithDefaultTarget(params: unknown): unknown | undefined {
-  if (!isRecord(params)) {
-    return undefined;
-  }
-
-  if (params.target !== undefined) {
-    return undefined;
-  }
-
-  return {
-    ...params,
-    target: targetSelectorSchema.parse({
-      window: { kind: "active" },
-      tab: { kind: "active" },
-    }),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function getCommandHandler<Commands extends CommandId, Args extends readonly unknown[]>(
+  handlers: CommandHandlerMap<Commands, Args>,
+  command: CommandId,
+): CommandHandler<Commands, Args> {
+  return handlers[command as Commands] as CommandHandler<Commands, Args>;
 }
 
 function failure(

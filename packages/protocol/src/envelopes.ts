@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { safeParseCommandResult, safeParseStrictCommandParams } from "./command-validation.js";
 import { PROTOCOL_VERSION } from "./constants.js";
 import {
   boundarySchema,
@@ -20,7 +21,7 @@ import {
   getRequestProtocolCompatibility,
   type RequestProtocolCompatibility,
 } from "./protocol-compatibility.js";
-import { commandSchemas, isCommandId, type CommandId } from "./registry/index.js";
+import { isCommandId, type CommandId, type commandSchemas } from "./registry/index.js";
 
 export type {
   HelloRequestNegotiationOptions,
@@ -185,7 +186,7 @@ export function parseBoundaryRequest(
     });
   }
 
-  const params = commandSchemas[envelope.data.command].params.safeParse(envelope.data.params);
+  const params = safeParseStrictCommandParams(envelope.data.command, envelope.data.params);
   if (!params.success) {
     return failure("INVALID_ENVELOPE", "Command params are invalid.", {
       command: envelope.data.command,
@@ -270,7 +271,7 @@ export function parseBoundaryResponse(
   }
 
   if (envelope.data.ok) {
-    const result = commandSchemas[command].result.safeParse(envelope.data.result);
+    const result = safeParseCommandResult(command, envelope.data.result);
     if (!result.success) {
       return failure("INVALID_RESPONSE", "Command result is invalid.", {
         command,
@@ -312,7 +313,7 @@ export function parseBoundaryResponseForRequest<C extends CommandId>(
   raw: unknown,
   options?: ParseBoundaryResponseOptions,
 ): ParseResult<ResponseEnvelope<C>> {
-  return parseBoundaryResponse(boundary, request.command as C, raw, options);
+  return parseBoundaryResponse(boundary, requestCommand(request), raw, options);
 }
 
 export function createRequest<C extends CommandId>(
@@ -329,13 +330,7 @@ export function createOkResponse<C extends CommandId>(
   result: CommandResult<C>,
   protocolVersion: number = request.protocolVersion,
 ): ResponseEnvelope<C> {
-  const envelope: OkResponseEnvelopeFor<C> = {
-    protocolVersion,
-    id: request.id,
-    ok: true,
-    result,
-  };
-  return envelope as ResponseEnvelope<C>;
+  return createValidatedOkResponseEnvelopeForRequest(request, result, protocolVersion);
 }
 
 export function createErrorResponse(
@@ -351,7 +346,7 @@ export function createErrorResponseForRequest<C extends CommandId>(
   error: ProtocolError,
   protocolVersion: number = request.protocolVersion,
 ): ResponseEnvelope<C> {
-  return createValidatedErrorResponseEnvelope(request.id, error, protocolVersion);
+  return createValidatedErrorResponseEnvelope<C>(request.id, error, protocolVersion);
 }
 
 export function withRequestProtocolVersion<C extends CommandId>(
@@ -369,9 +364,7 @@ export function withResponseProtocolVersion<C extends CommandId>(
   response: ResponseEnvelope<C>,
   protocolVersion: number,
 ): ResponseEnvelope<C> {
-  return response.ok
-    ? createOkResponse(request, response.result as CommandResult<C>, protocolVersion)
-    : createValidatedErrorResponseEnvelope<C>(request.id, response.error, protocolVersion);
+  return createValidatedResponseEnvelopeWithVersion(request, response, protocolVersion);
 }
 
 export function createProtocolSession(protocolVersion: number): ProtocolSession {
@@ -435,6 +428,42 @@ function createValidatedOkResponseEnvelope<C extends CommandId>(
     result,
   };
   return envelope as ResponseEnvelope<C>;
+}
+
+function createValidatedOkResponseEnvelopeForRequest<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  result: CommandResult<C>,
+  protocolVersion: number,
+): ResponseEnvelope<C> {
+  const envelope: OkResponseEnvelopeFor<C> = {
+    protocolVersion,
+    id: request.id,
+    ok: true,
+    result,
+  };
+  return envelope as ResponseEnvelope<C>;
+}
+
+function createValidatedResponseEnvelopeWithVersion<C extends CommandId>(
+  request: RequestEnvelope<C>,
+  response: ResponseEnvelope<C>,
+  protocolVersion: number,
+): ResponseEnvelope<C> {
+  if (!response.ok) {
+    return createValidatedErrorResponseEnvelope<C>(request.id, response.error, protocolVersion);
+  }
+
+  const envelope: OkResponseEnvelopeFor<C> = {
+    protocolVersion,
+    id: request.id,
+    ok: true,
+    result: response.result as CommandResult<C>,
+  };
+  return envelope as ResponseEnvelope<C>;
+}
+
+function requestCommand<C extends CommandId>(request: RequestEnvelope<C>): C {
+  return request.command as C;
 }
 
 function createValidatedErrorResponseEnvelope<C extends CommandId = CommandId>(

@@ -37,6 +37,7 @@ import {
   parseBoundaryResponse,
   parseBatchStepAs,
   parseBatchStepResultAs,
+  safeParseStrictCommandParams,
   type Boundary,
   type CliRouteMetadata,
   type CommandId,
@@ -697,6 +698,22 @@ describe("parseBoundaryRequest", () => {
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("INVALID_ENVELOPE");
     }
+  });
+
+  it("uses strict command params for non-batch request envelopes", () => {
+    const parsed = parseBoundaryRequest("cli-to-host", {
+      protocolVersion: PROTOCOL_VERSION,
+      id: "tab-close-1",
+      command: "tab.close",
+      params: {},
+    });
+
+    expect(parsed).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_ENVELOPE",
+      },
+    });
   });
 
   it("validates tab list requests", () => {
@@ -2066,6 +2083,8 @@ describe("parseBoundaryResponse", () => {
   });
 
   it("parses command-correlated batch steps and results", () => {
+    expect(safeParseStrictCommandParams("tab.close", {}).success).toBe(false);
+
     expect(
       parseBatchStepAs("tab.close", {
         command: "tab.close",

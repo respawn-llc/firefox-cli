@@ -8,6 +8,9 @@ import {
   type GetParams,
   type RequestEnvelope,
   type ResponseEnvelope,
+  type safeParseBatchStepCommandParams,
+  type safeParseCommandResult,
+  type safeParseStrictCommandParams,
   type ScreenshotResult,
 } from "../index.js";
 import { assembleCommandRegistry, defineCommandEntries } from "./define.js";
@@ -85,11 +88,31 @@ type SuccessfulResult<C extends CommandId> = Extract<
   ResponseEnvelope<C>,
   { readonly ok: true }
 >["result"];
+type SuccessfulSafeParseData<T> =
+  Extract<T, { readonly success: true }> extends { readonly data: infer Data } ? Data : never;
 type ProtocolTypeAssertions = [
   Assert<string extends CommandId ? false : true>,
   Assert<"noop" extends ContentCommandId ? false : true>,
   Assert<IsExact<RequestEnvelope<"get">["params"], GetParams>>,
   Assert<IsExact<SuccessfulResult<"screenshot">, ScreenshotResult>>,
+  Assert<
+    IsExact<
+      SuccessfulSafeParseData<ReturnType<typeof safeParseStrictCommandParams<"get">>>,
+      GetParams
+    >
+  >,
+  Assert<
+    IsExact<
+      SuccessfulSafeParseData<ReturnType<typeof safeParseBatchStepCommandParams<"tab.close">>>,
+      RequestEnvelope<"tab.close">["params"]
+    >
+  >,
+  Assert<
+    IsExact<
+      SuccessfulSafeParseData<ReturnType<typeof safeParseCommandResult<"screenshot">>>,
+      ScreenshotResult
+    >
+  >,
 ];
 
 describe("command registry assembly", () => {
@@ -119,8 +142,8 @@ describe("command registry assembly", () => {
   });
 
   it("preserves command-specific public protocol types", () => {
-    const assertions: ProtocolTypeAssertions = [true, true, true, true];
+    const assertions: ProtocolTypeAssertions = [true, true, true, true, true, true, true];
 
-    expect(assertions).toEqual([true, true, true, true]);
+    expect(assertions).toEqual([true, true, true, true, true, true, true]);
   });
 });

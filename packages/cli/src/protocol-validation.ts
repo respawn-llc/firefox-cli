@@ -1,6 +1,7 @@
 import {
-  commandSchemas,
   createRequest,
+  safeParseStrictCommandParams,
+  type CommandParams,
   type CommandId,
   type RequestEnvelope,
 } from "@firefox-cli/protocol";
@@ -10,7 +11,7 @@ export function createValidatedRequest<C extends CommandId>(
   command: C,
   params: unknown,
 ): RequestEnvelope<C> {
-  return createRequest(command, validateCommandParams(command, params) as never);
+  return createRequest(command, validateCommandParams(command, params));
 }
 
 export function validateProtocolRequest<C extends CommandId>(
@@ -18,17 +19,14 @@ export function validateProtocolRequest<C extends CommandId>(
 ): RequestEnvelope<C> {
   return {
     ...request,
-    params: validateCommandParams(request.command, request.params) as RequestEnvelope<C>["params"],
+    params: validateCommandParams(request.command, request.params),
   };
 }
 
-function validateCommandParams<C extends CommandId>(
-  command: C,
-  params: unknown,
-): RequestEnvelope<C>["params"] {
-  const parsed = commandSchemas[command].params.safeParse(params);
+function validateCommandParams<C extends CommandId>(command: C, params: unknown): CommandParams<C> {
+  const parsed = safeParseStrictCommandParams(command, params);
   if (parsed.success) {
-    return parsed.data as RequestEnvelope<C>["params"];
+    return parsed.data;
   }
 
   const firstIssue = parsed.error.issues[0];
