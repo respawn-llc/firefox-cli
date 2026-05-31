@@ -21,6 +21,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "source:size": "bun scripts/source-size-check.ts",
     "typecheck": "tsc -p packages/protocol/tsconfig.json --noEmit && tsc -p packages/native-host/tsconfig.json --noEmit && tsc -p packages/cli/tsconfig.json --noEmit && tsc -p packages/extension/tsconfig.json --noEmit && tsc -p packages/test-support/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:e2e": "bun run build && bun scripts/e2e-phase2.ts && bun scripts/e2e-disposable-firefox.ts",
@@ -37,7 +38,7 @@
     "release:check": "bun run build && bun run package && bun scripts/release-check.ts",
     "release:check:local": "bun run build && bun run package && bun scripts/release-check.ts --allow-unsigned-local",
     "release:check:signed": "bun run build && bun run package && bun scripts/release-check.ts --require-signed-xpi",
-    "ci": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build && bun run extension:lint && bun run package:check",
+    "ci": "bun run format:check && bun run lint && bun run source:size && bun run typecheck && bun run test && bun run build && bun run extension:lint && bun run package:check",
     "check": "bun run ci"
   },
   "devDependencies": {
