@@ -2,6 +2,7 @@ import { LocalIpcError } from "@firefox-cli/native-host";
 import {
   createRequest,
   createErrorResponseForRequest,
+  parseBoundaryResponseForRequest,
   type CommandId,
   type ProtocolError,
   type RequestEnvelope,
@@ -19,7 +20,11 @@ export async function sendOrUnavailable<C extends CommandId>(
     if (dependencies.sendRequest === undefined) {
       throw new LocalIpcError("CONNECTION_FAILED", "No native host IPC client is configured.");
     }
-    return (await dependencies.sendRequest(validatedRequest)) as ResponseEnvelope<C>;
+    const rawResponse = await dependencies.sendRequest(validatedRequest);
+    const parsed = parseBoundaryResponseForRequest("cli-to-host", validatedRequest, rawResponse, {
+      protocolVersion: validatedRequest.protocolVersion,
+    });
+    return parsed.ok ? parsed.value : createErrorResponseForRequest(validatedRequest, parsed.error);
   } catch (error) {
     if (error instanceof LocalIpcError) {
       return createErrorResponseForRequest(validatedRequest, {

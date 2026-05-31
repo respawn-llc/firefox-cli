@@ -37,7 +37,7 @@ export type CliDependencies = {
   readonly binaryPath?: string;
   readonly extensionPath?: string;
   readonly cwd?: string;
-  sendRequest?(request: RequestEnvelope): Promise<ResponseEnvelope>;
+  sendRequest?(request: RequestEnvelope): Promise<unknown>;
   readStdin?(): Promise<string>;
   statUploadFile?(path: string): Promise<CliUploadFileStat>;
   readUploadFile?(path: string, limits: UploadReadLimits): Promise<Uint8Array>;

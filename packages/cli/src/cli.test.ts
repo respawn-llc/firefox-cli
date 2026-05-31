@@ -5,6 +5,7 @@ import {
   MAX_UPLOAD_FILE_BYTES,
   MAX_UPLOAD_FILES,
   MAX_UPLOAD_TOTAL_BYTES,
+  PROTOCOL_VERSION,
   createErrorResponse,
   createOkResponse,
   gatedCapabilities,
@@ -91,6 +92,46 @@ describe("runCli", () => {
       stdout: "",
       stderr:
         "Not approved: Approve firefox-cli in the extension popup before running CLI commands.\n",
+    });
+  });
+
+  it("validates injected transport response payloads before formatting", async () => {
+    const output = await runCli(["capabilities"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => ({
+        protocolVersion: request.protocolVersion,
+        id: request.id,
+        ok: true,
+        result: { capabilities: "not an array" },
+      }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "INVALID_RESPONSE: Command result is invalid.\n",
+    });
+  });
+
+  it("surfaces injected transport protocol version mismatches", async () => {
+    const output = await runCli(["capabilities"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => ({
+        protocolVersion: PROTOCOL_VERSION + 1,
+        id: request.id,
+        ok: false,
+        error: {
+          code: "UNKNOWN_COMMAND",
+          message: "wrong protocol",
+        },
+      }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "Version mismatch: Protocol version is not supported.. Upgrade/rebuild firefox-cli, the native host, and the extension.\n",
     });
   });
 
@@ -1757,13 +1798,23 @@ describe("runCli", () => {
                 index: 0,
                 command: "upload",
                 ok: true,
-                result: { action: "upload", ok: true, valueLength: 1 },
+                result: {
+                  action: "upload",
+                  ok: true,
+                  element: actionElement("button", "Upload"),
+                  valueLength: 1,
+                },
               },
               {
                 index: 1,
                 command: "upload",
                 ok: true,
-                result: { action: "upload", ok: true, valueLength: 1 },
+                result: {
+                  action: "upload",
+                  ok: true,
+                  element: actionElement("button", "Upload"),
+                  valueLength: 1,
+                },
               },
             ],
             elapsedMs: 4,
@@ -2222,8 +2273,8 @@ describe("runCli", () => {
         },
         stdout: `${JSON.stringify(
           {
-            action: "select",
             ok: true,
+            action: "select",
             element: actionElement("combobox", "Plan"),
             selectedValues: ["pro"],
           },
