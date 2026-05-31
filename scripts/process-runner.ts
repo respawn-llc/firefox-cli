@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { timeoutPolicies } from "@firefox-cli/protocol";
 import { withTimeout } from "./script-timing.js";
 
 export type ProcessOutputMode = "pipe" | "ignore" | "inherit";
@@ -64,9 +65,9 @@ export type ManagedProcess = {
 };
 
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
-const DEFAULT_INTERRUPT_GRACE_MS = 5000;
-const DEFAULT_TERMINATE_GRACE_MS = 3000;
-const DEFAULT_FORCE_GRACE_MS = 3000;
+const DEFAULT_INTERRUPT_GRACE_MS = timeoutPolicies.processStop.interruptGraceMs;
+const DEFAULT_TERMINATE_GRACE_MS = timeoutPolicies.processStop.terminateGraceMs;
+const DEFAULT_FORCE_GRACE_MS = timeoutPolicies.processStop.forceGraceMs;
 
 export async function runProcess(
   command: string,

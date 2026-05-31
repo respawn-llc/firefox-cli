@@ -12,6 +12,7 @@ import {
   DEFAULT_WAIT_TIMEOUT_MS,
 } from "../browser-command/constants.js";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
+import { withBrowserCommandDeadline } from "../browser-command/deadline.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
 import { getOrderedWindows, resolveTarget } from "../browser-command/targets.js";
 import { waitForFunction, waitForUrl } from "../browser-command/wait.js";
@@ -59,7 +60,15 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
       });
     }
 
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const waitTimeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+    const resolved = resolveTarget(
+      await withBrowserCommandDeadline(
+        getOrderedWindows(adapter),
+        waitTimeoutMs,
+        () => `Timed out after ${waitTimeoutMs}ms resolving wait target.`,
+      ),
+      request.params.target,
+    );
     if (request.params.kind === "url") {
       const result = await waitForUrl(adapter, resolved.tab.id, request.params);
       return createOkResponse(request, result);

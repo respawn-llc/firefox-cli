@@ -1180,6 +1180,35 @@ describe("browser command handling", () => {
     });
   });
 
+  it("returns TIMEOUT when browser wait target resolution does not answer", async () => {
+    class HangingWindowsAdapter extends FakeBrowserAdapter {
+      override async listWindows(): Promise<never> {
+        return new Promise<never>(() => undefined);
+      }
+    }
+    const adapter = new HangingWindowsAdapter([
+      windowSnapshot(10, true, [
+        tabSummary(101, 0, true, 10, { url: "https://example.test/loading" }),
+      ]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "wait",
+        { kind: "url", urlGlob: "https://example.test/done", timeoutMs: 1, intervalMs: 1 },
+        "wait-url-hung-target",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "TIMEOUT",
+      },
+    });
+  });
+
   it("maps restricted-page getter injection failures to actionable errors", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),

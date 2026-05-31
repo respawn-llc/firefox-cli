@@ -5,6 +5,7 @@ import {
   createProtocolSession,
   createRequest,
   createRequestProtocolMismatchError,
+  timeoutPolicies,
   getRequestProtocolCompatibility,
   localProtocolVersionRange,
   parseBoundaryResponse,
@@ -24,8 +25,8 @@ import {
 import { LocalIpcError, type LocalIpcEndpoint } from "./local-ipc-types.js";
 import { NativeHostReliabilityError, withDeadline } from "./reliability.js";
 
-const DEFAULT_LOCAL_IPC_CLIENT_TIMEOUT_MS = 660_000;
-const DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS = 5_000;
+const DEFAULT_LOCAL_IPC_CLIENT_TIMEOUT_MS = timeoutPolicies.cliHostRequest.timeoutMs;
+const DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS = timeoutPolicies.cliHostConnect.timeoutMs;
 
 export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
   endpoint: LocalIpcEndpoint,

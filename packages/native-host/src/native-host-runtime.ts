@@ -12,6 +12,7 @@ import {
   kernelCapabilities,
   localProtocolVersionRange,
   parseBoundaryRequest,
+  timeoutPolicies,
   type CommandId,
   type ProtocolConnectionState,
   type ProtocolSession,
@@ -32,7 +33,7 @@ import type {
 } from "./pair-state.js";
 import { verifyPairStateStatus } from "./pair-state.js";
 
-const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = 660_000;
+const DEFAULT_PENDING_REQUEST_TIMEOUT_MS = timeoutPolicies.hostExtensionRequest.timeoutMs;
 
 export type NativeMessagingConnection = {
   readonly closed: Promise<void>;
@@ -81,7 +82,9 @@ export async function attachNativeMessagingConnection(
         request.protocolVersion ?? localProtocolVersionRange.protocolMax,
       ),
   });
-  const reader = new NativeMessagingFrameReader(options.input);
+  const reader = new NativeMessagingFrameReader(options.input, {
+    partialFrameTimeoutMs: timeoutPolicies.nativeMessagingPartialFrame.timeoutMs,
+  });
   const connectionState: {
     approved: boolean;
     token: string | undefined;

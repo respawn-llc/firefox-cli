@@ -9,6 +9,7 @@ export type NativeMessagingFrameErrorCode =
   | "TRUNCATED_BODY"
   | "MESSAGE_TOO_LARGE"
   | "INVALID_JSON"
+  | "READ_TIMEOUT"
   | "WRITE_FAILED";
 
 export class NativeMessagingFrameError extends Error {
@@ -32,21 +33,24 @@ export class NativeMessagingFrameError extends Error {
 
 export type NativeMessagingFrameReaderOptions = {
   readonly maxIncomingBytes?: number;
+  readonly partialFrameTimeoutMs?: number;
 };
 
 export class NativeMessagingFrameReader {
   readonly #iterator: AsyncIterator<Buffer>;
   readonly #maxIncomingBytes: number;
+  readonly #partialFrameTimeoutMs: number | undefined;
   readonly #buffer = new BufferCursor();
   #ended = false;
 
   constructor(input: Readable, options: NativeMessagingFrameReaderOptions = {}) {
     this.#iterator = input[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
     this.#maxIncomingBytes = options.maxIncomingBytes ?? DEFAULT_MAX_NATIVE_MESSAGE_INCOMING_BYTES;
+    this.#partialFrameTimeoutMs = options.partialFrameTimeoutMs;
   }
 
   async read(): Promise<unknown | null> {
-    const hasHeader = await this.#fill(4);
+    const hasHeader = await this.#fill(4, "header", { allowIdle: true });
     if (!hasHeader) {
       if (this.#buffer.availableBytes === 0) {
         return null;
@@ -72,7 +76,7 @@ export class NativeMessagingFrameReader {
       );
     }
 
-    const hasBody = await this.#fill(payloadBytes);
+    const hasBody = await this.#fill(payloadBytes, "body", { allowIdle: false });
     if (!hasBody) {
       throw new NativeMessagingFrameError(
         "TRUNCATED_BODY",
@@ -101,9 +105,14 @@ export class NativeMessagingFrameReader {
     }
   }
 
-  async #fill(requiredBytes: number): Promise<boolean> {
+  async #fill(
+    requiredBytes: number,
+    phase: "header" | "body",
+    options: { readonly allowIdle: boolean },
+  ): Promise<boolean> {
     while (this.#buffer.availableBytes < requiredBytes && !this.#ended) {
-      const next = await this.#iterator.next();
+      const shouldApplyDeadline = !options.allowIdle || this.#buffer.availableBytes > 0;
+      const next = await this.#readNext(phase, requiredBytes, shouldApplyDeadline);
       if (next.done === true) {
         this.#ended = true;
         break;
@@ -113,6 +122,44 @@ export class NativeMessagingFrameReader {
     }
 
     return this.#buffer.availableBytes >= requiredBytes;
+  }
+
+  async #readNext(
+    phase: "header" | "body",
+    expectedBytes: number,
+    applyDeadline: boolean,
+  ): Promise<IteratorResult<Buffer>> {
+    const read = this.#iterator.next();
+    if (!applyDeadline || this.#partialFrameTimeoutMs === undefined) {
+      return read;
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        read,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            reject(
+              new NativeMessagingFrameError(
+                "READ_TIMEOUT",
+                `Native messaging ${phase} did not complete within ${this.#partialFrameTimeoutMs}ms.`,
+                {
+                  phase,
+                  expectedBytes,
+                  availableBytes: this.#buffer.availableBytes,
+                  timeoutMs: this.#partialFrameTimeoutMs,
+                },
+              ),
+            );
+          }, this.#partialFrameTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+    }
   }
 }
 

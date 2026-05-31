@@ -70,6 +70,17 @@ describe("native messaging frames", () => {
     await expect(reader.read()).rejects.toMatchObject({ code: "TRUNCATED_HEADER" });
   });
 
+  it("rejects stalled partial length headers with a structured timeout", async () => {
+    const input = new PassThrough();
+    const reader = new NativeMessagingFrameReader(input, { partialFrameTimeoutMs: 1 });
+    input.write(Buffer.from([1]));
+
+    await expect(reader.read()).rejects.toMatchObject({
+      code: "READ_TIMEOUT",
+      details: { phase: "header", timeoutMs: 1 },
+    });
+  });
+
   it("rejects EOF inside the message body", async () => {
     const input = new PassThrough();
     const reader = new NativeMessagingFrameReader(input);
@@ -78,6 +89,19 @@ describe("native messaging frames", () => {
     input.end(Buffer.concat([header, Buffer.from("{}")]));
 
     await expect(reader.read()).rejects.toMatchObject({ code: "TRUNCATED_BODY" });
+  });
+
+  it("rejects stalled partial message bodies with a structured timeout", async () => {
+    const input = new PassThrough();
+    const reader = new NativeMessagingFrameReader(input, { partialFrameTimeoutMs: 1 });
+    const header = Buffer.alloc(4);
+    header.writeUInt32LE(8, 0);
+    input.write(Buffer.concat([header, Buffer.from("{}")]));
+
+    await expect(reader.read()).rejects.toMatchObject({
+      code: "READ_TIMEOUT",
+      details: { phase: "body", expectedBytes: 8, timeoutMs: 1 },
+    });
   });
 
   it("rejects incoming frames above the configured cap", async () => {

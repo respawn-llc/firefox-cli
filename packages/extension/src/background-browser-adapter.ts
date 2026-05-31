@@ -1,5 +1,6 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import type { BackgroundBrowserAdapter } from "./background-controller.js";
+import { createBrowserCommandDeadline } from "./browser-command/deadline.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import { createGlobMatcher } from "./glob.js";
 import type { NetworkRequestTracker } from "./network-tracker.js";
@@ -85,14 +86,18 @@ export function createBackgroundBrowserAdapter(options: {
       return toDownloadResult(item ?? { id });
     },
     waitForDownload: async (waitOptions) => {
-      const startedAt = Date.now();
+      const deadline = createBrowserCommandDeadline(waitOptions.timeoutMs);
+      const timeoutMessage = () => "Timed out waiting for download.";
       const matchesFilename =
         waitOptions.filenameGlob === undefined
           ? undefined
           : createGlobMatcher(waitOptions.filenameGlob);
-      while (Date.now() - startedAt < waitOptions.timeoutMs) {
-        const downloads = await options.browser.downloads.search(
-          waitOptions.downloadId === undefined ? {} : { id: waitOptions.downloadId },
+      while (true) {
+        const downloads = await deadline.run(
+          options.browser.downloads.search(
+            waitOptions.downloadId === undefined ? {} : { id: waitOptions.downloadId },
+          ),
+          timeoutMessage,
         );
         const match = downloads.find(
           (download) =>
@@ -105,9 +110,9 @@ export function createBackgroundBrowserAdapter(options: {
         if (match?.state === "interrupted") {
           throw new Error(`Download ${String(match.id)} was interrupted.`);
         }
-        await new Promise((resolve) => setTimeout(resolve, waitOptions.intervalMs));
+        deadline.throwIfExpired(timeoutMessage);
+        await deadline.sleep(waitOptions.intervalMs, timeoutMessage);
       }
-      throw new Error("Timed out waiting for download.");
     },
     readClipboard: async () => clipboard.readText(),
     writeClipboard: async (text) => {
@@ -145,8 +150,9 @@ export function createBackgroundBrowserAdapter(options: {
       });
     },
     waitForNetworkIdle: async (networkOptions) => {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < networkOptions.timeoutMs) {
+      const deadline = createBrowserCommandDeadline(networkOptions.timeoutMs);
+      const timeoutMessage = () => "Timed out waiting for network idle.";
+      while (true) {
         if (
           options.networkTracker.isIdle({
             tabId: networkOptions.tabId,
@@ -155,9 +161,9 @@ export function createBackgroundBrowserAdapter(options: {
         ) {
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        deadline.throwIfExpired(timeoutMessage);
+        await deadline.sleep(100, timeoutMessage);
       }
-      throw new Error("Timed out waiting for network idle.");
     },
     resizeWindow: async (windowId, size) => {
       await options.browser.windows.update(windowId, size);

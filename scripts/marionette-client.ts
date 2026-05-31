@@ -2,6 +2,7 @@ import { createConnection, type Socket } from "node:net";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FIREFOX_CLI_EXTENSION_ID } from "@firefox-cli/native-host";
+import { timeoutPolicies } from "@firefox-cli/protocol";
 import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
 export type MarionetteApprovalResult = {
@@ -61,8 +62,8 @@ async function waitForMarionettePort(profileDir: string): Promise<number> {
       }
     },
     {
-      timeoutMs: 20_000,
-      intervalMs: 100,
+      timeoutMs: timeoutPolicies.marionettePortDiscovery.timeoutMs,
+      intervalMs: timeoutPolicies.marionettePortDiscovery.intervalMs,
       timeoutMessage: () => `Timed out waiting for MarionetteActivePort in ${profileDir}.`,
     },
   );
@@ -90,8 +91,15 @@ function webDriverValue(value: unknown): unknown {
   return value;
 }
 
-class MarionetteClient {
+export type MarionetteClientOptions = {
+  readonly commandTimeoutMs?: number;
+  readonly maxFrameBytes?: number;
+};
+
+export class MarionetteClient {
   readonly #socket: Socket;
+  readonly #commandTimeoutMs: number;
+  readonly #maxFrameBytes: number;
   #buffer = Buffer.alloc(0);
   #nextId = 0;
   readonly #pending = new Map<
@@ -102,23 +110,34 @@ class MarionetteClient {
     }
   >();
 
-  private constructor(socket: Socket) {
+  private constructor(socket: Socket, options: MarionetteClientOptions = {}) {
     this.#socket = socket;
+    this.#commandTimeoutMs =
+      options.commandTimeoutMs ?? timeoutPolicies.marionetteCommand.timeoutMs;
+    this.#maxFrameBytes = options.maxFrameBytes ?? timeoutPolicies.marionetteFrame.maxBytes;
     this.#socket.on("data", (chunk) => {
       this.#buffer = Buffer.concat([this.#buffer, chunk]);
-      this.#parse();
+      try {
+        this.#parse();
+      } catch (error) {
+        this.#rejectPending(error instanceof Error ? error : new Error(String(error)));
+        this.#socket.destroy();
+      }
     });
     this.#socket.on("error", (error) => {
-      for (const pending of this.#pending.values()) {
-        pending.reject(error);
-      }
-      this.#pending.clear();
+      this.#rejectPending(error);
+    });
+    this.#socket.on("close", () => {
+      this.#rejectPending(new Error("Marionette socket closed."));
     });
   }
 
-  static async connect(port: number): Promise<MarionetteClient> {
+  static async connect(
+    port: number,
+    options: MarionetteClientOptions = {},
+  ): Promise<MarionetteClient> {
     const socket = createConnection(port, "127.0.0.1");
-    const client = new MarionetteClient(socket);
+    const client = new MarionetteClient(socket, options);
     await new Promise<void>((resolveConnect, rejectConnect) => {
       socket.once("connect", () => resolveConnect());
       socket.once("error", rejectConnect);
@@ -135,8 +154,11 @@ class MarionetteClient {
     });
     this.#socket.write(`${Buffer.byteLength(payload)}:${payload}`);
     return withTimeout(response, {
-      timeoutMs: 10_000,
+      timeoutMs: this.#commandTimeoutMs,
       timeoutMessage: () => `Marionette command timed out: ${command}`,
+      onTimeout: () => {
+        this.#pending.delete(id);
+      },
     });
   }
 
@@ -148,6 +170,9 @@ class MarionetteClient {
     while (true) {
       const separatorIndex = this.#buffer.indexOf(":");
       if (separatorIndex < 0) {
+        if (this.#buffer.byteLength > this.#maxFrameBytes) {
+          throw new Error(`Marionette frame prefix exceeds ${this.#maxFrameBytes} bytes.`);
+        }
         return;
       }
 
@@ -157,6 +182,11 @@ class MarionetteClient {
           `Invalid Marionette frame length: ${this.#buffer
             .subarray(0, separatorIndex)
             .toString("ascii")}`,
+        );
+      }
+      if (byteLength > this.#maxFrameBytes) {
+        throw new Error(
+          `Marionette frame length ${byteLength} exceeds ${this.#maxFrameBytes} bytes.`,
         );
       }
 
@@ -189,5 +219,12 @@ class MarionetteClient {
         pending.resolve(result);
       }
     }
+  }
+
+  #rejectPending(error: Error): void {
+    for (const pending of this.#pending.values()) {
+      pending.reject(error);
+    }
+    this.#pending.clear();
   }
 }

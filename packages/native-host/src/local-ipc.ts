@@ -4,6 +4,7 @@ import {
   createProtocolSession,
   localProtocolVersionRange,
   parseBoundaryResponse,
+  timeoutPolicies,
 } from "@firefox-cli/protocol";
 import {
   getRequestId,
@@ -47,8 +48,9 @@ export type {
   LocalIpcServerOptions,
 } from "./local-ipc-types.js";
 
-const DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS = 5_000;
-const DEFAULT_LOCAL_IPC_STARTUP_LOCK_TIMEOUT_MS = 5_000;
+const DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS =
+  timeoutPolicies.localIpcServerRequestLine.timeoutMs;
+const DEFAULT_LOCAL_IPC_STARTUP_LOCK_TIMEOUT_MS = timeoutPolicies.localIpcStartupLock.timeoutMs;
 
 export class LocalIpcServer {
   readonly #endpoint: LocalIpcEndpoint;

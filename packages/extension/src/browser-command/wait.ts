@@ -1,8 +1,8 @@
 import type { RequestEnvelope, WaitResult } from "@firefox-cli/protocol";
 import type { EvalExecutorResult } from "../eval-executor.js";
 import { createGlobMatcher } from "../glob.js";
-import { delay } from "./async.js";
 import { DEFAULT_WAIT_INTERVAL_MS, DEFAULT_WAIT_TIMEOUT_MS } from "./constants.js";
+import { createBrowserCommandDeadline } from "./deadline.js";
 import { BrowserCommandError } from "./errors.js";
 import { findTabById, getOrderedWindows, toResolvedTarget } from "./targets.js";
 import type { BackgroundBrowserAdapter } from "./types.js";
@@ -12,12 +12,17 @@ export async function waitForUrl(
   tabId: number,
   params: RequestEnvelope<"wait">["params"],
 ): Promise<WaitResult> {
-  const startedAt = Date.now();
   const timeoutMs = params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const intervalMs = params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS;
+  const deadline = createBrowserCommandDeadline(timeoutMs);
   const matchesUrlGlob = createGlobMatcher(params.urlGlob ?? "", { questionMark: "wildcard" });
+  const timeoutMessage = () =>
+    `Timed out after ${timeoutMs}ms waiting for URL ${JSON.stringify(params.urlGlob ?? "")}.`;
   while (true) {
-    const match = findTabById(await getOrderedWindows(adapter), tabId);
+    const match = findTabById(
+      await deadline.run(getOrderedWindows(adapter), timeoutMessage),
+      tabId,
+    );
     if (match === undefined) {
       throw new BrowserCommandError("INVALID_TARGET", "Requested Firefox tab was not found.");
     }
@@ -27,21 +32,14 @@ export async function waitForUrl(
       return {
         kind: "url",
         matched: true,
-        elapsedMs: Math.max(0, Date.now() - startedAt),
+        elapsedMs: deadline.elapsedMs(),
         value: url,
         target: toResolvedTarget(match.window, match.tab),
       };
     }
 
-    const elapsedMs = Date.now() - startedAt;
-    if (elapsedMs >= timeoutMs) {
-      throw new BrowserCommandError(
-        "TIMEOUT",
-        `Timed out after ${timeoutMs}ms waiting for URL ${JSON.stringify(params.urlGlob ?? "")}.`,
-      );
-    }
-
-    await delay(Math.max(0, Math.min(intervalMs, timeoutMs - elapsedMs)));
+    deadline.throwIfExpired(timeoutMessage);
+    await deadline.sleep(intervalMs, timeoutMessage);
   }
 }
 
@@ -54,18 +52,21 @@ export async function waitForFunction(
     readonly intervalMs?: number | undefined;
   },
 ): Promise<WaitResult> {
-  const startedAt = Date.now();
   const timeoutMs = params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const intervalMs = params.intervalMs ?? DEFAULT_WAIT_INTERVAL_MS;
+  const deadline = createBrowserCommandDeadline(timeoutMs);
   const script = waitFunctionEvalScript(params.expression ?? "");
+  const timeoutMessage = () => `Timed out after ${timeoutMs}ms waiting for function predicate.`;
 
   while (true) {
-    const elapsedBeforeAttempt = Date.now() - startedAt;
-    const response = await adapter.executeEval(tabId, {
-      script,
-      timeoutMs: Math.max(1, timeoutMs - elapsedBeforeAttempt),
-      maxResultBytes: 4096,
-    });
+    const response = await deadline.run(
+      adapter.executeEval(tabId, {
+        script,
+        timeoutMs: Math.max(1, deadline.remainingMs()),
+        maxResultBytes: 4096,
+      }),
+      timeoutMessage,
+    );
     if (!response.ok) {
       throw new BrowserCommandError(
         "SCRIPT_INJECTION_FAILED",
@@ -78,20 +79,13 @@ export async function waitForFunction(
       return {
         kind: "function",
         matched: true,
-        elapsedMs: Math.max(0, Date.now() - startedAt),
+        elapsedMs: deadline.elapsedMs(),
         value: evaluated.value,
       };
     }
 
-    const elapsedMs = Date.now() - startedAt;
-    if (elapsedMs >= timeoutMs) {
-      throw new BrowserCommandError(
-        "TIMEOUT",
-        `Timed out after ${timeoutMs}ms waiting for function predicate.`,
-      );
-    }
-
-    await delay(Math.max(0, Math.min(intervalMs, timeoutMs - elapsedMs)));
+    deadline.throwIfExpired(timeoutMessage);
+    await deadline.sleep(intervalMs, timeoutMessage);
   }
 }
 

@@ -15,3 +15,4 @@ export * from "./envelopes.js";
 export * from "./protocol-state.js";
 export * from "./typed-dispatch.js";
 export * from "./extension-requirements.js";
+export * from "./timeout-policy.js";
