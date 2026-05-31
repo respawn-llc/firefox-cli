@@ -125,7 +125,12 @@ if (import.meta.main) {
   if (githubOutput !== undefined && githubOutput.length > 0) {
     await writeFile(
       githubOutput,
-      [`version=${result.version}`, `tag=${result.tag}`, `changed=${result.changedFiles.length > 0 ? "true" : "false"}`].join("\n") + "\n",
+      [
+        `version=${result.version}`,
+        `tag=${result.tag}`,
+        `changed=${result.changedFiles.length > 0 ? "true" : "false"}`,
+        `changed_files=${result.changedFiles.join(" ")}`,
+      ].join("\n") + "\n",
       { flag: "a" },
     );
   }
