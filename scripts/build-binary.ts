@@ -2,11 +2,14 @@ import { chmod, mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
+import { copyPackagedBinary } from "./packaged-binary.js";
 
 const platformKey = getPlatformKey();
+const binaryName = getBinaryName();
 const rootDir = process.cwd();
-const outputPath = resolve("dist/bin", platformKey, getBinaryName());
+const outputPath = resolve("dist/bin", platformKey, binaryName);
 const entrypointPath = resolve("packages/cli/src/entrypoint.ts");
+const packageRoot = resolve("dist/package");
 
 await mkdir(dirname(outputPath), { recursive: true });
 
@@ -36,6 +39,16 @@ if (process.platform !== "win32") {
 }
 
 console.log(`Built ${outputPath}`);
+const syncedPackageBinaryPath = await copyPackagedBinary({
+  sourcePath: outputPath,
+  packageRoot,
+  platformKey,
+  binaryName,
+  skipWhenPackageBinMissing: true,
+});
+if (syncedPackageBinaryPath !== undefined) {
+  console.log(`Updated packaged binary ${syncedPackageBinaryPath}`);
+}
 
 async function moveToTrash(path: string): Promise<void> {
   const trash = Bun.spawn(["trash", path], {
@@ -52,9 +65,7 @@ async function assertNoRootBunBuildArtifacts(root: string): Promise<void> {
   const artifacts = (await readdir(root)).filter(isRootBunBuildArtifact);
   if (artifacts.length > 0) {
     throw new Error(
-      `Bun compile left root build artifacts: ${artifacts.slice(0, 5).join(", ")}${
-        artifacts.length > 5 ? `, and ${artifacts.length - 5} more` : ""
-      }`,
+      `Bun compile left root build artifacts: ${artifacts.slice(0, 5).join(", ")}${artifacts.length > 5 ? `, and ${String(artifacts.length - 5)} more` : ""}`,
     );
   }
 }

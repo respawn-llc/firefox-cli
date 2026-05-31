@@ -1,17 +1,11 @@
 import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import rootPackage from "../package.json" with { type: "json" };
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
-import {
-  packagedSignedExtensionProvenanceFile,
-  signedExtensionProvenanceArtifactName,
-} from "./extension-artifact-provenance.js";
+import rootPackage from "../package.json" with { type: "json" };
+import { packagedSignedExtensionProvenanceFile, signedExtensionProvenanceArtifactName } from "./extension-artifact-provenance.js";
 import { resetGeneratedArtifact } from "./generated-artifacts.js";
-import {
-  packagedSignedExtensionProvenanceJson,
-  readValidatedSignedExtensionSource,
-  SignedExtensionSourceNotFoundError,
-} from "./package-signed-extension.js";
+import { packagedSignedExtensionProvenanceJson, readValidatedSignedExtensionSource, SignedExtensionSourceNotFoundError } from "./package-signed-extension.js";
+import { copyPackagedBinary } from "./packaged-binary.js";
 import { packagedSignedExtensionXpiFile } from "./signed-extension-policy.js";
 
 const packageRoot = resolve("dist/package");
@@ -28,16 +22,10 @@ await cp("README.md", resolve(packageRoot, "README.md"));
 await cp("LICENSE", resolve(packageRoot, "LICENSE"));
 await mkdir(resolve(packageRoot, "lib"), { recursive: true });
 await cp("packages/cli/src/launcher-template.js", resolve(packageRoot, "bin/firefox-cli.js"));
-await cp(
-  "packages/native-host/src/platform-binary-runtime.js",
-  resolve(packageRoot, "lib/platform-binary.js"),
-);
+await cp("packages/native-host/src/platform-binary-runtime.js", resolve(packageRoot, "lib/platform-binary.js"));
 await chmod(resolve(packageRoot, "bin/firefox-cli.js"), 0o755);
 
-await cp(resolve("dist/bin", platformKey, binaryName), resolve(packageRoot, "bin", platformKey, binaryName));
-if (process.platform !== "win32") {
-  await chmod(resolve(packageRoot, "bin", platformKey, binaryName), 0o755);
-}
+await copyPackagedBinary({ sourcePath: resolve("dist/bin", platformKey, binaryName), packageRoot, platformKey, binaryName });
 
 await cp("dist/extension", resolve(packageRoot, "extension/development"), {
   recursive: true,
@@ -80,18 +68,13 @@ async function copyExtensionArchive(path: string): Promise<void> {
   }
 
   const manifest = await readFile(resolve(path, "extension/development/manifest.json"), "utf8");
-  await writeFile(
-    resolve(path, "extension/development/README.md"),
-    `Development extension directory only. Manifest:\n\n${manifest}`,
-  );
+  await writeFile(resolve(path, "extension/development/README.md"), `Development extension directory only. Manifest:\n\n${manifest}`);
 }
 
 async function copySignedExtensionXpi(path: string): Promise<void> {
   const envPath = process.env.FIREFOX_CLI_SIGNED_XPI;
   const sourcePath =
-    envPath === undefined || envPath.length === 0
-      ? resolve("dist/extension-artifacts", `firefox-cli-${rootPackage.version}.xpi`)
-      : resolve(envPath);
+    envPath === undefined || envPath.length === 0 ? resolve("dist/extension-artifacts", `firefox-cli-${rootPackage.version}.xpi`) : resolve(envPath);
 
   try {
     const source = await readValidatedSignedExtensionSource({
@@ -99,15 +82,9 @@ async function copySignedExtensionXpi(path: string): Promise<void> {
       provenancePath: signedExtensionProvenanceSourcePath(sourcePath),
     });
     await writeFile(resolve(path, "extension", packagedSignedExtensionXpiFile), source.xpiData);
-    await writeFile(
-      resolve(path, "extension", packagedSignedExtensionProvenanceFile),
-      packagedSignedExtensionProvenanceJson(source.provenance),
-    );
+    await writeFile(resolve(path, "extension", packagedSignedExtensionProvenanceFile), packagedSignedExtensionProvenanceJson(source.provenance));
   } catch (error) {
-    if (
-      (envPath === undefined || envPath.length === 0) &&
-      error instanceof SignedExtensionSourceNotFoundError
-    ) {
+    if ((envPath === undefined || envPath.length === 0) && error instanceof SignedExtensionSourceNotFoundError) {
       return;
     }
     if (envPath !== undefined && envPath.length > 0) {

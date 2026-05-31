@@ -40,7 +40,8 @@ describe("CLI response formatting", () => {
     expect(formatCliResponse(cliResponseFormatters["tab-list"], response, false)).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: "Native host unavailable: Native host is offline.\n",
+      stderr:
+        "Native host unavailable: Native host is offline. Run `firefox-cli setup`, install the extension, run `firefox-cli setup native-host`, then approve the extension popup.\n",
     });
   });
 });

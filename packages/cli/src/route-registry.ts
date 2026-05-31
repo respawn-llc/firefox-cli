@@ -1,10 +1,7 @@
+import { type CliRouteMetadata, type CommandId, gatedCapabilities, getCliRouteEntries } from "@firefox-cli/protocol";
+import { parseCliRouteArgv as parseArgvWithRouteContract, routeParserSpecs } from "./argv-contracts.js";
 import {
-  gatedCapabilities,
-  getCliRouteEntries,
-  type CommandId,
-  type CliRouteMetadata,
-} from "@firefox-cli/protocol";
-import {
+  buildDragRequest,
   buildElementActionRequest,
   buildKeyboardRequest,
   buildKeyEventRequest,
@@ -13,7 +10,6 @@ import {
   buildScrollRequest,
   buildSelectRequest,
   buildTextActionRequest,
-  buildDragRequest,
   buildUploadRequest,
 } from "./commands/actions.js";
 import { buildBatchRequest } from "./commands/batch.js";
@@ -38,32 +34,25 @@ import { buildEvalRequest } from "./commands/eval.js";
 import { buildCapabilitiesRequest, buildNavigationRequest, buildOpenRequest } from "./commands/navigation.js";
 import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
-import { cliResponseFormatters } from "./format.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
-import { parseCliRouteArgv as parseArgvWithRouteContract, routeParserSpecs } from "./argv-contracts.js";
+import { cliResponseFormatters } from "./format.js";
 import { getPositionals } from "./parse.js";
-import type {
-  CliRequestBuilder,
-  CliResponseFormatter,
-  CliResponseFormatterKind,
-  CliRouteBinding,
-} from "./types.js";
+import type { CliRequestBuilder, CliResponseFormatter, CliResponseFormatterKind, CliRouteBinding, CliRouteParserSpec } from "./types.js";
 
 const protocolCliRouteEntries = getCliRouteEntries();
 const protocolCliRouteEntriesById = new Map(protocolCliRouteEntries.map((entry) => [entry.route.id, entry]));
+const routeParserSpecsById = new Map<string, CliRouteParserSpec>(Object.entries(routeParserSpecs));
 
 export const unsupportedCliCommands = new Map(
-  gatedCapabilities.flatMap((capability) =>
-    (capability.cliCommands ?? []).map((command) => [command, capability] as const),
-  ),
+  gatedCapabilities.flatMap((capability) => (capability.cliCommands ?? []).map((command) => [command, capability] as const)),
 );
 
-type CliRouteFormatterSpec<C extends CommandId> = {
+interface CliRouteFormatterSpec<C extends CommandId> {
   readonly command: C;
   readonly kind: CliResponseFormatterKind;
   readonly formatter: CliResponseFormatter<C>;
-};
+}
 
 const routeFormatterSpecs = {
   capabilities: routeFormatter("capabilities", "capabilities", cliResponseFormatters.capabilities),
@@ -125,11 +114,7 @@ const routeFormatterSpecs = {
 
 type RouteFormatterSpecById = typeof routeFormatterSpecs;
 
-function routeFormatter<C extends CommandId>(
-  command: C,
-  kind: CliResponseFormatterKind,
-  formatter: CliResponseFormatter<C>,
-): CliRouteFormatterSpec<C> {
+function routeFormatter<C extends CommandId>(command: C, kind: CliResponseFormatterKind, formatter: CliResponseFormatter<C>): CliRouteFormatterSpec<C> {
   return { command, kind, formatter };
 }
 
@@ -142,15 +127,13 @@ function bindCliRoute<RouteId extends keyof RouteFormatterSpecById>(
   if (routeEntry === undefined) {
     throw new Error(`CLI binding references unknown protocol route: ${routeId}`);
   }
-  const parser = routeParserSpecs[routeId];
-  const formatter = routeFormatterSpecs[routeId];
+  const parser = routeParserSpecsById.get(routeId);
   if (parser === undefined) {
     throw new Error(`CLI binding is missing parser or formatter metadata: ${routeId}`);
   }
+  const formatter = routeFormatterSpecs[routeId];
   if (routeEntry.command !== formatter.command) {
-    throw new Error(
-      `CLI binding formatter command mismatch for ${routeId}: expected ${routeEntry.command}, received ${formatter.command}`,
-    );
+    throw new Error(`CLI binding formatter command mismatch for ${routeId}: expected ${routeEntry.command}, received ${formatter.command}`);
   }
 
   return {
@@ -168,33 +151,17 @@ export const cliRouteBindings = {
   capabilities: bindCliRoute("capabilities", "firefox-cli capabilities [--json]", buildCapabilitiesRequest),
   "tab.list": bindCliRoute("tab.list", "firefox-cli tab [--json]", buildTabsRequest),
   "tab.new": bindCliRoute("tab.new", "firefox-cli tab new [url] [--json]", buildTabsRequest),
-  "tab.select": bindCliRoute(
-    "tab.select",
-    "firefox-cli tab select [target-or-url] [--json]",
-    buildTabsRequest,
-  ),
+  "tab.select": bindCliRoute("tab.select", "firefox-cli tab select [target-or-url] [--json]", buildTabsRequest),
   "tab.close": bindCliRoute("tab.close", "firefox-cli tab close [target-or-url] [--json]", buildTabsRequest),
   "window.list": bindCliRoute("window.list", "firefox-cli window [--json]", buildWindowsRequest),
   "window.new": bindCliRoute("window.new", "firefox-cli window new [url] [--json]", buildWindowsRequest),
-  "window.select": bindCliRoute(
-    "window.select",
-    "firefox-cli window select [target-or-url] [--json]",
-    buildWindowsRequest,
-  ),
-  "window.close": bindCliRoute(
-    "window.close",
-    "firefox-cli window close [target-or-url] [--json]",
-    buildWindowsRequest,
-  ),
+  "window.select": bindCliRoute("window.select", "firefox-cli window select [target-or-url] [--json]", buildWindowsRequest),
+  "window.close": bindCliRoute("window.close", "firefox-cli window close [target-or-url] [--json]", buildWindowsRequest),
   open: bindCliRoute("open", "firefox-cli open [--new-tab] <url> [--json]", buildOpenRequest),
   back: bindCliRoute("back", "firefox-cli back [--json]", buildNavigationRequest),
   forward: bindCliRoute("forward", "firefox-cli forward [--json]", buildNavigationRequest),
   reload: bindCliRoute("reload", "firefox-cli reload [--json]", buildNavigationRequest),
-  snapshot: bindCliRoute(
-    "snapshot",
-    "firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]",
-    buildSnapshotRequest,
-  ),
+  snapshot: bindCliRoute("snapshot", "firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--json]", buildSnapshotRequest),
   ref: bindCliRoute("ref", "firefox-cli ref <@ref> [--json]", buildRefRequest),
   get: bindCliRoute("get", "firefox-cli get <kind> [selector|@ref] [--json]", buildGetRequest),
   is: bindCliRoute("is", "firefox-cli is <kind> <selector|@ref> [--json]", buildIsRequest),
@@ -203,104 +170,42 @@ export const cliRouteBindings = {
   screenshot: bindCliRoute("screenshot", "firefox-cli screenshot [path] [--json]", buildScreenshotRequest),
   drag: bindCliRoute("drag", "firefox-cli drag <source> <target> [--json]", buildDragRequest),
   upload: bindCliRoute("upload", "firefox-cli upload <selector|@ref> <file...> [--json]", buildUploadRequest),
-  mouse: bindCliRoute(
-    "mouse",
-    "firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]",
-    buildMouseRequest,
-  ),
-  keydown: bindCliRoute(
-    "keydown",
-    "firefox-cli keydown <key> [selector|@ref] [--json]",
-    buildKeyEventRequest,
-  ),
+  mouse: bindCliRoute("mouse", "firefox-cli mouse move|down|up|wheel [selector|@ref] [--json]", buildMouseRequest),
+  keydown: bindCliRoute("keydown", "firefox-cli keydown <key> [selector|@ref] [--json]", buildKeyEventRequest),
   keyup: bindCliRoute("keyup", "firefox-cli keyup <key> [selector|@ref] [--json]", buildKeyEventRequest),
   find: bindCliRoute("find", "firefox-cli find <kind> <value> [--json]", buildFindRequest),
   frame: bindCliRoute("frame", "firefox-cli frame [--json]", buildFrameRequest),
   download: bindCliRoute("download", "firefox-cli download <url> [filename] [--json]", buildDownloadRequest),
   dialog: bindCliRoute("dialog", "firefox-cli dialog status|accept|dismiss [--json]", buildDialogRequest),
-  clipboard: bindCliRoute(
-    "clipboard",
-    "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]",
-    buildClipboardRequest,
-  ),
-  cookies: bindCliRoute(
-    "cookies",
-    "firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]",
-    buildCookiesRequest,
-  ),
-  storage: bindCliRoute(
-    "storage",
-    "firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]",
-    buildStorageRequest,
-  ),
-  network: bindCliRoute(
-    "network",
-    "firefox-cli network list|clear [--window target] [--tab target] [--json]",
-    buildNetworkRequest,
-  ),
+  clipboard: bindCliRoute("clipboard", "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]", buildClipboardRequest),
+  cookies: bindCliRoute("cookies", "firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]", buildCookiesRequest),
+  storage: bindCliRoute("storage", "firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]", buildStorageRequest),
+  network: bindCliRoute("network", "firefox-cli network list|clear [--window target] [--tab target] [--json]", buildNetworkRequest),
   console: bindCliRoute("console", "firefox-cli console list|clear [--json]", buildLogRequest),
   errors: bindCliRoute("errors", "firefox-cli errors list|clear [--json]", buildLogRequest),
-  highlight: bindCliRoute(
-    "highlight",
-    "firefox-cli highlight <selector|@ref> [--json]",
-    buildHighlightRequest,
-  ),
+  highlight: bindCliRoute("highlight", "firefox-cli highlight <selector|@ref> [--json]", buildHighlightRequest),
   pdf: bindCliRoute("pdf", "firefox-cli pdf <path> [--json]", buildPdfRequest),
-  "set.viewport": bindCliRoute(
-    "set.viewport",
-    "firefox-cli set viewport <width> <height> [--json]",
-    buildSetViewportRequest,
-  ),
+  "set.viewport": bindCliRoute("set.viewport", "firefox-cli set viewport <width> <height> [--json]", buildSetViewportRequest),
   diff: bindCliRoute("diff", "firefox-cli diff url|title|snapshot <expected> [--json]", buildDiffRequest),
   batch: bindCliRoute("batch", "firefox-cli batch <json> | --stdin [--bail] [--json]", buildBatchRequest),
   click: bindCliRoute("click", "firefox-cli click <selector|@ref> [--json]", buildElementActionRequest),
-  dblclick: bindCliRoute(
-    "dblclick",
-    "firefox-cli dblclick <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
+  dblclick: bindCliRoute("dblclick", "firefox-cli dblclick <selector|@ref> [--json]", buildElementActionRequest),
   focus: bindCliRoute("focus", "firefox-cli focus <selector|@ref> [--json]", buildElementActionRequest),
   hover: bindCliRoute("hover", "firefox-cli hover <selector|@ref> [--json]", buildElementActionRequest),
   fill: bindCliRoute("fill", "firefox-cli fill <selector|@ref> <text> [--json]", buildTextActionRequest),
   type: bindCliRoute("type", "firefox-cli type <selector|@ref> <text> [--json]", buildTextActionRequest),
   press: bindCliRoute("press", "firefox-cli press <key> [--json]", buildPressRequest),
-  "keyboard.type": bindCliRoute(
-    "keyboard.type",
-    "firefox-cli keyboard type <text> [--json]",
-    buildKeyboardRequest,
-  ),
-  "keyboard.inserttext": bindCliRoute(
-    "keyboard.inserttext",
-    "firefox-cli keyboard inserttext <text> [--json]",
-    buildKeyboardRequest,
-  ),
+  "keyboard.type": bindCliRoute("keyboard.type", "firefox-cli keyboard type <text> [--json]", buildKeyboardRequest),
+  "keyboard.inserttext": bindCliRoute("keyboard.inserttext", "firefox-cli keyboard inserttext <text> [--json]", buildKeyboardRequest),
   check: bindCliRoute("check", "firefox-cli check <selector|@ref> [--json]", buildElementActionRequest),
   uncheck: bindCliRoute("uncheck", "firefox-cli uncheck <selector|@ref> [--json]", buildElementActionRequest),
-  select: bindCliRoute(
-    "select",
-    "firefox-cli select <selector|@ref> <value...> [--json]",
-    buildSelectRequest,
-  ),
-  scroll: bindCliRoute(
-    "scroll",
-    "firefox-cli scroll up|down|left|right [px] [selector|@ref] [--json]",
-    buildScrollRequest,
-  ),
-  scrollintoview: bindCliRoute(
-    "scrollintoview",
-    "firefox-cli scrollintoview <selector|@ref> [--json]",
-    buildElementActionRequest,
-  ),
-  swipe: bindCliRoute(
-    "swipe",
-    "firefox-cli swipe up|down|left|right [px] [selector|@ref] [--json]",
-    buildScrollRequest,
-  ),
+  select: bindCliRoute("select", "firefox-cli select <selector|@ref> <value...> [--json]", buildSelectRequest),
+  scroll: bindCliRoute("scroll", "firefox-cli scroll up|down|left|right [px] [selector|@ref] [--json]", buildScrollRequest),
+  scrollintoview: bindCliRoute("scrollintoview", "firefox-cli scrollintoview <selector|@ref> [--json]", buildElementActionRequest),
+  swipe: bindCliRoute("swipe", "firefox-cli swipe up|down|left|right [px] [selector|@ref] [--json]", buildScrollRequest),
 } as const satisfies Record<string, CliRouteBinding>;
 
-const cliRouteBindingsForMatching = Object.values(cliRouteBindings).sort(
-  (left, right) => right.route.path.length - left.route.path.length,
-);
+const cliRouteBindingsForMatching = Object.values(cliRouteBindings).sort((left, right) => right.route.path.length - left.route.path.length);
 
 export function findCliRouteBindingForArgv(argv: readonly string[]): CliRouteBinding | undefined {
   const root = argv[0];
@@ -310,9 +215,8 @@ export function findCliRouteBindingForArgv(argv: readonly string[]): CliRouteBin
 
   const positionals = getPositionals(argv);
   return (
-    cliRouteBindingsForMatching.find((binding) =>
-      routePathMatchesPositionals(binding.route.path, positionals),
-    ) ?? Object.values(cliRouteBindings).find((binding) => binding.route.path[0] === root)
+    cliRouteBindingsForMatching.find((binding) => routePathMatchesPositionals(binding.route.path, positionals)) ??
+    Object.values(cliRouteBindings).find((binding) => binding.route.path[0] === root)
   );
 }
 
@@ -328,26 +232,6 @@ function parseCliRouteArgv(binding: CliRouteBinding, argv: readonly string[]): {
   return parseArgvWithRouteContract(binding.parser, binding.route.id, argv);
 }
 
-function routePathMatchesPositionals(
-  routePath: CliRouteMetadata["path"],
-  positionals: readonly string[],
-): boolean {
-  return (
-    positionals.length >= routePath.length &&
-    routePath.every((segment, index) => positionals[index] === segment)
-  );
-}
-
-export function renderHelp(): string {
-  return [
-    "firefox-cli",
-    "",
-    "Usage:",
-    "  firefox-cli --version",
-    "  firefox-cli setup native-host [--dry-run] [--json]",
-    "  firefox-cli doctor [--fix] [--json]",
-    "  firefox-cli unpair",
-    ...Object.values(cliRouteBindings).map((binding) => `  ${binding.help}`),
-    "",
-  ].join("\n");
+function routePathMatchesPositionals(routePath: CliRouteMetadata["path"], positionals: readonly string[]): boolean {
+  return positionals.length >= routePath.length && routePath.every((segment, index) => positionals[index] === segment);
 }

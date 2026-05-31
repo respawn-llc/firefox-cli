@@ -1,33 +1,21 @@
-import {
-  gatedCapabilities,
-  isRequestCommand,
-  type CommandId,
-  type RequestEnvelope,
-} from "@firefox-cli/protocol";
+import { type CommandId, gatedCapabilities, isRequestCommand, type RequestEnvelope } from "@firefox-cli/protocol";
 import { doctor, setup } from "./commands/setup-doctor.js";
 import { formatCliResponse } from "./format.js";
-import {
-  cliRouteWantsJsonOutput,
-  findCliRouteBindingForArgv,
-  renderHelp,
-  unsupportedCliCommands,
-  validateCliRouteArgv,
-} from "./route-registry.js";
+import { isHelpRequest, renderHelp, renderHelpForArgv } from "./help.js";
 import { error, ok } from "./result.js";
+import { cliRouteWantsJsonOutput, findCliRouteBindingForArgv, unsupportedCliCommands, validateCliRouteArgv } from "./route-registry.js";
 import { formatProtocolError, sendOrUnavailable } from "./transport.js";
 import {
-  InvalidBatchArgvCommandError,
-  CliUsageError,
   type CliDependencies,
   type CliRequestBuildContext,
   type CliResult,
   type CliRouteBinding,
+  CliUsageError,
+  InvalidBatchArgvCommandError,
 } from "./types.js";
 import { createUploadBudget } from "./upload.js";
 
-const gatedCapabilitiesByCommand = new Map(
-  gatedCapabilities.map((capability) => [capability.command, capability] as const),
-);
+const gatedCapabilitiesByCommand = new Map(gatedCapabilities.map((capability) => [capability.command, capability] as const));
 
 export async function runCli(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   try {
@@ -46,6 +34,10 @@ export async function runCli(args: readonly string[], dependencies: CliDependenc
 }
 
 async function runCliOrThrow(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
+  if (isHelpRequest(args)) {
+    return ok(renderHelpForArgv(args));
+  }
+
   if (args.includes("--version") || args.includes("-V")) {
     return ok(`${dependencies.version}\n`);
   }
@@ -103,18 +95,12 @@ async function buildRequestForBinding<C extends CommandId>(
   validateCliRouteArgv(binding, argv);
   const request = await binding.buildRequest(argv, dependencies, context);
   if (!isRequestCommand(request, binding.command)) {
-    throw new CliUsageError(
-      `CLI route ${binding.route.id} built ${request.command} instead of ${binding.command}.`,
-    );
+    throw new CliUsageError(`CLI route ${binding.route.id} built ${request.command} instead of ${binding.command}.`);
   }
   return request;
 }
 
-async function buildRequestForArgv(
-  argv: readonly string[],
-  dependencies: CliDependencies,
-  context: CliRequestBuildContext,
-): Promise<RequestEnvelope> {
+async function buildRequestForArgv(argv: readonly string[], dependencies: CliDependencies, context: CliRequestBuildContext): Promise<RequestEnvelope> {
   const binding = findCliRouteBindingForArgv(argv);
   if (binding === undefined) {
     throw new InvalidBatchArgvCommandError();

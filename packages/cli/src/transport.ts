@@ -1,20 +1,17 @@
 import { LocalIpcError } from "@firefox-cli/native-host";
 import {
-  createRequest,
-  createErrorResponseForRequest,
-  parseBoundaryResponseForRequest,
   type CommandId,
+  createErrorResponseForRequest,
+  createRequest,
   type ProtocolError,
+  parseBoundaryResponseForRequest,
   type RequestEnvelope,
   type ResponseEnvelope,
 } from "@firefox-cli/protocol";
 import { validateProtocolRequest } from "./protocol-validation.js";
 import type { CliDependencies } from "./types.js";
 
-export async function sendOrUnavailable<C extends CommandId>(
-  dependencies: CliDependencies,
-  request: RequestEnvelope<C>,
-): Promise<ResponseEnvelope<C>> {
+export async function sendOrUnavailable<C extends CommandId>(dependencies: CliDependencies, request: RequestEnvelope<C>): Promise<ResponseEnvelope<C>> {
   const validatedRequest = validateProtocolRequest(request);
   try {
     if (dependencies.sendRequest === undefined) {
@@ -46,7 +43,7 @@ export function formatProtocolError(error: ProtocolError): string {
   }
 
   if (error.code === "NATIVE_HOST_UNAVAILABLE") {
-    return `Native host unavailable: ${error.message}\n`;
+    return `Native host unavailable: ${error.message} Run \`firefox-cli setup\`, install the extension, run \`firefox-cli setup native-host\`, then approve the extension popup.\n`;
   }
 
   if (error.code === "VERSION_MISMATCH") {
