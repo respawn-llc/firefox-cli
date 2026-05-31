@@ -1,6 +1,9 @@
-.builder/
+.builder/plans
 node_modules/
 dist/
 coverage/
 .DS_Store
 .*.bun-build
+.env
+./docs/tmp/**
+
