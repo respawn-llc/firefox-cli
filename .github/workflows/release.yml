@@ -70,7 +70,7 @@ jobs:
       - name: Checkout Claude plugin marketplace
         uses: actions/checkout@v4
         with:
-          repository: respawn-app/claude-plugin-marketplace
+          repository: respawn-llc/claude-plugin-marketplace
           path: claude-plugin-marketplace
           token: ${{ secrets.OPENSOURCE_PAT }}
       - name: Sync Claude plugin marketplace version
