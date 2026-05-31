@@ -11,9 +11,16 @@ export class BrowserCommandError extends Error {
     | "OUTPUT_TOO_LARGE"
     | "RESULT_TOO_LARGE";
 
-  constructor(code: BrowserCommandError["code"], message: string) {
+  readonly details: Record<string, unknown> | undefined;
+
+  constructor(
+    code: BrowserCommandError["code"],
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "BrowserCommandError";
     this.code = code;
+    this.details = details;
   }
 }

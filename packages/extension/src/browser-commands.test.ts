@@ -15,6 +15,7 @@ import {
   tabSummary,
   windowSnapshot,
 } from "./browser-commands-test-utils.js";
+import { ContentScriptDeliveryError } from "./content-script-delivery.js";
 
 const browserSmokeRequests = new Map<CommandId, unknown>([
   ["tabs.list", {}],
@@ -1249,6 +1250,37 @@ describe("browser command handling", () => {
       },
     });
     expect(response.ok ? "" : response.error.message).toContain("Open a normal web page");
+  });
+
+  it("surfaces classified content-script delivery failures", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    ]);
+    adapter.contentFailure = new ContentScriptDeliveryError({
+      cause: "permission-denied",
+      stage: "send",
+      originalMessage: "Missing host permission for the tab",
+      retried: false,
+    });
+
+    const response = await handleBrowserRequest(
+      createRequest("snapshot", { interactiveOnly: true }, "snapshot-delivery-1", 1),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      protocolVersion: 1,
+      ok: false,
+      error: {
+        code: "SCRIPT_INJECTION_FAILED",
+        message: expect.stringContaining("denied extension host access"),
+        details: {
+          cause: "permission-denied",
+          stage: "send",
+          retried: false,
+        },
+      },
+    });
   });
 
   it("surfaces stale content-script version mismatches without treating them as injection failures", async () => {

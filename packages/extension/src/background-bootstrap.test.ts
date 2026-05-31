@@ -97,6 +97,28 @@ describe("background bootstrap", () => {
       .calls;
     expect(scriptingCalls).toEqual([]);
   });
+
+  it("does not inject content scripts for classified non-recoverable send failures", async () => {
+    const port = new FakeNativePort();
+    const browser = createFakeBrowserApi(port);
+    const networkTracker = new NetworkRequestTracker();
+    const adapter = createBackgroundBrowserAdapter({ browser, networkTracker });
+
+    (browser.tabs as unknown as { sendMessageFailure: Error }).sendMessageFailure = new Error(
+      "Cannot access a restricted Firefox page",
+    );
+
+    await expect(
+      adapter.sendContentRequest(42, createRequest("snapshot", {}, "snapshot-1")),
+    ).rejects.toMatchObject({
+      deliveryCause: "restricted-page",
+      stage: "send",
+      retried: false,
+    });
+    expect((browser.scripting as unknown as { readonly calls: readonly unknown[] }).calls).toEqual(
+      [],
+    );
+  });
 });
 
 class FakeNativePort implements NativePortLike {
@@ -132,6 +154,7 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
     },
     tabs: {
       failNextSendMessage: false,
+      sendMessageFailure: undefined,
       create: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
       update: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
       get: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
@@ -143,8 +166,12 @@ function createFakeBrowserApi(port: NativePortLike): BackgroundBrowserApi {
       sendMessage: async function sendMessage(this: {
         failNextSendMessage: boolean;
         response: unknown;
+        sendMessageFailure: Error | undefined;
       }) {
         sendMessageCalls += 1;
+        if (this.sendMessageFailure !== undefined) {
+          throw this.sendMessageFailure;
+        }
         if (this.failNextSendMessage) {
           this.failNextSendMessage = false;
           throw new Error("content script missing");

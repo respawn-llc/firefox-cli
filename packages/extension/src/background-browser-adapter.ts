@@ -1,6 +1,11 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import type { BackgroundBrowserAdapter } from "./background-controller.js";
 import { createBrowserCommandDeadline } from "./browser-command/deadline.js";
+import {
+  createContentScriptInjectionState,
+  deliverContentScriptRequest,
+  type ContentScriptInjectionState,
+} from "./content-script-delivery.js";
 import { executeEvalInPage } from "./eval-executor.js";
 import { createGlobMatcher } from "./glob.js";
 import type { NetworkRequestTracker } from "./network-tracker.js";
@@ -9,11 +14,13 @@ export function createBackgroundBrowserAdapter(options: {
   readonly browser: typeof browser;
   readonly networkTracker: NetworkRequestTracker;
   readonly clipboard?: Pick<typeof navigator.clipboard, "readText" | "writeText">;
+  readonly contentScriptState?: ContentScriptInjectionState;
 }): BackgroundBrowserAdapter {
   const clipboard = options.clipboard ?? navigator.clipboard;
   const requiredHostAccess = {
     origins: getExtensionPermissionRequirements().popupApprovalOrigins,
   };
+  const contentScriptState = options.contentScriptState ?? createContentScriptInjectionState();
   return {
     hasRequiredHostAccess: async () =>
       options.browser.permissions?.contains(requiredHostAccess) ?? true,
@@ -175,15 +182,23 @@ export function createBackgroundBrowserAdapter(options: {
       return toWindowSnapshot(window);
     },
     sendContentRequest: async (tabId, request) => {
-      try {
-        return await options.browser.tabs.sendMessage(tabId, request);
-      } catch {
-        await options.browser.scripting.executeScript({
-          target: { tabId, allFrames: false },
-          files: ["content.js"],
-        });
-        return options.browser.tabs.sendMessage(tabId, request);
-      }
+      return deliverContentScriptRequest(
+        {
+          sendMessage: (targetTabId, contentRequest) =>
+            options.browser.tabs.sendMessage(targetTabId, contentRequest),
+          injectContentScript: async (targetTabId) => {
+            await options.browser.scripting.executeScript({
+              target: { tabId: targetTabId, allFrames: false },
+              files: ["content.js"],
+            });
+          },
+          markInjected: (targetTabId) => {
+            contentScriptState.markInjected(targetTabId);
+          },
+        },
+        tabId,
+        request,
+      );
     },
     executeEval: async (tabId, payload) => {
       const [result] = await options.browser.scripting.executeScript({

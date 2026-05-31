@@ -4,6 +4,7 @@ import {
   type BackgroundStorageAdapter,
 } from "./background-controller.js";
 import { createBackgroundBrowserAdapter } from "./background-browser-adapter.js";
+import { createContentScriptInjectionState } from "./content-script-delivery.js";
 import { NetworkRequestTracker } from "./network-tracker.js";
 
 type RuntimeMessage = { readonly type?: string };
@@ -44,10 +45,12 @@ export function startBackground(options: {
   readonly networkTracker?: NetworkRequestTracker;
 }): BackgroundLifecycle {
   const networkTracker = options.networkTracker ?? new NetworkRequestTracker();
+  const contentScriptState = createContentScriptInjectionState();
   const controller = new FirefoxCliBackgroundController({
     browserAdapter: createBackgroundBrowserAdapter({
       browser: options.browser,
       networkTracker,
+      contentScriptState,
       ...(options.clipboard === undefined ? {} : { clipboard: options.clipboard }),
     }),
     connectNative: (name) => options.browser.runtime.connectNative(name),
@@ -86,6 +89,7 @@ export function startBackground(options: {
   }[] = [];
   const onTabRemoved = (tabId: number) => {
     networkTracker.pruneTab(tabId);
+    contentScriptState.forgetTab(tabId);
   };
 
   controller.start();

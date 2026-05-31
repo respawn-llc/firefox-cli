@@ -31,6 +31,9 @@ export async function handleBrowserRequest(
       {
         code: error instanceof BrowserCommandError ? error.code : "PERMISSION_DENIED",
         message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof BrowserCommandError && error.details !== undefined
+          ? { details: error.details }
+          : {}),
       },
       request.protocolVersion,
     );
