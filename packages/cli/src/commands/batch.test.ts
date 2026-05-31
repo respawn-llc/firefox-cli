@@ -2,11 +2,7 @@ import { createRequest, type RequestEnvelope } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { createUploadBudget } from "../upload.js";
 import { buildBatchRequest } from "./batch.js";
-import {
-  InvalidBatchArgvCommandError,
-  type CliDependencies,
-  type CliRequestBuildContext,
-} from "../types.js";
+import { InvalidBatchArgvCommandError, type CliDependencies, type CliRequestBuildContext } from "../types.js";
 
 const dependencies: CliDependencies = {
   version: "0.0.0-test",

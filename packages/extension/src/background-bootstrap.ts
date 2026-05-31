@@ -1,7 +1,4 @@
-import {
-  FirefoxCliBackgroundController,
-  type BackgroundStorageAdapter,
-} from "./background-controller.js";
+import { FirefoxCliBackgroundController, type BackgroundStorageAdapter } from "./background-controller.js";
 import { createBackgroundBrowserAdapter } from "./background-browser-adapter.js";
 import { createContentScriptInjectionState } from "./content-script-delivery.js";
 import { NetworkObservationService } from "./network-observation-service.js";
@@ -60,8 +57,7 @@ export function startBackground(options: {
       : { storageAdapter: options.controllerOptions.storageAdapter }),
   });
 
-  const runtimeListener: RuntimeMessageListener = (message) =>
-    controller.handleRuntimeMessage(message);
+  const runtimeListener: RuntimeMessageListener = (message) => controller.handleRuntimeMessage(message);
   const onTabRemoved = (tabId: number) => {
     networkObservation.pruneTab(tabId);
     contentScriptState.forgetTab(tabId);

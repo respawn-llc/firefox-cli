@@ -1,9 +1,4 @@
-import type {
-  CommandHandlerMap,
-  CommandId,
-  RequestEnvelope,
-  ResponseEnvelope,
-} from "@firefox-cli/protocol";
+import type { CommandHandlerMap, CommandId, RequestEnvelope, ResponseEnvelope } from "@firefox-cli/protocol";
 import type { ExecuteBatchStep } from "../browser-command/batch.js";
 import type { BrowserTargetContext } from "../browser-command/target-context.js";
 import type { BackgroundBrowserAdapter } from "../browser-command/types.js";

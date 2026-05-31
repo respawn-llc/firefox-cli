@@ -1,8 +1,4 @@
-import type {
-  SnapshotFrameDiagnostic,
-  SnapshotParams,
-  SnapshotResult,
-} from "@firefox-cli/protocol";
+import type { SnapshotFrameDiagnostic, SnapshotParams, SnapshotResult } from "@firefox-cli/protocol";
 import type { ElementRefRegistry } from "../element-ref-registry.js";
 import { defaultSnapshotSemantics, type SnapshotSemantics } from "./snapshot-semantics.js";
 import { resolveScope } from "./dom.js";
@@ -68,8 +64,7 @@ function collectEntries(
   const role = semantics.getRole(element);
   const name = semantics.getAccessibleName(element);
   const interactive = semantics.isInteractive(element, role);
-  const include =
-    params.interactiveOnly === true ? interactive : semantics.isSemantic(element, role, name);
+  const include = params.interactiveOnly === true ? interactive : semantics.isSemantic(element, role, name);
   if (include) {
     entries.push({
       element,
@@ -83,9 +78,7 @@ function collectEntries(
   if (element.localName === "iframe") {
     frames.push({
       selector: semantics.describeFrame(element),
-      ...(element.getAttribute("title") === null
-        ? {}
-        : { title: element.getAttribute("title") ?? "" }),
+      ...(element.getAttribute("title") === null ? {} : { title: element.getAttribute("title") ?? "" }),
       ...(element.getAttribute("src") === null ? {} : { url: element.getAttribute("src") ?? "" }),
       unsupported: true,
       reason: "Iframe refs are prototype-gated.",

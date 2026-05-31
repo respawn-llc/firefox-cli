@@ -60,8 +60,7 @@ function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
 
   return {
     optionArgs: parsed.optionArgs,
-    source:
-      base64 !== undefined ? "base64" : hasOption(parsed.optionArgs, "--stdin") ? "stdin" : "argv",
+    source: base64 !== undefined ? "base64" : hasOption(parsed.optionArgs, "--stdin") ? "stdin" : "argv",
     ...(script === undefined ? {} : { script }),
     ...(base64 === undefined ? {} : { base64 }),
     ...(timeout === undefined ? {} : { timeout }),
@@ -70,10 +69,7 @@ function parseEvalArguments(args: readonly string[]): ParsedEvalArguments {
   };
 }
 
-async function readEvalScript(
-  args: ParsedEvalArguments,
-  dependencies: CliDependencies,
-): Promise<string> {
+async function readEvalScript(args: ParsedEvalArguments, dependencies: CliDependencies): Promise<string> {
   const script =
     args.source === "stdin"
       ? await (dependencies.readStdin?.() ?? readProcessStdin())

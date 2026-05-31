@@ -102,9 +102,7 @@ export function createZipFixture(
   return {
     data: Buffer.concat([localDirectory, centralDirectory, endRecord, comment]),
     localHeaderOffsets,
-    centralHeaderOffsets: centralHeaderRelativeOffsets.map(
-      (offset) => localDirectory.length + offset,
-    ),
+    centralHeaderOffsets: centralHeaderRelativeOffsets.map((offset) => localDirectory.length + offset),
     eocdOffset,
   };
 }

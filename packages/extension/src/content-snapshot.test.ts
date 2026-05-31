@@ -27,10 +27,7 @@ import {
   type ContentLogCaptureService,
 } from "./content-snapshot/log-capture.js";
 
-type TestContentOptions = Omit<
-  Parameters<typeof handleRawContentScriptRequest>[1],
-  "logCapture"
-> & {
+type TestContentOptions = Omit<Parameters<typeof handleRawContentScriptRequest>[1], "logCapture"> & {
   readonly logCapture?: ContentLogCaptureService;
 };
 
@@ -326,9 +323,7 @@ describe("content snapshot", () => {
       1000,
     );
 
-    expect(() => registry.resolve("@e1", { now: 1011 })).toThrow(
-      "Element ref is stale or unknown.",
-    );
+    expect(() => registry.resolve("@e1", { now: 1011 })).toThrow("Element ref is stale or unknown.");
   });
 
   it("resolves refs created by an earlier content request", async () => {
@@ -342,14 +337,8 @@ describe("content snapshot", () => {
       logCapture: createContentLogCaptureService(),
     });
 
-    const snapshot = await handler(
-      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
-    );
-    const parsedSnapshot = parseBoundaryResponse(
-      "extension-to-content-script",
-      "snapshot",
-      snapshot,
-    );
+    const snapshot = await handler(createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"));
+    const parsedSnapshot = parseBoundaryResponse("extension-to-content-script", "snapshot", snapshot);
     if (!parsedSnapshot.ok || !parsedSnapshot.value.ok) {
       throw new Error("snapshot failed");
     }
@@ -366,11 +355,7 @@ describe("content snapshot", () => {
       ),
     );
 
-    const parsedResolve = parseBoundaryResponse(
-      "extension-to-content-script",
-      "ref.resolve",
-      resolved,
-    );
+    const parsedResolve = parseBoundaryResponse("extension-to-content-script", "ref.resolve", resolved);
     expect(parsedResolve).toMatchObject({
       ok: true,
       value: {
@@ -442,20 +427,18 @@ describe("content snapshot", () => {
       result: { kind: "html", value: '<a id="link" href="/docs">Docs</a>' },
     });
     expect(
-      handleContentScriptRequest(
-        createRequest("get", { kind: "value", selector: "#email" }, "g3"),
-        { document: window.document, registry, now: 1001 },
-      ),
+      handleContentScriptRequest(createRequest("get", { kind: "value", selector: "#email" }, "g3"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "value", value: "user@example.test" } });
     expect(
-      handleContentScriptRequest(
-        createRequest("get", { kind: "value", selector: "#main" }, "g3b"),
-        {
-          document: window.document,
-          registry,
-          now: 1001,
-        },
-      ),
+      handleContentScriptRequest(createRequest("get", { kind: "value", selector: "#main" }, "g3b"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "value", value: null } });
     expect(
       handleContentScriptRequest(
@@ -481,10 +464,11 @@ describe("content snapshot", () => {
       result: { kind: "box", value: { x: 1, y: 2, width: 300, height: 200 } },
     });
     expect(
-      handleContentScriptRequest(
-        createRequest("get", { kind: "styles", selector: "#main" }, "g7"),
-        { document: window.document, registry, now: 1001 },
-      ),
+      handleContentScriptRequest(createRequest("get", { kind: "styles", selector: "#main" }, "g7"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({
       ok: true,
       result: { kind: "styles", value: { display: "block", color: "rgb(255, 0, 0)" } },
@@ -517,26 +501,25 @@ describe("content snapshot", () => {
     }
 
     expect(
-      handleContentScriptRequest(
-        createRequest("is", { kind: "visible", selector: "#save" }, "i1"),
-        {
-          document: window.document,
-          registry,
-          now: 1001,
-        },
-      ),
+      handleContentScriptRequest(createRequest("is", { kind: "visible", selector: "#save" }, "i1"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "visible", value: true } });
     expect(
-      handleContentScriptRequest(
-        createRequest("is", { kind: "visible", selector: "#hidden" }, "i2"),
-        { document: window.document, registry, now: 1001 },
-      ),
+      handleContentScriptRequest(createRequest("is", { kind: "visible", selector: "#hidden" }, "i2"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "visible", value: false } });
     expect(
-      handleContentScriptRequest(
-        createRequest("is", { kind: "enabled", selector: "#disabled" }, "i3"),
-        { document: window.document, registry, now: 1001 },
-      ),
+      handleContentScriptRequest(createRequest("is", { kind: "enabled", selector: "#disabled" }, "i3"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "enabled", value: false } });
     expect(
       handleContentScriptRequest(
@@ -571,10 +554,11 @@ describe("content snapshot", () => {
     ).toMatchObject({ ok: true, result: { kind: "checked", value: true } });
     expect(snapshot.result.generationId).toMatch(/^g/u);
     expect(
-      handleContentScriptRequest(
-        createRequest("is", { kind: "checked", selector: "#aria-check" }, "i6"),
-        { document: window.document, registry, now: 1001 },
-      ),
+      handleContentScriptRequest(createRequest("is", { kind: "checked", selector: "#aria-check" }, "i6"), {
+        document: window.document,
+        registry,
+        now: 1001,
+      }),
     ).toMatchObject({ ok: true, result: { kind: "checked", value: true } });
   });
 
@@ -865,15 +849,12 @@ describe("content snapshot", () => {
   it("returns REF_NOT_FOUND when resolving an unknown ref", () => {
     const { window } = new JSDOM(`<button>Save</button>`, { url: "https://example.test/" });
 
-    const response = handleContentScriptRequest(
-      createRequest("ref.resolve", { ref: "@e1" }, "ref-1"),
-      {
-        document: window.document,
-        registry: new ElementRefRegistry<Element>(),
-        logCapture: createContentLogCaptureService(),
-        now: 1000,
-      },
-    );
+    const response = handleContentScriptRequest(createRequest("ref.resolve", { ref: "@e1" }, "ref-1"), {
+      document: window.document,
+      registry: new ElementRefRegistry<Element>(),
+      logCapture: createContentLogCaptureService(),
+      now: 1000,
+    });
 
     expect(response).toMatchObject({
       ok: false,
@@ -896,14 +877,11 @@ describe("content snapshot", () => {
     );
     window.document.querySelector("#save")?.remove();
 
-    const response = handleContentScriptRequest(
-      createRequest("ref.resolve", { ref: "@e1" }, "ref-1"),
-      {
-        document: window.document,
-        registry,
-        now: 1001,
-      },
-    );
+    const response = handleContentScriptRequest(createRequest("ref.resolve", { ref: "@e1" }, "ref-1"), {
+      document: window.document,
+      registry,
+      now: 1001,
+    });
 
     expect(response).toMatchObject({
       ok: false,
@@ -926,14 +904,11 @@ describe("content snapshot", () => {
     );
     window.document.querySelector("#save")?.replaceWith(window.document.createElement("button"));
 
-    const response = handleContentScriptRequest(
-      createRequest("ref.resolve", { ref: "@e1" }, "ref-1"),
-      {
-        document: window.document,
-        registry,
-        now: 1001,
-      },
-    );
+    const response = handleContentScriptRequest(createRequest("ref.resolve", { ref: "@e1" }, "ref-1"), {
+      document: window.document,
+      registry,
+      now: 1001,
+    });
 
     expect(response).toMatchObject({
       ok: false,
@@ -1094,11 +1069,7 @@ describe("content snapshot", () => {
       ).toMatchObject({ ok: true, result: { action: "copy", ok: true, text: "copied" } });
       expect(
         handleContentScriptRequest(
-          createRequest(
-            "clipboard",
-            { action: "paste", selector: "#clip", text: "pasted" },
-            "paste-1",
-          ),
+          createRequest("clipboard", { action: "paste", selector: "#clip", text: "pasted" }, "paste-1"),
           base,
         ),
       ).toMatchObject({ ok: true, result: { action: "paste", ok: true } });
@@ -1106,11 +1077,7 @@ describe("content snapshot", () => {
 
       expect(
         handleContentScriptRequest(
-          createRequest(
-            "storage",
-            { area: "local", action: "set", key: "phase", value: "8" },
-            "s1",
-          ),
+          createRequest("storage", { area: "local", action: "set", key: "phase", value: "8" }, "s1"),
           base,
         ),
       ).toMatchObject({ ok: true, result: { area: "local", action: "set", ok: true } });
@@ -1121,26 +1088,17 @@ describe("content snapshot", () => {
         ),
       ).toMatchObject({ ok: true, result: { area: "local", action: "get", value: "8" } });
       expect(
-        handleContentScriptRequest(
-          createRequest("storage", { area: "local", action: "get" }, "s3"),
-          base,
-        ),
+        handleContentScriptRequest(createRequest("storage", { area: "local", action: "get" }, "s3"), base),
       ).toMatchObject({ ok: true, result: { entries: { phase: "8" } } });
 
       expect(
         handleContentScriptRequest(createRequest("dialog", { action: "status" }, "dialog-1"), base),
       ).toMatchObject({ ok: true, result: { action: "status", handled: false } });
 
-      handleContentScriptRequest(
-        createRequest("console", { action: "clear" }, "console-clear"),
-        base,
-      );
+      handleContentScriptRequest(createRequest("console", { action: "clear" }, "console-clear"), base);
       captureConsoleLogWithoutStdout("phase8-log", 42);
       expect(
-        handleContentScriptRequest(
-          createRequest("console", { action: "list" }, "console-list"),
-          base,
-        ),
+        handleContentScriptRequest(createRequest("console", { action: "list" }, "console-list"), base),
       ).toMatchObject({
         ok: true,
         result: {
@@ -1148,16 +1106,10 @@ describe("content snapshot", () => {
         },
       });
 
-      handleContentScriptRequest(
-        createRequest("errors", { action: "clear" }, "errors-clear"),
-        base,
-      );
+      handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
       window.dispatchEvent(new window.ErrorEvent("error", { message: "phase8-error" }));
       expect(
-        handleContentScriptRequest(
-          createRequest("errors", { action: "list" }, "errors-list"),
-          base,
-        ),
+        handleContentScriptRequest(createRequest("errors", { action: "list" }, "errors-list"), base),
       ).toMatchObject({
         ok: true,
         result: {
@@ -1251,15 +1203,9 @@ describe("content snapshot", () => {
     };
     const originalFirst = readHighlightFields(first);
 
-    handleContentScriptRequest(
-      createRequest("highlight", { selector: "#first" }, "highlight-first"),
-      base,
-    );
+    handleContentScriptRequest(createRequest("highlight", { selector: "#first" }, "highlight-first"), base);
     expect(first.style.outline).toContain("#ff9500");
-    handleContentScriptRequest(
-      createRequest("highlight", { selector: "#second" }, "highlight-second"),
-      base,
-    );
+    handleContentScriptRequest(createRequest("highlight", { selector: "#second" }, "highlight-second"), base);
 
     expect(readHighlightFields(first)).toEqual(originalFirst);
     expect(second.getAttribute("data-firefox-cli-highlight")).toBe("true");
@@ -1338,11 +1284,7 @@ describe("content snapshot", () => {
     };
 
     handleContentScriptRequest(
-      createRequest(
-        "highlight",
-        { selector: "#target", durationMs: 100 },
-        "highlight-transition-1",
-      ),
+      createRequest("highlight", { selector: "#target", durationMs: 100 }, "highlight-transition-1"),
       base,
     );
     expect(scheduler.activeTimers()).toHaveLength(1);
@@ -1354,11 +1296,7 @@ describe("content snapshot", () => {
     expect(target.style.outline).toContain("#ff9500");
 
     handleContentScriptRequest(
-      createRequest(
-        "highlight",
-        { selector: "#target", durationMs: 100 },
-        "highlight-transition-3",
-      ),
+      createRequest("highlight", { selector: "#target", durationMs: 100 }, "highlight-transition-3"),
       base,
     );
     expect(scheduler.activeTimers()).toHaveLength(1);
@@ -1381,17 +1319,11 @@ describe("content snapshot", () => {
     const globalLogHandle = installLogCapture();
 
     try {
-      handleContentScriptRequest(
-        createRequest("console", { action: "clear" }, "console-clear"),
-        base,
-      );
+      handleContentScriptRequest(createRequest("console", { action: "clear" }, "console-clear"), base);
       captureConsoleLogWithoutStdout("explicit-log");
 
       expect(
-        handleContentScriptRequest(
-          createRequest("console", { action: "list" }, "console-list"),
-          base,
-        ),
+        handleContentScriptRequest(createRequest("console", { action: "list" }, "console-list"), base),
       ).toMatchObject({
         ok: true,
         result: {
@@ -1399,15 +1331,9 @@ describe("content snapshot", () => {
         },
       });
 
-      handleContentScriptRequest(
-        createRequest("console", { action: "clear" }, "console-clear-2"),
-        base,
-      );
+      handleContentScriptRequest(createRequest("console", { action: "clear" }, "console-clear-2"), base);
       expect(
-        handleContentScriptRequest(
-          createRequest("console", { action: "list" }, "console-list-2"),
-          base,
-        ),
+        handleContentScriptRequest(createRequest("console", { action: "list" }, "console-list-2"), base),
       ).toMatchObject({
         ok: true,
         result: {
@@ -1431,13 +1357,9 @@ describe("content snapshot", () => {
       } as never),
     ).toThrow("ContentLogCaptureService is required");
 
-    window.dispatchEvent(
-      new window.ErrorEvent("error", { message: "missing-capture-service-leak-check" }),
-    );
+    window.dispatchEvent(new window.ErrorEvent("error", { message: "missing-capture-service-leak-check" }));
     expect(
-      createErrorsResult("list").errors?.some(
-        (entry) => entry.text === "missing-capture-service-leak-check",
-      ),
+      createErrorsResult("list").errors?.some((entry) => entry.text === "missing-capture-service-leak-check"),
     ).toBe(false);
   });
 
@@ -1453,10 +1375,7 @@ describe("content snapshot", () => {
     };
 
     try {
-      handleContentScriptRequest(
-        createRequest("errors", { action: "clear" }, "errors-clear"),
-        base,
-      );
+      handleContentScriptRequest(createRequest("errors", { action: "clear" }, "errors-clear"), base);
       for (let index = 0; index < MAX_LOG_ENTRIES + 2; index += 1) {
         window.dispatchEvent(new window.ErrorEvent("error", { message: `bounded-error-${index}` }));
       }
@@ -1500,15 +1419,12 @@ describe("content snapshot", () => {
       console.log("cold-facade-log");
 
       expect(
-        firstFacade.handleContentScriptRequest(
-          createRequest("console", { action: "list" }, "console-list"),
-          {
-            document: new JSDOM(`<main></main>`).window.document,
-            registry: new firstFacade.ElementRefRegistry<Element>(),
-            logCapture: createContentLogCaptureService(),
-            now: 1000,
-          },
-        ),
+        firstFacade.handleContentScriptRequest(createRequest("console", { action: "list" }, "console-list"), {
+          document: new JSDOM(`<main></main>`).window.document,
+          registry: new firstFacade.ElementRefRegistry<Element>(),
+          logCapture: createContentLogCaptureService(),
+          now: 1000,
+        }),
       ).toMatchObject({
         ok: true,
         result: {
@@ -1577,9 +1493,7 @@ describe("content snapshot", () => {
     expect(registrationOrder).toEqual(["installGlobal", "installWindow", "addListener"]);
     expect(runtime.listenerCount()).toBe(1);
     captureConsoleLogWithoutStdout("runtime-log-before-message");
-    const response = await runtime.emit(
-      createRequest("console", { action: "list" }, "runtime-console-list"),
-    );
+    const response = await runtime.emit(createRequest("console", { action: "list" }, "runtime-console-list"));
     const parsed = parseBoundaryResponse("extension-to-content-script", "console", response);
 
     expect(parsed).toMatchObject({
@@ -1595,9 +1509,9 @@ describe("content snapshot", () => {
     lifecycle.dispose();
     expect(runtime.listenerCount()).toBe(0);
     captureConsoleLogWithoutStdout("after-runtime-dispose");
-    expect(
-      createConsoleResult("list").entries?.some((entry) => entry.text === "after-runtime-dispose"),
-    ).toBe(false);
+    expect(createConsoleResult("list").entries?.some((entry) => entry.text === "after-runtime-dispose")).toBe(
+      false,
+    );
   });
 
   it("keeps duplicate content runtime starts idempotent and preserves refs until explicit dispose", async () => {
@@ -1614,11 +1528,7 @@ describe("content snapshot", () => {
     const snapshotResponse = await runtime.emit(
       createRequest("snapshot", { selector: "#save", interactiveOnly: true }, "snapshot-ref"),
     );
-    const snapshotParsed = parseBoundaryResponse(
-      "extension-to-content-script",
-      "snapshot",
-      snapshotResponse,
-    );
+    const snapshotParsed = parseBoundaryResponse("extension-to-content-script", "snapshot", snapshotResponse);
     expect(snapshotParsed).toMatchObject({
       ok: true,
       value: {
@@ -1640,11 +1550,7 @@ describe("content snapshot", () => {
       createRequest("ref.resolve", { ref: "@e1" }, "resolve-ref"),
     );
     expect(
-      parseBoundaryResponse(
-        "extension-to-content-script",
-        "ref.resolve",
-        resolvedWhileDuplicateStarted,
-      ),
+      parseBoundaryResponse("extension-to-content-script", "ref.resolve", resolvedWhileDuplicateStarted),
     ).toMatchObject({
       ok: true,
       value: {
@@ -1681,9 +1587,9 @@ describe("content snapshot", () => {
 
       restoreLogCapture();
       console.log("after-restore");
-      expect(
-        createConsoleResult("list").entries?.some((entry) => entry.text === "after-restore"),
-      ).toBe(false);
+      expect(createConsoleResult("list").entries?.some((entry) => entry.text === "after-restore")).toBe(
+        false,
+      );
       expect(passthroughCalls).toEqual([["captured-once"], ["after-restore"]]);
 
       installLogCapture();
@@ -1738,32 +1644,22 @@ describe("content snapshot", () => {
     createErrorsResult("clear");
     installWindowLogCapture(firstWindow);
     installWindowLogCapture(secondWindow);
-    firstDom.window.dispatchEvent(
-      new firstDom.window.ErrorEvent("error", { message: "window-error-1" }),
-    );
+    firstDom.window.dispatchEvent(new firstDom.window.ErrorEvent("error", { message: "window-error-1" }));
     expect(createErrorsResult("list")).toMatchObject({
       errors: [expect.objectContaining({ text: "window-error-1" })],
     });
 
     restoreWindowLogCapture(firstWindow);
-    firstDom.window.dispatchEvent(
-      new firstDom.window.ErrorEvent("error", { message: "window-error-2" }),
-    );
-    secondDom.window.dispatchEvent(
-      new secondDom.window.ErrorEvent("error", { message: "window-error-3" }),
-    );
-    expect(
-      createErrorsResult("list").errors?.some((entry) => entry.text === "window-error-2"),
-    ).toBe(false);
+    firstDom.window.dispatchEvent(new firstDom.window.ErrorEvent("error", { message: "window-error-2" }));
+    secondDom.window.dispatchEvent(new secondDom.window.ErrorEvent("error", { message: "window-error-3" }));
+    expect(createErrorsResult("list").errors?.some((entry) => entry.text === "window-error-2")).toBe(false);
     expect(
       createErrorsResult("list").errors?.filter((entry) => entry.text === "window-error-3"),
     ).toHaveLength(1);
 
     installWindowLogCapture(firstWindow);
     installWindowLogCapture(firstWindow);
-    firstDom.window.dispatchEvent(
-      new firstDom.window.ErrorEvent("error", { message: "window-error-4" }),
-    );
+    firstDom.window.dispatchEvent(new firstDom.window.ErrorEvent("error", { message: "window-error-4" }));
     expect(
       createErrorsResult("list").errors?.filter((entry) => entry.text === "window-error-4"),
     ).toHaveLength(1);
@@ -1777,9 +1673,7 @@ describe("content snapshot", () => {
     const firstHandle = installWindowLogCapture(view);
     const secondHandle = installWindowLogCapture(view);
 
-    dom.window.dispatchEvent(
-      new dom.window.ErrorEvent("error", { message: "scoped-window-before-dispose" }),
-    );
+    dom.window.dispatchEvent(new dom.window.ErrorEvent("error", { message: "scoped-window-before-dispose" }));
     firstHandle.dispose();
     dom.window.dispatchEvent(
       new dom.window.ErrorEvent("error", { message: "scoped-window-after-one-dispose" }),
@@ -1791,9 +1685,7 @@ describe("content snapshot", () => {
 
     const listed = createErrorsResult("list").errors ?? [];
     expect(listed.filter((entry) => entry.text === "scoped-window-before-dispose")).toHaveLength(1);
-    expect(listed.filter((entry) => entry.text === "scoped-window-after-one-dispose")).toHaveLength(
-      1,
-    );
+    expect(listed.filter((entry) => entry.text === "scoped-window-after-one-dispose")).toHaveLength(1);
     expect(listed.some((entry) => entry.text === "scoped-window-after-all-dispose")).toBe(false);
   });
 

@@ -45,11 +45,7 @@ import {
   type RequestEnvelope,
 } from "./index.js";
 
-const boundaries: readonly Boundary[] = [
-  "cli-to-host",
-  "host-to-extension",
-  "extension-to-content-script",
-];
+const boundaries: readonly Boundary[] = ["cli-to-host", "host-to-extension", "extension-to-content-script"];
 const inheritedCommandNames = ["toString", "constructor", "__proto__"] as const;
 
 const cliIdentity: ComponentIdentity = {
@@ -122,9 +118,7 @@ const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliRouteMet
   type: [{ id: "type", path: ["type"], batch: true }],
   press: [{ id: "press", path: ["press"], batch: true }],
   "keyboard.type": [{ id: "keyboard.type", path: ["keyboard", "type"], batch: true }],
-  "keyboard.inserttext": [
-    { id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true },
-  ],
+  "keyboard.inserttext": [{ id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true }],
   check: [{ id: "check", path: ["check"], batch: true }],
   uncheck: [{ id: "uncheck", path: ["uncheck"], batch: true }],
   select: [{ id: "select", path: ["select"], batch: true }],
@@ -148,17 +142,11 @@ describe("protocol negotiation", () => {
 
   it("chooses the highest overlapping protocol version", () => {
     expect(
-      negotiateProtocolVersion(
-        { protocolMin: 1, protocolMax: 3 },
-        { protocolMin: 1, protocolMax: 2 },
-      ),
+      negotiateProtocolVersion({ protocolMin: 1, protocolMax: 3 }, { protocolMin: 1, protocolMax: 2 }),
     ).toEqual({ ok: true, value: 2 });
 
     expect(
-      negotiateProtocolVersion(
-        { protocolMin: 1, protocolMax: 1 },
-        { protocolMin: 2, protocolMax: 3 },
-      ),
+      negotiateProtocolVersion({ protocolMin: 1, protocolMax: 1 }, { protocolMin: 2, protocolMax: 3 }),
     ).toMatchObject({
       ok: false,
       error: {
@@ -269,9 +257,9 @@ describe("protocol negotiation", () => {
         }),
       ),
     ).toMatchObject({ ok: true, value: { id: request.id, ok: true } });
-    expect(
-      session.withResponseVersion(request, createErrorResponseForRequest(request, error)),
-    ).toEqual(createErrorResponseForRequest(request, error, 1));
+    expect(session.withResponseVersion(request, createErrorResponseForRequest(request, error))).toEqual(
+      createErrorResponseForRequest(request, error, 1),
+    );
 
     expect(
       parseBoundaryResponse(
@@ -301,9 +289,7 @@ describe("protocol command metadata", () => {
   it("uses unique CLI route ids and paths", () => {
     const routes = getCliRoutes();
     const routeEntries = getCliRouteEntries();
-    const expectedRoutes = commandIds().flatMap(
-      (command) => expectedCliRoutesByCommand[command] ?? [],
-    );
+    const expectedRoutes = commandIds().flatMap((command) => expectedCliRoutesByCommand[command] ?? []);
     const expectedRouteEntries = commandIds().flatMap((command) =>
       (expectedCliRoutesByCommand[command] ?? []).map((route) => ({ command, route })),
     );
@@ -357,12 +343,7 @@ describe("protocol command metadata", () => {
   it("marks only required tab/window selectors for protocol batch default targets", () => {
     const protocolDefaultCommands = commandIds().filter(commandAcceptsProtocolBatchDefaultTarget);
 
-    expect(protocolDefaultCommands).toEqual([
-      "tab.select",
-      "tab.close",
-      "window.select",
-      "window.close",
-    ]);
+    expect(protocolDefaultCommands).toEqual(["tab.select", "tab.close", "window.select", "window.close"]);
   });
 
   it("marks extension batch default target commands", () => {
@@ -430,9 +411,7 @@ describe("protocol command metadata", () => {
   });
 
   it("identifies every command with content-script policy", () => {
-    const contentCommands = commandIds().filter(
-      (command) => commandSchemas[command].content !== "never",
-    );
+    const contentCommands = commandIds().filter((command) => commandSchemas[command].content !== "never");
     const helperCommands = commandIds().filter(isContentCommand);
 
     expect(sorted(helperCommands)).toEqual(sorted(contentCommands));
@@ -484,16 +463,14 @@ describe("protocol command metadata", () => {
       reasons: ["page-mutation"],
     });
 
+    expect(isPrivilegeSensitiveRequest(createRequest("wait", { kind: "element", selector: "#main" }))).toBe(
+      false,
+    );
+    expect(isPrivilegeSensitiveRequest(createRequest("wait", { kind: "function", expression: "1" }))).toBe(
+      true,
+    );
     expect(
-      isPrivilegeSensitiveRequest(createRequest("wait", { kind: "element", selector: "#main" })),
-    ).toBe(false);
-    expect(
-      isPrivilegeSensitiveRequest(createRequest("wait", { kind: "function", expression: "1" })),
-    ).toBe(true);
-    expect(
-      isPrivilegeSensitiveRequest(
-        createRequest("wait", { kind: "load-state", state: "networkidle" }),
-      ),
+      isPrivilegeSensitiveRequest(createRequest("wait", { kind: "load-state", state: "networkidle" })),
     ).toBe(true);
   });
 });
@@ -513,9 +490,7 @@ describe("request protocol compatibility", () => {
       reason: "Network commands are scoped to the resolved tab.",
     });
     expect(
-      getRequestProtocolRequirement(
-        createRequest("wait", { kind: "load-state", state: "networkidle" }),
-      ),
+      getRequestProtocolRequirement(createRequest("wait", { kind: "load-state", state: "networkidle" })),
     ).toEqual({
       minProtocolVersion: 2,
       reason: "Network-idle waits are scoped to the resolved tab.",
@@ -527,19 +502,13 @@ describe("request protocol compatibility", () => {
       },
     });
     expect(
-      getRequestProtocolRequirement(
-        createRequest("wait", { kind: "load-state", state: "complete" }),
-      ),
+      getRequestProtocolRequirement(createRequest("wait", { kind: "load-state", state: "complete" })),
     ).toBeUndefined();
   });
 
   it("requires protocol v2 for scoped network semantics", () => {
     const network = createRequest("network", { action: "list" }, "network-v2");
-    const networkIdle = createRequest(
-      "wait",
-      { kind: "load-state", state: "networkidle" },
-      "networkidle-v2",
-    );
+    const networkIdle = createRequest("wait", { kind: "load-state", state: "networkidle" }, "networkidle-v2");
     const batch = createRequest(
       "batch",
       {
@@ -557,11 +526,7 @@ describe("request protocol compatibility", () => {
         requiredProtocolVersion: 2,
       });
       expect(
-        parseBoundaryRequest(
-          "host-to-extension",
-          { ...request, protocolVersion: 1 },
-          { protocolVersion: 1 },
-        ),
+        parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 1 }, { protocolVersion: 1 }),
       ).toMatchObject({
         ok: false,
         error: {
@@ -573,11 +538,7 @@ describe("request protocol compatibility", () => {
         },
       });
       expect(
-        parseBoundaryRequest(
-          "host-to-extension",
-          { ...request, protocolVersion: 2 },
-          { protocolVersion: 2 },
-        ),
+        parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 2 }, { protocolVersion: 2 }),
       ).toMatchObject({
         ok: true,
       });
@@ -591,15 +552,15 @@ describe("request protocol compatibility", () => {
       compatible: true,
       requiredProtocolVersion: 1,
     });
-    expect(
-      createRequestProtocolMismatchError(createRequest("network", { action: "list" }), 1),
-    ).toMatchObject({
-      code: "VERSION_MISMATCH",
-      details: {
-        requiredProtocolVersion: 2,
-        negotiatedProtocolVersion: 1,
+    expect(createRequestProtocolMismatchError(createRequest("network", { action: "list" }), 1)).toMatchObject(
+      {
+        code: "VERSION_MISMATCH",
+        details: {
+          requiredProtocolVersion: 2,
+          negotiatedProtocolVersion: 1,
+        },
       },
-    });
+    );
   });
 });
 
@@ -737,11 +698,7 @@ describe("parseBoundaryRequest", () => {
     const requests = [
       createRequest("open", { url: "https://example.com/", newTab: false }, "open-1"),
       createRequest("tab.select", { target: { tab: { kind: "id", id: 42 } } }, "tab-select-1"),
-      createRequest(
-        "window.select",
-        { target: { window: { kind: "index", index: 0 } } },
-        "window-select-1",
-      ),
+      createRequest("window.select", { target: { window: { kind: "index", index: 0 } } }, "window-select-1"),
       createRequest(
         "snapshot",
         {
@@ -755,11 +712,7 @@ describe("parseBoundaryRequest", () => {
       ),
       createRequest("ref.resolve", { ref: "@e1", generationId: "g1" }, "ref-resolve-1"),
       createRequest("get", { kind: "text", selector: "#main", maxOutputBytes: 1000 }, "get-1"),
-      createRequest(
-        "get",
-        { kind: "attr", ref: "@e1", generationId: "g1", attribute: "href" },
-        "get-2",
-      ),
+      createRequest("get", { kind: "attr", ref: "@e1", generationId: "g1", attribute: "href" }, "get-2"),
       createRequest("get", { kind: "title" }, "get-title-1"),
       createRequest("is", { kind: "visible", selector: "#main" }, "is-1"),
       createRequest("is", { kind: "checked", ref: "@e1", generationId: "g1" }, "is-2"),
@@ -1329,11 +1282,7 @@ describe("parseBoundaryResponse", () => {
 
   it("validates eval responses with JSON values and undefined markers", () => {
     const json = createRequest("eval", { script: "({ ready: true })", source: "argv" }, "eval-1");
-    const undefinedValue = createRequest(
-      "eval",
-      { script: "let value = 1;", source: "stdin" },
-      "eval-2",
-    );
+    const undefinedValue = createRequest("eval", { script: "let value = 1;", source: "stdin" }, "eval-2");
 
     expect(
       parseBoundaryResponse(
@@ -1420,11 +1369,7 @@ describe("parseBoundaryResponse", () => {
   });
 
   it("validates screenshot responses and rejects malformed screenshot contracts", () => {
-    const request = createRequest(
-      "screenshot",
-      { path: "/tmp/page.png", format: "png" },
-      "screenshot-1",
-    );
+    const request = createRequest("screenshot", { path: "/tmp/page.png", format: "png" }, "screenshot-1");
 
     expect(
       parseBoundaryResponse(
@@ -1552,11 +1497,7 @@ describe("parseBoundaryResponse", () => {
     };
     const cases: readonly { readonly request: RequestEnvelope; readonly result: unknown }[] = [
       {
-        request: createRequest(
-          "drag",
-          { sourceSelector: "#source", targetSelector: "#target" },
-          "drag-1",
-        ),
+        request: createRequest("drag", { sourceSelector: "#source", targetSelector: "#target" }, "drag-1"),
         result: { action: "drag", ok: true, element },
       },
       {
@@ -1571,11 +1512,7 @@ describe("parseBoundaryResponse", () => {
         result: { action: "upload", ok: true, element, valueLength: 1 },
       },
       {
-        request: createRequest(
-          "mouse",
-          { action: "wheel", selector: "#feed", deltaY: 120 },
-          "mouse-1",
-        ),
+        request: createRequest("mouse", { action: "wheel", selector: "#feed", deltaY: 120 }, "mouse-1"),
         result: { action: "mouse", ok: true, element },
       },
       {
@@ -2037,17 +1974,13 @@ describe("parseBoundaryResponse", () => {
           elapsedMs: 5,
         },
       };
-      expect(() =>
-        parseBoundaryResponse("host-to-extension", "batch", successfulResponse),
-      ).not.toThrow();
-      expect(parseBoundaryResponse("host-to-extension", "batch", successfulResponse)).toMatchObject(
-        {
-          ok: false,
-          error: {
-            code: "INVALID_RESPONSE",
-          },
+      expect(() => parseBoundaryResponse("host-to-extension", "batch", successfulResponse)).not.toThrow();
+      expect(parseBoundaryResponse("host-to-extension", "batch", successfulResponse)).toMatchObject({
+        ok: false,
+        error: {
+          code: "INVALID_RESPONSE",
         },
-      );
+      });
 
       const failedResponse = {
         protocolVersion: PROTOCOL_VERSION,
@@ -2070,9 +2003,7 @@ describe("parseBoundaryResponse", () => {
           elapsedMs: 5,
         },
       };
-      expect(() =>
-        parseBoundaryResponse("host-to-extension", "batch", failedResponse),
-      ).not.toThrow();
+      expect(() => parseBoundaryResponse("host-to-extension", "batch", failedResponse)).not.toThrow();
       expect(parseBoundaryResponse("host-to-extension", "batch", failedResponse)).toMatchObject({
         ok: false,
         error: {
@@ -2332,9 +2263,7 @@ describe("parseBoundaryResponse", () => {
     }
   });
 
-  it.each(
-    boundaries,
-  )("rejects success responses that also include errors across %s", (boundary) => {
+  it.each(boundaries)("rejects success responses that also include errors across %s", (boundary) => {
     const parsed = parseBoundaryResponse(boundary, "noop", {
       protocolVersion: PROTOCOL_VERSION,
       id: "request-1",

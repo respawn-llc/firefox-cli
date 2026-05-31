@@ -23,11 +23,7 @@ import {
 } from "./protocol-compatibility.js";
 import { isCommandId, type CommandId, type commandSchemas } from "./registry/index.js";
 
-export type {
-  HelloRequestNegotiationOptions,
-  HelloResponseNegotiationOptions,
-  RequestProtocolCompatibility,
-};
+export type { HelloRequestNegotiationOptions, HelloResponseNegotiationOptions, RequestProtocolCompatibility };
 export { createRequestProtocolMismatchError, getRequestProtocolCompatibility };
 
 export type CommandParams<C extends CommandId> = z.infer<(typeof commandSchemas)[C]["params"]>;
@@ -299,11 +295,7 @@ export function parseBoundaryResponse(
 
   return {
     ok: true,
-    value: createValidatedErrorResponseEnvelope(
-      envelope.data.id,
-      error.data,
-      expectedProtocolVersion,
-    ),
+    value: createValidatedErrorResponseEnvelope(envelope.data.id, error.data, expectedProtocolVersion),
   };
 }
 

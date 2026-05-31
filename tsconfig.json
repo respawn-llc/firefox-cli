@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/native-host" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/extension" },
+    { "path": "./packages/test-support" },
+    { "path": "./scripts" }
+  ]
+}

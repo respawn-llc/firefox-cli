@@ -8,27 +8,16 @@ import {
   mouseAction,
   pressAction,
 } from "./content-actions/pointer-keyboard-actions.js";
-import {
-  checkAction,
-  selectAction,
-  uploadAction,
-} from "./content-actions/selection-upload-actions.js";
+import { checkAction, selectAction, uploadAction } from "./content-actions/selection-upload-actions.js";
 import { scrollAction, scrollIntoViewAction } from "./content-actions/scroll-actions.js";
-import {
-  fillAction,
-  keyboardTextAction,
-  typeAction,
-} from "./content-actions/text-editing-actions.js";
+import { fillAction, keyboardTextAction, typeAction } from "./content-actions/text-editing-actions.js";
 
 export function createActionResult(options: ActionOptions): ActionResult {
   return createContentActionResult(options) as ActionResult;
 }
 
 type ActionHandlerMap = {
-  readonly [C in ActionKind]: (
-    options: ActionOptions<C>,
-    params: CommandParams<C>,
-  ) => ContentActionResult;
+  readonly [C in ActionKind]: (options: ActionOptions<C>, params: CommandParams<C>) => ContentActionResult;
 };
 
 const actionHandlers: ActionHandlerMap = {
@@ -54,15 +43,10 @@ const actionHandlers: ActionHandlerMap = {
   keyup: keyEventAction,
 };
 
-function createContentActionResult<C extends ActionKind>(
-  options: ActionOptions<C>,
-): ContentActionResult {
+function createContentActionResult<C extends ActionKind>(options: ActionOptions<C>): ContentActionResult {
   const handler = actionHandlers[options.command];
   if (handler === undefined) {
-    throw options.createError(
-      "ACTION_REJECTED",
-      `Unsupported content action: ${String(options.command)}`,
-    );
+    throw options.createError("ACTION_REJECTED", `Unsupported content action: ${String(options.command)}`);
   }
   return handler(options, options.params);
 }

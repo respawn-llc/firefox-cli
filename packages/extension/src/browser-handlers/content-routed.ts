@@ -68,8 +68,7 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     if (request.params.kind === "title" || request.params.kind === "url") {
       return createOkResponse(request, {
         kind: request.params.kind,
-        value:
-          request.params.kind === "title" ? (resolved.tab.title ?? "") : (resolved.tab.url ?? ""),
+        value: request.params.kind === "title" ? (resolved.tab.title ?? "") : (resolved.tab.url ?? ""),
         target: resolved.target,
       });
     }
@@ -192,10 +191,7 @@ async function handleLogCommand(
   }
   return createOkResponse(
     command,
-    logResultForProtocolVersion(
-      logResponse.result as ConsoleResult | ErrorsResult,
-      command.protocolVersion,
-    ),
+    logResultForProtocolVersion(logResponse.result as ConsoleResult | ErrorsResult, command.protocolVersion),
   );
 }
 

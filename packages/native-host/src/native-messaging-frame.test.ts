@@ -1,9 +1,5 @@
 import { PassThrough, Writable } from "node:stream";
-import {
-  MAX_UPLOAD_FILE_BYTES,
-  MAX_UPLOAD_TOTAL_BYTES,
-  createRequest,
-} from "@firefox-cli/protocol";
+import { MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_TOTAL_BYTES, createRequest } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import {
   MAX_NATIVE_MESSAGE_OUTGOING_BYTES,
@@ -43,10 +39,7 @@ describe("native messaging frames", () => {
     const input = new PassThrough();
     const reader = new NativeMessagingFrameReader(input);
     input.end(
-      Buffer.concat([
-        encodeNativeMessageFrame({ index: 1 }),
-        encodeNativeMessageFrame({ index: 2 }),
-      ]),
+      Buffer.concat([encodeNativeMessageFrame({ index: 1 }), encodeNativeMessageFrame({ index: 2 })]),
     );
 
     await expect(reader.read()).resolves.toEqual({ index: 1 });

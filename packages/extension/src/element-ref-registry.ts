@@ -59,10 +59,7 @@ export class ElementRefRegistry<TElement> {
     return { generationId, refsByElement, refCount: refs.size };
   }
 
-  resolve(
-    ref: string,
-    options: { readonly generationId?: string; readonly now?: number } = {},
-  ): TElement {
+  resolve(ref: string, options: { readonly generationId?: string; readonly now?: number } = {}): TElement {
     return this.resolveRef(ref, options).element;
   }
 
@@ -94,10 +91,7 @@ export class ElementRefRegistry<TElement> {
       }
     }
 
-    if (
-      this.#latestGenerationId !== undefined &&
-      !this.#generations.has(this.#latestGenerationId)
-    ) {
+    if (this.#latestGenerationId !== undefined && !this.#generations.has(this.#latestGenerationId)) {
       this.#latestGenerationId = [...this.#generations.values()]
         .sort((a, b) => b.createdAt - a.createdAt)
         .at(0)?.id;
@@ -123,10 +117,5 @@ export class ElementRefRegistryError extends Error {
 }
 
 function isDetachedElement(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "isConnected" in value &&
-    value.isConnected === false
-  );
+  return typeof value === "object" && value !== null && "isConnected" in value && value.isConnected === false;
 }

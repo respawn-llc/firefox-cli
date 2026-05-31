@@ -19,10 +19,7 @@ export async function waitForUrl(
   const timeoutMessage = () =>
     `Timed out after ${timeoutMs}ms waiting for URL ${JSON.stringify(params.urlGlob ?? "")}.`;
   while (true) {
-    const match = findTabById(
-      await deadline.run(getOrderedWindows(adapter), timeoutMessage),
-      tabId,
-    );
+    const match = findTabById(await deadline.run(getOrderedWindows(adapter), timeoutMessage), tabId);
     if (match === undefined) {
       throw new BrowserCommandError("INVALID_TARGET", "Requested Firefox tab was not found.");
     }
@@ -100,9 +97,10 @@ function waitFunctionEvalScript(expression: string): string {
   })()`;
 }
 
-function evalValueToWaitFunctionResult(
-  value: Extract<EvalExecutorResult, { readonly ok: true }>["value"],
-): { readonly matched: boolean; readonly value: FunctionWaitValue } {
+function evalValueToWaitFunctionResult(value: Extract<EvalExecutorResult, { readonly ok: true }>["value"]): {
+  readonly matched: boolean;
+  readonly value: FunctionWaitValue;
+} {
   if (value.type !== "json" || typeof value.value !== "object" || value.value === null) {
     return { matched: false, value: null };
   }
@@ -130,10 +128,7 @@ function toFunctionWaitValue(value: unknown): FunctionWaitValue {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
-        typeof entry === "string" ||
-        typeof entry === "number" ||
-        typeof entry === "boolean" ||
-        entry === null
+        typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean" || entry === null
           ? entry
           : String(entry),
       ]),

@@ -34,10 +34,7 @@ export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new BrowserCommandError(
-        "CAPTURE_FAILED",
-        `Failed to activate screenshot target: ${message}`,
-      );
+      throw new BrowserCommandError("CAPTURE_FAILED", `Failed to activate screenshot target: ${message}`);
     }
 
     const target =

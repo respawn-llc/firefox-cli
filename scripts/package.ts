@@ -34,10 +34,7 @@ await cp(
 );
 await chmod(resolve(packageRoot, "bin/firefox-cli.js"), 0o755);
 
-await cp(
-  resolve("dist/bin", platformKey, binaryName),
-  resolve(packageRoot, "bin", platformKey, binaryName),
-);
+await cp(resolve("dist/bin", platformKey, binaryName), resolve(packageRoot, "bin", platformKey, binaryName));
 if (process.platform !== "win32") {
   await chmod(resolve(packageRoot, "bin", platformKey, binaryName), 0o755);
 }
@@ -125,12 +122,8 @@ async function copySignedExtensionXpi(path: string): Promise<void> {
 function signedExtensionProvenanceSourcePath(signedXpiPath: string): string {
   const envPath = process.env.FIREFOX_CLI_SIGNED_XPI_PROVENANCE;
   const defaultPath =
-    process.env.FIREFOX_CLI_SIGNED_XPI === undefined ||
-    process.env.FIREFOX_CLI_SIGNED_XPI.length === 0
-      ? resolve(
-          "dist/extension-artifacts",
-          signedExtensionProvenanceArtifactName(rootPackage.version),
-        )
+    process.env.FIREFOX_CLI_SIGNED_XPI === undefined || process.env.FIREFOX_CLI_SIGNED_XPI.length === 0
+      ? resolve("dist/extension-artifacts", signedExtensionProvenanceArtifactName(rootPackage.version))
       : `${signedXpiPath}.provenance.json`;
   return envPath === undefined || envPath.length === 0 ? defaultPath : resolve(envPath);
 }

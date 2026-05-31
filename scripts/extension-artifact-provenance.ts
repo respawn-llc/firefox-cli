@@ -3,11 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { z } from "zod";
 import { parseJsonWithSchema } from "./manifest-validation.js";
-import {
-  listRegularFilesUnder,
-  readRegularFile,
-  readRegularFileUnder,
-} from "./safe-extension-files.js";
+import { listRegularFilesUnder, readRegularFile, readRegularFileUnder } from "./safe-extension-files.js";
 
 export const packagedSignedExtensionProvenanceFile = "firefox-cli.xpi.provenance.json";
 
@@ -51,19 +47,14 @@ export async function writeSignedExtensionProvenance(input: {
   return provenance;
 }
 
-export async function readSignedExtensionProvenance(
-  path: string,
-): Promise<SignedExtensionProvenance> {
+export async function readSignedExtensionProvenance(path: string): Promise<SignedExtensionProvenance> {
   return parseSignedExtensionProvenance(
     (await readRegularFile(path, "signed extension provenance")).toString("utf8"),
     path,
   );
 }
 
-export function parseSignedExtensionProvenance(
-  content: string,
-  location: string,
-): SignedExtensionProvenance {
+export function parseSignedExtensionProvenance(content: string, location: string): SignedExtensionProvenance {
   return parseJsonWithSchema(
     content,
     "signed extension provenance",
@@ -81,9 +72,7 @@ export async function hashFile(path: string): Promise<string> {
 export async function hashDirectoryPayload(root: string): Promise<string> {
   const files = await listRegularFilesUnder(root, "extension source payload");
   const hash = createHash("sha256");
-  for (const file of [...files].sort((left, right) =>
-    left.relativePath.localeCompare(right.relativePath),
-  )) {
+  for (const file of [...files].sort((left, right) => left.relativePath.localeCompare(right.relativePath))) {
     hash.update(file.relativePath);
     hash.update("\0");
     hash.update(await readRegularFileUnder(root, file.relativePath, "extension source payload"));
@@ -94,9 +83,7 @@ export async function hashDirectoryPayload(root: string): Promise<string> {
 
 export function hashPayloadMap(payload: ReadonlyMap<string, Buffer>): string {
   const hash = createHash("sha256");
-  for (const [file, data] of [...payload.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
+  for (const [file, data] of [...payload.entries()].sort(([left], [right]) => left.localeCompare(right))) {
     hash.update(file);
     hash.update("\0");
     hash.update(data);

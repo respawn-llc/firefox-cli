@@ -78,9 +78,7 @@ describe("browser command handling", () => {
   it("has browser handlers for every extension-owned command routed past background control", async () => {
     const expectedCommands = (Object.keys(commandSchemas) as CommandId[]).filter(
       (command) =>
-        commandSchemas[command].owner === "extension" &&
-        command !== "capabilities" &&
-        command !== "noop",
+        commandSchemas[command].owner === "extension" && command !== "capabilities" && command !== "noop",
     );
 
     expect([...browserSmokeRequests.keys()].sort()).toEqual(expectedCommands.sort());
@@ -123,15 +121,10 @@ describe("browser command handling", () => {
   });
 
   it("rejects page-scoped commands when host approval was revoked", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.hostAccess = false;
 
-    const response = await handleBrowserRequest(
-      createRequest("snapshot", {}, "snapshot-1"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("snapshot", {}, "snapshot-1"), adapter);
 
     expect(response).toMatchObject({
       ok: false,
@@ -148,10 +141,7 @@ describe("browser command handling", () => {
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
     ]);
 
-    const response = await handleBrowserRequest(
-      createRequest("tabs.list", {}, "request-1"),
-      adapter,
-    );
+    const response = await handleBrowserRequest(createRequest("tabs.list", {}, "request-1"), adapter);
 
     expect(response).toMatchObject({
       ok: true,
@@ -190,9 +180,7 @@ describe("browser command handling", () => {
   });
 
   it("navigates the resolved active tab without creating a hidden browser session", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("open", { url: "https://example.com/", newTab: false }, "request-1"),
@@ -212,9 +200,7 @@ describe("browser command handling", () => {
   });
 
   it("creates a new tab in the selected window", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("tab.new", { url: "https://example.com/" }, "request-1"),
@@ -277,9 +263,7 @@ describe("browser command handling", () => {
   });
 
   it("routes snapshots to the resolved tab content script and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
     const response = await handleBrowserRequest(request, adapter);
@@ -299,9 +283,7 @@ describe("browser command handling", () => {
   });
 
   it("uses local protocol version for same-extension content-script messages", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("snapshot", { interactiveOnly: true }, "snapshot-v1", 1),
@@ -313,14 +295,9 @@ describe("browser command handling", () => {
   });
 
   it("routes ref resolution to the same tab content registry across CLI invocations", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
-    await handleBrowserRequest(
-      createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"),
-      adapter,
-    );
+    await handleBrowserRequest(createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"), adapter);
     const response = await handleBrowserRequest(
       createRequest("ref.resolve", { ref: "@e1", generationId: "g1" }, "ref-1"),
       adapter,
@@ -377,9 +354,7 @@ describe("browser command handling", () => {
   });
 
   it("routes element getters to the resolved tab content script and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("get", { kind: "text", selector: "#main" }, "get-1"),
@@ -400,9 +375,7 @@ describe("browser command handling", () => {
   });
 
   it("routes element state checks to the resolved tab content script and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("is", { kind: "visible", selector: "#main" }, "is-1"),
@@ -423,9 +396,7 @@ describe("browser command handling", () => {
   });
 
   it("handles duration waits without content injection or browser mutation", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("wait", { kind: "ms", durationMs: 0 }, "wait-ms-1"),
@@ -482,27 +453,19 @@ describe("browser command handling", () => {
     ).resolves.toMatchObject({ ok: true, result: { value: "https://example.test/a" } });
 
     const queryAdapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [
-        tabSummary(101, 0, true, 10, { url: "https://example.test/api/x=1" }),
-      ]),
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { url: "https://example.test/api/x=1" })]),
     ]);
 
     await expect(
       handleBrowserRequest(
-        createRequest(
-          "wait",
-          { kind: "url", urlGlob: "https://example.test/api?x=1" },
-          "wait-url-query",
-        ),
+        createRequest("wait", { kind: "url", urlGlob: "https://example.test/api?x=1" }, "wait-url-query"),
         queryAdapter,
       ),
     ).resolves.toMatchObject({ ok: true, result: { value: "https://example.test/api/x=1" } });
   });
 
   it("routes document waits to content script and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("wait", { kind: "text", text: "Ready" }, "wait-text-1"),
@@ -524,9 +487,7 @@ describe("browser command handling", () => {
   });
 
   it("runs function waits through main-world eval instead of content-script eval", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.evalResult = {
       ok: true,
       value: { type: "json", value: { matched: true, value: true } },
@@ -569,9 +530,7 @@ describe("browser command handling", () => {
   });
 
   it("waits for network idle through the background network tracker", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -666,15 +625,11 @@ describe("browser command handling", () => {
 
     expect(adapter.networkListRequests).toEqual([{ tabId: 102, urlGlob: "example.test/api" }]);
     expect(adapter.networkClearRequests).toEqual([{ tabId: 102 }]);
-    expect(adapter.networkRequests).toEqual([
-      { id: "active", tabId: 101, url: "https://example.test/api" },
-    ]);
+    expect(adapter.networkRequests).toEqual([{ id: "active", tabId: 101, url: "https://example.test/api" }]);
   });
 
   it("runs eval in the resolved tab main world and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("eval", { script: "document.title", source: "argv" }, "eval-1"),
@@ -729,9 +684,7 @@ describe("browser command handling", () => {
   });
 
   it("maps eval injection failures to actionable errors", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.evalFailure = new Error("Missing host permission for the tab");
 
     const response = await handleBrowserRequest(
@@ -749,9 +702,7 @@ describe("browser command handling", () => {
   });
 
   it("captures JPEG screenshots with quality options and returns image bytes", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.screenshotDataUrl = "data:image/jpeg;base64,AQID";
 
     const response = await handleBrowserRequest(
@@ -779,15 +730,11 @@ describe("browser command handling", () => {
         },
       },
     });
-    expect(adapter.captureRequests).toEqual([
-      { windowId: 10, options: { format: "jpeg", quality: 80 } },
-    ]);
+    expect(adapter.captureRequests).toEqual([{ windowId: 10, options: { format: "jpeg", quality: 80 } }]);
   });
 
   it("returns explicit unsupported error for full-page screenshots", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     await expect(
       handleBrowserRequest(
@@ -806,9 +753,7 @@ describe("browser command handling", () => {
   });
 
   it("routes interactions to content script and adds target metadata", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest("click", { selector: "button" }, "click-1"),
@@ -879,10 +824,7 @@ describe("browser command handling", () => {
     expect(adapter.downloadWaits).toEqual([{ downloadId: 1, timeoutMs: 500, intervalMs: 50 }]);
 
     await expect(
-      handleBrowserRequest(
-        createRequest("clipboard", { action: "write", text: "Manual" }, "cw"),
-        adapter,
-      ),
+      handleBrowserRequest(createRequest("clipboard", { action: "write", text: "Manual" }, "cw"), adapter),
     ).resolves.toMatchObject({ ok: true, result: { action: "write", ok: true } });
     expect(adapter.clipboardText).toBe("Manual");
     await expect(
@@ -892,10 +834,7 @@ describe("browser command handling", () => {
       result: { action: "read", ok: true, text: "Manual" },
     });
     await expect(
-      handleBrowserRequest(
-        createRequest("clipboard", { action: "copy", selector: "#copy" }, "cc"),
-        adapter,
-      ),
+      handleBrowserRequest(createRequest("clipboard", { action: "copy", selector: "#copy" }, "cc"), adapter),
     ).resolves.toMatchObject({ ok: true, result: { action: "copy", text: "Copied" } });
     expect(adapter.clipboardText).toBe("Copied");
     adapter.clipboardText = "Pasted";
@@ -921,11 +860,7 @@ describe("browser command handling", () => {
     });
     await expect(
       handleBrowserRequest(
-        createRequest(
-          "cookies",
-          { action: "get", url: "https://example.test/", name: "sid" },
-          "cookie-get",
-        ),
+        createRequest("cookies", { action: "get", url: "https://example.test/", name: "sid" }, "cookie-get"),
         adapter,
       ),
     ).resolves.toMatchObject({ ok: true, result: { action: "get", cookie: { name: "sid" } } });
@@ -962,20 +897,17 @@ describe("browser command handling", () => {
     });
 
     await expect(
-      handleBrowserRequest(
-        createRequest("find", { kind: "role", value: "button" }, "find-1"),
-        adapter,
-      ),
+      handleBrowserRequest(createRequest("find", { kind: "role", value: "button" }, "find-1"), adapter),
     ).resolves.toMatchObject({
       ok: true,
       result: { target: { tabId: 101 }, elements: [{ role: "button" }] },
     });
-    await expect(
-      handleBrowserRequest(createRequest("frame", {}, "frame-1"), adapter),
-    ).resolves.toMatchObject({
-      ok: true,
-      result: { target: { tabId: 101 }, frames: [{ index: 0 }] },
-    });
+    await expect(handleBrowserRequest(createRequest("frame", {}, "frame-1"), adapter)).resolves.toMatchObject(
+      {
+        ok: true,
+        result: { target: { tabId: 101 }, frames: [{ index: 0 }] },
+      },
+    );
     await expect(
       handleBrowserRequest(createRequest("dialog", { action: "status" }, "dialog-1"), adapter),
     ).resolves.toMatchObject({ ok: true, result: { action: "status", handled: false } });
@@ -992,10 +924,7 @@ describe("browser command handling", () => {
       handleBrowserRequest(createRequest("errors", { action: "list" }, "errors-1"), adapter),
     ).resolves.toMatchObject({ ok: true, result: { action: "list", errors: [] } });
     await expect(
-      handleBrowserRequest(
-        createRequest("highlight", { selector: "#save" }, "highlight-1"),
-        adapter,
-      ),
+      handleBrowserRequest(createRequest("highlight", { selector: "#save" }, "highlight-1"), adapter),
     ).resolves.toMatchObject({
       ok: true,
       result: { target: { tabId: 101 }, element: { role: "button" } },
@@ -1030,18 +959,11 @@ describe("browser command handling", () => {
   });
 
   it("strips log truncation metadata for protocol v1 and v2 browser responses", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     for (const protocolVersion of [1, 2]) {
       const consoleResponse = await handleBrowserRequest(
-        createRequest(
-          "console",
-          { action: "list" },
-          `console-v${protocolVersion}`,
-          protocolVersion,
-        ),
+        createRequest("console", { action: "list" }, `console-v${protocolVersion}`, protocolVersion),
         adapter,
       );
       const errorsResponse = await handleBrowserRequest(
@@ -1092,9 +1014,7 @@ describe("browser command handling", () => {
   });
 
   it("keeps log truncation metadata for protocol v3 browser responses", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const consoleResponse = await handleBrowserRequest(
       createRequest("console", { action: "list" }, "console-v3"),
@@ -1161,9 +1081,7 @@ describe("browser command handling", () => {
 
   it("returns TIMEOUT for unsatisfied URL waits", async () => {
     const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [
-        tabSummary(101, 0, true, 10, { url: "https://example.test/loading" }),
-      ]),
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { url: "https://example.test/loading" })]),
     ]);
 
     const response = await handleBrowserRequest(
@@ -1190,9 +1108,7 @@ describe("browser command handling", () => {
       }
     }
     const adapter = new HangingWindowsAdapter([
-      windowSnapshot(10, true, [
-        tabSummary(101, 0, true, 10, { url: "https://example.test/loading" }),
-      ]),
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10, { url: "https://example.test/loading" })]),
     ]);
 
     const response = await handleBrowserRequest(
@@ -1213,9 +1129,7 @@ describe("browser command handling", () => {
   });
 
   it("maps restricted-page getter injection failures to actionable errors", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.contentFailure = new Error("Cannot access a restricted Firefox page");
 
     const response = await handleBrowserRequest(
@@ -1232,9 +1146,7 @@ describe("browser command handling", () => {
   });
 
   it("maps content-script injection failures to actionable errors", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.contentFailure = new Error("Missing host permission for the tab");
 
     const response = await handleBrowserRequest(
@@ -1253,9 +1165,7 @@ describe("browser command handling", () => {
   });
 
   it("surfaces classified content-script delivery failures", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.contentFailure = new ContentScriptDeliveryError({
       cause: "permission-denied",
       stage: "send",
@@ -1284,9 +1194,7 @@ describe("browser command handling", () => {
   });
 
   it("surfaces stale content-script version mismatches without treating them as injection failures", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1", 1);
     adapter.contentResponse = createErrorResponse(
       "snapshot-1",

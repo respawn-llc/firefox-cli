@@ -19,10 +19,7 @@ import {
 } from "./extension-payload-check.js";
 import { readOptionalRegularFileUnder, readRegularFileUnder } from "./safe-extension-files.js";
 import { verifySignedExtensionArtifactTrust } from "./signed-extension-artifact.js";
-import {
-  packagedSignedExtensionXpiFile,
-  type SignedExtensionChannel,
-} from "./signed-extension-policy.js";
+import { packagedSignedExtensionXpiFile, type SignedExtensionChannel } from "./signed-extension-policy.js";
 import type { SignedExtensionSignatureVerifier } from "./signed-extension-signature.js";
 import { readZipArchive } from "./zip-archive.js";
 
@@ -31,10 +28,7 @@ const SIGNED_EXTENSION_REQUIRED_METADATA = [
   "META-INF/mozilla.sf",
   "META-INF/mozilla.rsa",
 ] as const;
-const SIGNED_EXTENSION_OPTIONAL_COSE_METADATA = [
-  "META-INF/cose.manifest",
-  "META-INF/cose.sig",
-] as const;
+const SIGNED_EXTENSION_OPTIONAL_COSE_METADATA = ["META-INF/cose.manifest", "META-INF/cose.sig"] as const;
 const SIGNED_EXTENSION_DIGEST_HEADERS = [
   { algorithm: "sha256", headers: ["sha256-digest", "sha-256-digest"] },
   { algorithm: "sha384", headers: ["sha384-digest", "sha-384-digest"] },
@@ -54,16 +48,8 @@ export type PackageCheckOptions = {
   readonly signedExtensionSignatureVerifier?: SignedExtensionSignatureVerifier;
 };
 
-export async function verifyPackageLayout(
-  options: PackageCheckOptions,
-): Promise<readonly string[]> {
-  const artifacts = [
-    "package.json",
-    "README.md",
-    "LICENSE",
-    "bin/firefox-cli.js",
-    "lib/platform-binary.js",
-  ];
+export async function verifyPackageLayout(options: PackageCheckOptions): Promise<readonly string[]> {
+  const artifacts = ["package.json", "README.md", "LICENSE", "bin/firefox-cli.js", "lib/platform-binary.js"];
 
   await Promise.all(
     artifacts.map((artifact) => readRegularFileUnder(options.packageRoot, artifact, artifact)),
@@ -89,14 +75,10 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
   );
 
   if (packageJson.name !== "firefox-cli") {
-    throw new Error(
-      `Expected package name firefox-cli, received ${packageJson.name ?? "<missing>"}`,
-    );
+    throw new Error(`Expected package name firefox-cli, received ${packageJson.name ?? "<missing>"}`);
   }
   if (packageJson.version !== rootPackage.version) {
-    throw new Error(
-      `Expected package version ${rootPackage.version}, received ${packageJson.version}`,
-    );
+    throw new Error(`Expected package version ${rootPackage.version}, received ${packageJson.version}`);
   }
   if (packageJson.bin?.["firefox-cli"] !== "./bin/firefox-cli.js") {
     throw new Error("Expected firefox-cli bin to point at ./bin/firefox-cli.js");
@@ -173,11 +155,7 @@ async function verifySignedExtensionArtifact(input: {
 
   verifySignedExtensionMetadata(signatureEntries);
   verifySignedExtensionDigests(signatureEntries, xpiPayload);
-  const provenancePath = resolve(
-    input.packageRoot,
-    "extension",
-    packagedSignedExtensionProvenanceFile,
-  );
+  const provenancePath = resolve(input.packageRoot, "extension", packagedSignedExtensionProvenanceFile);
   const provenance = await readSignedExtensionProvenance(provenancePath).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Expected signed extension provenance at ${provenancePath}: ${message}`);
@@ -284,9 +262,7 @@ function verifySignedExtensionDigests(
     verifyDigestHeader(section, data, file, SIGNED_EXTENSION_DIGEST_HEADERS);
   }
 
-  const unexpectedDigestEntries = [...manifestEntries.keys()].filter(
-    (file) => !signableEntries.has(file),
-  );
+  const unexpectedDigestEntries = [...manifestEntries.keys()].filter((file) => !signableEntries.has(file));
   if (unexpectedDigestEntries.length > 0) {
     throw new Error(
       `Signed extension metadata contains digest entries outside the package payload: ${unexpectedDigestEntries.join(
@@ -323,11 +299,7 @@ function parseJarManifest(data: Buffer, label: string): readonly ReadonlyMap<str
   let currentSection = new Map<string, string>();
   let currentKey: string | undefined;
 
-  for (const line of data
-    .toString("utf8")
-    .replaceAll("\r\n", "\n")
-    .replaceAll("\r", "\n")
-    .split("\n")) {
+  for (const line of data.toString("utf8").replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n")) {
     if (line.length === 0) {
       if (currentSection.size > 0) {
         sections.push(currentSection);
@@ -368,9 +340,7 @@ function verifyDigestHeader(
   section: ReadonlyMap<string, string>,
   data: Buffer,
   label: string,
-  digestHeaders:
-    | typeof SIGNED_EXTENSION_DIGEST_HEADERS
-    | typeof SIGNED_EXTENSION_MANIFEST_DIGEST_HEADERS,
+  digestHeaders: typeof SIGNED_EXTENSION_DIGEST_HEADERS | typeof SIGNED_EXTENSION_MANIFEST_DIGEST_HEADERS,
 ): void {
   for (const { algorithm, headers } of digestHeaders) {
     for (const header of headers) {

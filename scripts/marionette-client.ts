@@ -9,9 +9,7 @@ export type MarionetteApprovalResult = {
   readonly captureVisibleTabAvailableBeforeApproval: boolean;
 };
 
-export async function approveExtensionWithMarionette(
-  profileDir: string,
-): Promise<MarionetteApprovalResult> {
+export async function approveExtensionWithMarionette(profileDir: string): Promise<MarionetteApprovalResult> {
   const port = await waitForMarionettePort(profileDir);
   const client = await MarionetteClient.connect(port);
   try {
@@ -77,9 +75,7 @@ function marionetteElementId(value: unknown): string {
   const record = value as Record<string, unknown>;
   const elementId = record["element-6066-11e4-a52e-4f735466cecf"] ?? record.ELEMENT;
   if (typeof elementId !== "string") {
-    throw new Error(
-      `Marionette element object did not include an element id: ${JSON.stringify(value)}`,
-    );
+    throw new Error(`Marionette element object did not include an element id: ${JSON.stringify(value)}`);
   }
   return elementId;
 }
@@ -112,8 +108,7 @@ export class MarionetteClient {
 
   private constructor(socket: Socket, options: MarionetteClientOptions = {}) {
     this.#socket = socket;
-    this.#commandTimeoutMs =
-      options.commandTimeoutMs ?? timeoutPolicies.marionetteCommand.timeoutMs;
+    this.#commandTimeoutMs = options.commandTimeoutMs ?? timeoutPolicies.marionetteCommand.timeoutMs;
     this.#maxFrameBytes = options.maxFrameBytes ?? timeoutPolicies.marionetteFrame.maxBytes;
     this.#socket.on("data", (chunk) => {
       this.#buffer = Buffer.concat([this.#buffer, chunk]);
@@ -132,10 +127,7 @@ export class MarionetteClient {
     });
   }
 
-  static async connect(
-    port: number,
-    options: MarionetteClientOptions = {},
-  ): Promise<MarionetteClient> {
+  static async connect(port: number, options: MarionetteClientOptions = {}): Promise<MarionetteClient> {
     const socket = createConnection(port, "127.0.0.1");
     const client = new MarionetteClient(socket, options);
     await new Promise<void>((resolveConnect, rejectConnect) => {
@@ -179,15 +171,11 @@ export class MarionetteClient {
       const byteLength = Number(this.#buffer.subarray(0, separatorIndex).toString("ascii"));
       if (!Number.isInteger(byteLength) || byteLength < 0) {
         throw new Error(
-          `Invalid Marionette frame length: ${this.#buffer
-            .subarray(0, separatorIndex)
-            .toString("ascii")}`,
+          `Invalid Marionette frame length: ${this.#buffer.subarray(0, separatorIndex).toString("ascii")}`,
         );
       }
       if (byteLength > this.#maxFrameBytes) {
-        throw new Error(
-          `Marionette frame length ${byteLength} exceeds ${this.#maxFrameBytes} bytes.`,
-        );
+        throw new Error(`Marionette frame length ${byteLength} exceeds ${this.#maxFrameBytes} bytes.`);
       }
 
       const frameStart = separatorIndex + 1;

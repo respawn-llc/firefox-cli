@@ -36,10 +36,7 @@ export function compileGlob(glob: string, options: GlobOptions = {}): RegExp {
   return new RegExp(`^${source}$`, "u");
 }
 
-export function createGlobMatcher(
-  glob: string,
-  options: GlobOptions = {},
-): (value: string) => boolean {
+export function createGlobMatcher(glob: string, options: GlobOptions = {}): (value: string) => boolean {
   const expression = compileGlob(glob, options);
   return (value) => expression.test(value);
 }

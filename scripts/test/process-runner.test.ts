@@ -30,9 +30,7 @@ describe("process runner", () => {
   });
 
   it("rejects spawn errors for one-shot and managed processes", async () => {
-    await expect(runProcess("__firefox_cli_missing_process__")).rejects.toBeInstanceOf(
-      ProcessRunnerError,
-    );
+    await expect(runProcess("__firefox_cli_missing_process__")).rejects.toBeInstanceOf(ProcessRunnerError);
 
     const managed = startManagedProcess("__firefox_cli_missing_process__");
     await expect(managed.wait()).rejects.toBeInstanceOf(ProcessRunnerError);
@@ -52,9 +50,7 @@ describe("process runner", () => {
       runProcess(node, ["-e", "process.exit(2);"], { expectedExitCodes: [2] }),
     ).resolves.toMatchObject({ exitCode: 2 });
 
-    await expect(runProcess(node, ["-e", "process.exit(2);"])).rejects.toBeInstanceOf(
-      ProcessRunnerError,
-    );
+    await expect(runProcess(node, ["-e", "process.exit(2);"])).rejects.toBeInstanceOf(ProcessRunnerError);
   });
 
   it("terminates timed-out processes and exposes the child pid", async () => {

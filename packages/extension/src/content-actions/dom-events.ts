@@ -93,11 +93,7 @@ export function dispatchWheelEvent(
   );
 }
 
-export function dispatchDragEvent(
-  element: Element,
-  type: string,
-  dataTransfer: DataTransfer,
-): void {
+export function dispatchDragEvent(element: Element, type: string, dataTransfer: DataTransfer): void {
   dispatchDragEventWithDataTransfer(element, type, dataTransfer);
 }
 

@@ -54,11 +54,7 @@ export type LocalIpcAuthTokenStore = {
 export class LocalIpcError extends Error {
   readonly code: "INVALID_IPC_RESPONSE" | "CONNECTION_FAILED" | "SOCKET_FAILED" | "REQUEST_FAILED";
 
-  constructor(
-    code: LocalIpcError["code"],
-    message: string,
-    options?: { readonly cause?: unknown },
-  ) {
+  constructor(code: LocalIpcError["code"], message: string, options?: { readonly cause?: unknown }) {
     super(message, options);
     this.name = "LocalIpcError";
     this.code = code;

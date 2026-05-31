@@ -7,11 +7,7 @@ import type {
   TextActionParams,
   UploadParams,
 } from "@firefox-cli/protocol";
-import type {
-  ActionOptions,
-  ContentActionResult,
-  ElementResolution,
-} from "../content-action-types.js";
+import type { ActionOptions, ContentActionResult, ElementResolution } from "../content-action-types.js";
 
 type ElementTargetParams = ElementActionParams | TextActionParams | SelectParams | UploadParams;
 

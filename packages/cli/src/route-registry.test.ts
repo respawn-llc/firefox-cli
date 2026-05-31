@@ -10,9 +10,7 @@ describe("CLI route registry", () => {
     const bindingEntries = Object.entries(cliRouteBindings);
 
     expect(bindingEntries).toHaveLength(protocolRoutes.length);
-    expect(new Set(bindingEntries.map(([, binding]) => binding.route.id)).size).toBe(
-      protocolRoutes.length,
-    );
+    expect(new Set(bindingEntries.map(([, binding]) => binding.route.id)).size).toBe(protocolRoutes.length);
 
     for (const route of protocolRoutes) {
       const matches = bindingEntries.filter(([, binding]) => binding.route.id === route.id);
@@ -29,9 +27,7 @@ describe("CLI route registry", () => {
       const protocolRoute = getCliRoutes().find((route) => route.id === routeId);
       expect(protocolRoute, `Unknown bound protocol route ${routeId}`).toBeDefined();
       expect(binding.route).toEqual(protocolRoute);
-      expect(commandSchemas[binding.command].cliRoutes.some((route) => route.id === routeId)).toBe(
-        true,
-      );
+      expect(commandSchemas[binding.command].cliRoutes.some((route) => route.id === routeId)).toBe(true);
     }
   });
 

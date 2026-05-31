@@ -38,20 +38,17 @@ describe("disposable Firefox process cleanup parsing", () => {
   });
 
   it("matches quoted profile arguments without matching web-ext profile flags", () => {
+    expect(commandLineUsesProfileDir('/usr/bin/firefox --profile "/tmp/fc profile"', "/tmp/fc profile")).toBe(
+      true,
+    );
+    expect(commandLineUsesProfileDir("/usr/bin/firefox --profile='/tmp/fc profile'", "/tmp/fc profile")).toBe(
+      true,
+    );
+    expect(commandLineUsesProfileDir("/usr/bin/firefox -profile=/tmp/fc-profile", "/tmp/fc-profile")).toBe(
+      true,
+    );
     expect(
-      commandLineUsesProfileDir('/usr/bin/firefox --profile "/tmp/fc profile"', "/tmp/fc profile"),
-    ).toBe(true);
-    expect(
-      commandLineUsesProfileDir("/usr/bin/firefox --profile='/tmp/fc profile'", "/tmp/fc profile"),
-    ).toBe(true);
-    expect(
-      commandLineUsesProfileDir("/usr/bin/firefox -profile=/tmp/fc-profile", "/tmp/fc-profile"),
-    ).toBe(true);
-    expect(
-      commandLineUsesProfileDir(
-        "/usr/bin/firefox --firefox-profile /tmp/fc-profile",
-        "/tmp/fc-profile",
-      ),
+      commandLineUsesProfileDir("/usr/bin/firefox --firefox-profile /tmp/fc-profile", "/tmp/fc-profile"),
     ).toBe(false);
   });
 

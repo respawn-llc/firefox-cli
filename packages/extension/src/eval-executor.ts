@@ -65,9 +65,7 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
   function evaluateUserScript(script: string): unknown {
     let expressionEvaluator: (() => unknown) | undefined;
     try {
-      const compiledExpression = new Function(
-        `"use strict"; return (${script}\n);`,
-      ) as () => unknown;
+      const compiledExpression = new Function(`"use strict"; return (${script}\n);`) as () => unknown;
       expressionEvaluator = () => compiledExpression.call(globalThis);
     } catch (error) {
       if (!isSyntaxError(error)) {
@@ -130,10 +128,7 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
     }
 
     if (typeof value === "function" || typeof value === "symbol") {
-      throw executorError(
-        "SERIALIZATION_FAILED",
-        `Eval result contains a non-serializable ${typeof value}.`,
-      );
+      throw executorError("SERIALIZATION_FAILED", `Eval result contains a non-serializable ${typeof value}.`);
     }
 
     if (typeof value !== "object") {
@@ -196,9 +191,7 @@ export async function executeEvalInPage(payload: EvalExecutorPayload): Promise<E
   }
 
   function isSyntaxError(error: unknown): boolean {
-    return (
-      error instanceof SyntaxError || (error as { readonly name?: unknown })?.name === "SyntaxError"
-    );
+    return error instanceof SyntaxError || (error as { readonly name?: unknown })?.name === "SyntaxError";
   }
 
   function errorDetails(error: unknown): Record<string, unknown> {

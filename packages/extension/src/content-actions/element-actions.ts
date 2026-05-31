@@ -8,10 +8,7 @@ import {
 } from "./action-targets.js";
 import { focusElement } from "./dom-events.js";
 
-export function focusAction(
-  options: ActionOptions,
-  params: ElementActionParams,
-): ContentActionResult {
+export function focusAction(options: ActionOptions, params: ElementActionParams): ContentActionResult {
   const resolution = resolveRequiredElement(options, params);
   assertVisible(options, resolution.element);
   assertEnabled(options, resolution.element);

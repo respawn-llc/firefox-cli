@@ -51,10 +51,7 @@ export type BackgroundBrowserAdapter = {
   }): Promise<DownloadResult>;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
-  listCookies(options: {
-    readonly url: string;
-    readonly name?: string;
-  }): Promise<CookieResult["cookies"]>;
+  listCookies(options: { readonly url: string; readonly name?: string }): Promise<CookieResult["cookies"]>;
   setCookie(options: {
     readonly url: string;
     readonly name: string;
@@ -67,10 +64,7 @@ export type BackgroundBrowserAdapter = {
     readonly tabId: number;
     readonly urlGlob?: string;
   }): Promise<NonNullable<NetworkResult["requests"]>>;
-  clearNetworkRequests(options: {
-    readonly tabId: number;
-    readonly urlGlob?: string;
-  }): Promise<void>;
+  clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void>;
   waitForNetworkIdle(options: {
     readonly tabId: number;
     readonly timeoutMs: number;

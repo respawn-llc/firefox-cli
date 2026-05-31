@@ -273,9 +273,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       return createOkResponse(errorsRequest, {
         action: errorsRequest.params.action,
         ok: true,
-        ...(errorsRequest.params.action === "list"
-          ? { errors: [], truncated: true, droppedEntries: 2 }
-          : {}),
+        ...(errorsRequest.params.action === "list" ? { errors: [], truncated: true, droppedEntries: 2 } : {}),
       });
     }
 
@@ -337,11 +335,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return this.screenshotDataUrl;
   }
 
-  async download(options: {
-    readonly url: string;
-    readonly filename?: string;
-    readonly saveAs?: boolean;
-  }) {
+  async download(options: { readonly url: string; readonly filename?: string; readonly saveAs?: boolean }) {
     this.downloads.push(options);
     return { id: this.downloads.length, filename: options.filename, state: "complete" };
   }
@@ -392,10 +386,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       .filter((request) => options.urlGlob === undefined || request.url.includes(options.urlGlob));
   }
 
-  async clearNetworkRequests(options: {
-    readonly tabId: number;
-    readonly urlGlob?: string;
-  }): Promise<void> {
+  async clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void> {
     this.networkClearRequests.push(options);
     this.networkRequests = this.networkRequests.filter(
       (request) =>
@@ -421,9 +412,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       throw new Error("window not found");
     }
     const resized = { ...window, width: size.width, height: size.height };
-    this.#windows = this.#windows.map((candidate) =>
-      candidate.id === windowId ? resized : candidate,
-    );
+    this.#windows = this.#windows.map((candidate) => (candidate.id === windowId ? resized : candidate));
     return resized;
   }
 

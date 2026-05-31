@@ -48,9 +48,9 @@ describe("native messaging manifest generation", () => {
     const homeDir = "/home/tester";
     const binaryPath = "/opt/firefox-cli/bin/linux-x64/firefox-cli";
 
-    expect(
-      planNativeMessagingManifest({ binaryPath, homeDir, platform: "linux" }).manifestPath,
-    ).toBe(join(homeDir, ".mozilla/native-messaging-hosts", `${NATIVE_HOST_NAME}.json`));
+    expect(planNativeMessagingManifest({ binaryPath, homeDir, platform: "linux" }).manifestPath).toBe(
+      join(homeDir, ".mozilla/native-messaging-hosts", `${NATIVE_HOST_NAME}.json`),
+    );
   });
 
   it("plans Windows manifest storage and registry data without touching the registry", () => {
@@ -76,12 +76,7 @@ describe("native messaging manifest generation", () => {
         hive: "HKEY_CURRENT_USER",
         key: `SOFTWARE\\Mozilla\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`,
         valueName: "",
-        value: win32.join(
-          appDataDir,
-          "firefox-cli",
-          "native-messaging-hosts",
-          `${NATIVE_HOST_NAME}.json`,
-        ),
+        value: win32.join(appDataDir, "firefox-cli", "native-messaging-hosts", `${NATIVE_HOST_NAME}.json`),
       },
     });
   });

@@ -89,8 +89,7 @@ export class NetworkRequestTracker {
     readonly urlGlob?: string;
   }): NonNullable<NetworkResult["requests"]> {
     this.pruneStaleActiveRequests();
-    const matchesUrl =
-      options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
+    const matchesUrl = options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     return this.#recordsForTab(options.tabId)
       .filter((request) => matchesUrl === undefined || matchesUrl(request.url))
       .sort((left, right) => left.startedAt - right.startedAt)
@@ -104,8 +103,7 @@ export class NetworkRequestTracker {
       return;
     }
 
-    const matchesUrl =
-      options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
+    const matchesUrl = options.urlGlob === undefined ? undefined : createGlobMatcher(options.urlGlob);
     this.#completedByTabId.set(
       options.tabId,
       completed.filter((request) => matchesUrl !== undefined && !matchesUrl(request.url)),

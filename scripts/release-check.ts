@@ -2,11 +2,7 @@ import { cp, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import {
-  FIREFOX_CLI_EXTENSION_ID,
-  NATIVE_HOST_NAME,
-  resolvePackagedBinary,
-} from "@firefox-cli/native-host";
+import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME, resolvePackagedBinary } from "@firefox-cli/native-host";
 import { parseJsonWithSchema, runCliJson } from "./manifest-validation.js";
 import { verifyPackageLayout } from "./package-check.js";
 import { runProcess } from "./process-runner.js";
@@ -86,9 +82,7 @@ if (releasePolicy.phase0Mode) {
   await runCheck("native manifest temp-path verification", () =>
     verifyNativeManifestTempPath({ packageRoot }),
   );
-  await runCheck("stale native manifest repair", () =>
-    verifyStaleNativeManifestRepair({ packageRoot }),
-  );
+  await runCheck("stale native manifest repair", () => verifyStaleNativeManifestRepair({ packageRoot }));
   if (releasePolicy.allowUnsignedLocal) {
     console.log("Release check completed with explicit non-release local unsigned override.");
   }
@@ -199,10 +193,7 @@ async function verifyNativeManifestTempPath(options: { readonly packageRoot: str
   if (manifest.type !== "stdio") {
     throw new Error(`unexpected native manifest type: ${manifest.type}`);
   }
-  if (
-    manifestBinaryPath !== expectedBinaryPath ||
-    parsedManifestBinaryPath !== expectedBinaryPath
-  ) {
+  if (manifestBinaryPath !== expectedBinaryPath || parsedManifestBinaryPath !== expectedBinaryPath) {
     throw new Error("native manifest does not point at the packaged executable");
   }
   if (
@@ -240,9 +231,7 @@ async function runNodeLauncher(
   const launcherPath = join(packageRoot, "bin/firefox-cli.js");
   const result = await runProcess(process.execPath, [launcherPath, ...args], {
     ...(options.env === undefined ? {} : { env: options.env }),
-    ...(options.expectedExitCodes === undefined
-      ? {}
-      : { expectedExitCodes: options.expectedExitCodes }),
+    ...(options.expectedExitCodes === undefined ? {} : { expectedExitCodes: options.expectedExitCodes }),
     timeoutMs: 30_000,
     label: "node launcher",
   });

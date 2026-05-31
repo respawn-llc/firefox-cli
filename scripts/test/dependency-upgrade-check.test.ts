@@ -63,10 +63,7 @@ describe("dependency upgrade policy", () => {
       },
       {
         command: "bun",
-        args: [
-          "outdated",
-          `--minimum-release-age=${String(PATCH_MINOR_RELEASE_AGE_DAYS * SECONDS_PER_DAY)}`,
-        ],
+        args: ["outdated", `--minimum-release-age=${String(PATCH_MINOR_RELEASE_AGE_DAYS * SECONDS_PER_DAY)}`],
         label: "aged dependency drift report",
       },
     ]);

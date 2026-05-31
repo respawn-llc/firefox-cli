@@ -1,0 +1,36 @@
+{
+  "$schema": "./dependency-policy.schema.json",
+  "packageManager": "bun",
+  "trustedDependenciesAllowlist": [],
+  "directDependencyAllowlist": {
+    "firefox-cli-workspace": {
+      "dependencies": [
+        "@firefox-cli/cli",
+        "@firefox-cli/native-host",
+        "@firefox-cli/protocol",
+        "@firefox-cli/test-support"
+      ],
+      "devDependencies": [
+        "@biomejs/biome",
+        "@eslint/js",
+        "@types/bun",
+        "@types/jsdom",
+        "@types/node",
+        "eslint",
+        "eslint-config-prettier",
+        "jsdom",
+        "typescript",
+        "typescript-eslint",
+        "vite",
+        "vitest",
+        "web-ext",
+        "zod"
+      ]
+    },
+    "@firefox-cli/cli": { "dependencies": ["@firefox-cli/native-host", "@firefox-cli/protocol"] },
+    "@firefox-cli/extension": { "dependencies": ["@firefox-cli/protocol"] },
+    "@firefox-cli/native-host": {},
+    "@firefox-cli/protocol": {},
+    "@firefox-cli/test-support": {}
+  }
+}

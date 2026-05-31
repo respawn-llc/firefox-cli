@@ -4,11 +4,7 @@ import type { ContentElementResolver } from "./content-snapshot/element-resolver
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 100;
 
-type WaitErrorCode =
-  | "SCRIPT_INJECTION_FAILED"
-  | "SELECTOR_NOT_FOUND"
-  | "UNSUPPORTED_CAPABILITY"
-  | "TIMEOUT";
+type WaitErrorCode = "SCRIPT_INJECTION_FAILED" | "SELECTOR_NOT_FOUND" | "UNSUPPORTED_CAPABILITY" | "TIMEOUT";
 type WithoutTiming<T> = T extends unknown ? Omit<T, "matched" | "elapsedMs"> : never;
 type PendingWaitResult = WithoutTiming<WaitResult>;
 
@@ -110,9 +106,7 @@ function evaluateElementWait(options: {
   const state = options.params.state ?? "visible";
   if (options.params.ref !== undefined) {
     const resolved = options.elementResolver.resolveRef(options.params.ref, {
-      ...(options.params.generationId === undefined
-        ? {}
-        : { generationId: options.params.generationId }),
+      ...(options.params.generationId === undefined ? {} : { generationId: options.params.generationId }),
       now: options.now,
     });
     const base = {
@@ -207,10 +201,7 @@ function toWaitValue(value: unknown): GetValue {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
-        typeof entry === "string" ||
-        typeof entry === "number" ||
-        typeof entry === "boolean" ||
-        entry === null
+        typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean" || entry === null
           ? entry
           : String(entry),
       ]),

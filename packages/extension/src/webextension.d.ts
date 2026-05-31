@@ -23,12 +23,8 @@ type BrowserWindow = {
 declare const browser: {
   readonly runtime: {
     readonly onMessage: {
-      addListener(
-        listener: (message: { readonly type?: string }) => Promise<unknown> | unknown,
-      ): void;
-      removeListener(
-        listener: (message: { readonly type?: string }) => Promise<unknown> | unknown,
-      ): void;
+      addListener(listener: (message: { readonly type?: string }) => Promise<unknown> | unknown): void;
+      removeListener(listener: (message: { readonly type?: string }) => Promise<unknown> | unknown): void;
     };
     connectNative(name: string): {
       readonly onMessage: {
@@ -57,10 +53,7 @@ declare const browser: {
       readonly url?: string;
       readonly windowId?: number;
     }): Promise<BrowserTab>;
-    update(
-      tabId: number,
-      options: { readonly active?: boolean; readonly url?: string },
-    ): Promise<BrowserTab>;
+    update(tabId: number, options: { readonly active?: boolean; readonly url?: string }): Promise<BrowserTab>;
     get(tabId: number): Promise<BrowserTab>;
     remove(tabId: number): Promise<void>;
     goBack(tabId: number): Promise<void>;
@@ -117,15 +110,10 @@ declare const browser: {
     }): Promise<number>;
     search(options: {
       readonly id?: number;
-    }): Promise<
-      readonly { readonly id?: number; readonly filename?: string; readonly state?: string }[]
-    >;
+    }): Promise<readonly { readonly id?: number; readonly filename?: string; readonly state?: string }[]>;
   };
   readonly cookies: {
-    getAll(options: {
-      readonly url: string;
-      readonly name?: string;
-    }): Promise<readonly BrowserCookie[]>;
+    getAll(options: { readonly url: string; readonly name?: string }): Promise<readonly BrowserCookie[]>;
     set(options: {
       readonly url: string;
       readonly name: string;

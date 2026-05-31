@@ -22,9 +22,7 @@ async function loadStatus(): Promise<void> {
 
 function renderStatus(status: Status): void {
   if (statusElement) {
-    statusElement.textContent = status.connected
-      ? "Native host connected."
-      : "Native host disconnected.";
+    statusElement.textContent = status.connected ? "Native host connected." : "Native host disconnected.";
   }
 
   if (approvalElement) {

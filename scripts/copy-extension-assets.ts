@@ -20,10 +20,7 @@ export async function copyExtensionAssets(options: {
   );
   manifest.version = options.version;
 
-  await writeFile(
-    resolve(options.outputDir, "manifest.json"),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
+  await writeFile(resolve(options.outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await cp(resolve(options.sourceDir, "popup.html"), resolve(options.outputDir, "popup.html"));
   await cp(resolve(options.sourceDir, "popup.css"), resolve(options.outputDir, "popup.css"));
 }

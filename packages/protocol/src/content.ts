@@ -91,17 +91,7 @@ export const refResolveResultSchema = z.object({
 });
 export type RefResolveResult = z.infer<typeof refResolveResultSchema>;
 
-export const getKinds = [
-  "text",
-  "html",
-  "value",
-  "attr",
-  "title",
-  "url",
-  "count",
-  "box",
-  "styles",
-] as const;
+export const getKinds = ["text", "html", "value", "attr", "title", "url", "count", "box", "styles"] as const;
 export const getKindSchema = z.enum(getKinds);
 export type GetKind = z.infer<typeof getKindSchema>;
 
@@ -220,9 +210,7 @@ export const getResultSchema = z.discriminatedUnion("kind", [
   getBaseResultSchema.extend({ kind: z.literal("attr"), value: z.string().nullable() }).strict(),
   getBaseResultSchema.extend({ kind: z.literal("title"), value: z.string() }).strict(),
   getBaseResultSchema.extend({ kind: z.literal("url"), value: z.string() }).strict(),
-  getBaseResultSchema
-    .extend({ kind: z.literal("count"), value: z.number().int().nonnegative() })
-    .strict(),
+  getBaseResultSchema.extend({ kind: z.literal("count"), value: z.number().int().nonnegative() }).strict(),
   getBaseResultSchema.extend({ kind: z.literal("box"), value: getBoxValueSchema }).strict(),
   getBaseResultSchema.extend({ kind: z.literal("styles"), value: getStylesValueSchema }).strict(),
 ]);
@@ -270,15 +258,7 @@ export const isResultSchema = z
   .strict();
 export type IsResult = z.infer<typeof isResultSchema>;
 
-export const waitKinds = [
-  "ms",
-  "element",
-  "text",
-  "url",
-  "function",
-  "load-state",
-  "download",
-] as const;
+export const waitKinds = ["ms", "element", "text", "url", "function", "load-state", "download"] as const;
 export const waitKindSchema = z.enum(waitKinds);
 export type WaitKind = z.infer<typeof waitKindSchema>;
 export const waitStates = [
@@ -327,10 +307,7 @@ export const waitParamsSchema = z
       });
     }
 
-    if (
-      params.kind === "element" &&
-      (params.selector === undefined) === (params.ref === undefined)
-    ) {
+    if (params.kind === "element" && (params.selector === undefined) === (params.ref === undefined)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Element waits require exactly one selector or ref.",

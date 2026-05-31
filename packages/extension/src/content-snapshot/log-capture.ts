@@ -198,9 +198,7 @@ export class BoundedLogBuffer implements LogEntryStore {
     while (low <= high) {
       const middle = Math.floor((low + high) / 2);
       const text = `${chars.slice(0, middle).join("")}${TRUNCATED_TEXT_SUFFIX}`;
-      if (
-        this.#encodedResultBytes([{ ...entry, text }], truncatedMetadata) <= this.#maxResultBytes
-      ) {
+      if (this.#encodedResultBytes([{ ...entry, text }], truncatedMetadata) <= this.#maxResultBytes) {
         bestText = text;
         low = middle + 1;
       } else {

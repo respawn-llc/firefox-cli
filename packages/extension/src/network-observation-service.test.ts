@@ -17,9 +17,7 @@ describe("NetworkObservationService", () => {
     expect(browser.webRequest.onBeforeRequest.listenerCount()).toBe(0);
 
     await service.observeTab(7, (tracker) => {
-      expect(browser.webRequest.onBeforeRequest.filters()).toEqual([
-        { urls: ["<all_urls>"], tabId: 7 },
-      ]);
+      expect(browser.webRequest.onBeforeRequest.filters()).toEqual([{ urls: ["<all_urls>"], tabId: 7 }]);
       browser.webRequest.onBeforeRequest.emit({
         requestId: "target",
         tabId: 7,
@@ -30,9 +28,7 @@ describe("NetworkObservationService", () => {
         tabId: 8,
         url: "https://example.test/other",
       });
-      expect(tracker.list({ tabId: 7 })).toEqual([
-        { id: "target", url: "https://example.test/target" },
-      ]);
+      expect(tracker.list({ tabId: 7 })).toEqual([{ id: "target", url: "https://example.test/target" }]);
       expect(tracker.list({ tabId: 8 })).toEqual([]);
     });
   });
@@ -173,10 +169,7 @@ function createWebRequestEvent() {
     },
     emit(details: NetworkObservationWebRequestDetails): void {
       for (const registration of listeners) {
-        if (
-          registration.filter.tabId === undefined ||
-          registration.filter.tabId === details.tabId
-        ) {
+        if (registration.filter.tabId === undefined || registration.filter.tabId === details.tabId) {
           registration.listener(details);
         }
       }

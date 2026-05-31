@@ -30,11 +30,7 @@ export type ContentElementResolver = {
   ): ElementResolution;
   resolveOptionalTarget(params: ElementTarget, now?: number): ElementResolution | undefined;
   resolveContentCommandTarget(params: ElementTarget, now?: number): ElementResolution;
-  resolveRequiredDragTarget(
-    params: DragParams,
-    role: "source" | "target",
-    now?: number,
-  ): ElementResolution;
+  resolveRequiredDragTarget(params: DragParams, role: "source" | "target", now?: number): ElementResolution;
   resolveRef(
     ref: string,
     options: { readonly generationId?: string; readonly now?: number },
@@ -67,8 +63,7 @@ export function createContentElementResolver(options: {
     resolveRequiredDragTarget: (params, role, resolveNow) => {
       const selector = role === "source" ? params.sourceSelector : params.targetSelector;
       const ref = role === "source" ? params.sourceRef : params.targetRef;
-      const generationId =
-        role === "source" ? params.sourceGenerationId : params.targetGenerationId;
+      const generationId = role === "source" ? params.sourceGenerationId : params.targetGenerationId;
       return resolveRequiredTarget(
         options.document,
         options.registry,
@@ -85,9 +80,7 @@ export function createContentElementResolver(options: {
     },
     resolveRef: (ref, resolveOptions) => {
       const resolved = options.registry.resolveRef(ref, {
-        ...(resolveOptions.generationId === undefined
-          ? {}
-          : { generationId: resolveOptions.generationId }),
+        ...(resolveOptions.generationId === undefined ? {} : { generationId: resolveOptions.generationId }),
         now: now(resolveOptions.now),
       });
       return { element: resolved.element, ref, generationId: resolved.generationId };

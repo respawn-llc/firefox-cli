@@ -53,9 +53,9 @@ describe("verifyPackageLayout", () => {
 
   it("requires signed XPI for release checks", async () => {
     const packageRoot = await createPackageRoot();
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("Expected signed extension XPI");
+    await expect(verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true })).rejects.toThrow(
+      "Expected signed extension XPI",
+    );
   });
 
   it("accepts a matching signed XPI with deflated data, data descriptors, and EOCD comments", async () => {
@@ -131,27 +131,27 @@ describe("verifyPackageLayout", () => {
     const packageRoot = await createPackageRoot();
     await writeMatchingXpi(packageRoot, { signed: false });
 
-    await expect(
-      verifyPackageLayout(createPackageCheckOptions(packageRoot, false)),
-    ).rejects.toThrow("Expected signed extension XPI signature metadata");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, false))).rejects.toThrow(
+      "Expected signed extension XPI signature metadata",
+    );
   });
 
   it("runs real PKCS7 verification by default for present signed XPIs", async () => {
     const packageRoot = await createPackageRoot();
     await writeMatchingXpi(packageRoot);
 
-    await expect(
-      verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true }),
-    ).rejects.toThrow("PKCS7 verification failed");
+    await expect(verifyPackageLayout({ packageRoot, platform, requireSignedXpi: true })).rejects.toThrow(
+      "PKCS7 verification failed",
+    );
   });
 
   it("rejects malformed present XPIs instead of falling back to the development extension", async () => {
     const packageRoot = await createPackageRoot();
     await writeFile(join(packageRoot, "extension/firefox-cli.xpi"), "not a zip");
 
-    await expect(
-      verifyPackageLayout(createPackageCheckOptions(packageRoot, false)),
-    ).rejects.toThrow("missing end of central directory");
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, false))).rejects.toThrow(
+      "missing end of central directory",
+    );
   });
 
   it("rejects invalid signed-XPI metadata for signed release checks", async () => {
@@ -173,9 +173,9 @@ describe("verifyPackageLayout", () => {
       const packageRoot = await createPackageRoot();
       await writeMatchingXpi(packageRoot, { signatureEntries });
 
-      await expect(
-        verifyPackageLayout(createPackageCheckOptions(packageRoot, true)),
-      ).rejects.toThrow("signed extension metadata");
+      await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
+        "signed extension metadata",
+      );
     }
   });
 
@@ -190,9 +190,7 @@ describe("verifyPackageLayout", () => {
       },
     });
 
-    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow(
-      "digest",
-    );
+    await expect(verifyPackageLayout(createPackageCheckOptions(packageRoot, true))).rejects.toThrow("digest");
   });
 
   for (const requireSignedXpi of [false, true] as const) {
@@ -365,9 +363,7 @@ describe("verifyPackageLayout", () => {
     await writeFile(outsideFile, "not really an xpi\n");
     await symlink(outsideFile, join(packageRoot, "extension/firefox-cli.xpi"));
 
-    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
-      "Refusing to read symlink",
-    );
+    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow("Refusing to read symlink");
   });
 
   it("rejects symlinks when hashing extension source provenance", async () => {
@@ -498,9 +494,7 @@ async function writeMatchingXpi(
     name,
     data,
     compressionMethod: options.compressionMethod ?? 0,
-    ...(options.useDataDescriptor === undefined
-      ? {}
-      : { useDataDescriptor: options.useDataDescriptor }),
+    ...(options.useDataDescriptor === undefined ? {} : { useDataDescriptor: options.useDataDescriptor }),
   }));
   const signatureEntries = await createSignatureEntries(options, payload);
   const fixture = createZipFixture(
@@ -563,9 +557,7 @@ async function createSignatureEntries(
 
 function createSignedManifest(payload: ReadonlyMap<string, Buffer>): Buffer {
   const lines = ["Manifest-Version: 1.0", ""];
-  for (const [name, data] of [...payload.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
+  for (const [name, data] of [...payload.entries()].sort(([left], [right]) => left.localeCompare(right))) {
     lines.push(`Name: ${name}`, `SHA256-Digest: ${sha256Digest(data)}`, "");
   }
   return Buffer.from(lines.join("\r\n"), "utf8");
@@ -585,9 +577,7 @@ function sha256Digest(data: Buffer): string {
 async function readDevelopmentPayload(packageRoot: string): Promise<Map<string, Buffer>> {
   const extensionRoot = join(packageRoot, "extension/development");
   const packageOnlyFiles = new Set(["README.md", `firefox-cli-${rootPackage.version}.zip`]);
-  const files = (await listRelativeFiles(extensionRoot)).filter(
-    (file) => !packageOnlyFiles.has(file),
-  );
+  const files = (await listRelativeFiles(extensionRoot)).filter((file) => !packageOnlyFiles.has(file));
   const entries = await Promise.all(
     files.map(async (file) => [file, await readFile(join(extensionRoot, file))] as const),
   );

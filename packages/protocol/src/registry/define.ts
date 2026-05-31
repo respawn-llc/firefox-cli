@@ -10,8 +10,9 @@ type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) e
   ? I
   : never;
 
-type AssembledCommandRegistry<Fragments extends readonly CommandRegistryFragment[]> =
-  UnionToIntersection<Fragments[number]>;
+type AssembledCommandRegistry<Fragments extends readonly CommandRegistryFragment[]> = UnionToIntersection<
+  Fragments[number]
+>;
 
 export function defineCommandEntries<const T extends CommandRegistryFragment>(entries: T): T {
   return entries;

@@ -97,9 +97,7 @@ export function renderDependencyUpgradePolicy(
   ].join("\n");
 }
 
-export async function runDependencyUpgradeCheck(
-  options: DependencyUpgradeCheckOptions = {},
-): Promise<void> {
+export async function runDependencyUpgradeCheck(options: DependencyUpgradeCheckOptions = {}): Promise<void> {
   const runCommand = options.runCommand ?? runDependencyCommand;
   const write = options.write ?? console.log;
 
@@ -145,10 +143,7 @@ function renderCommand(command: readonly string[]): string {
   return command.join(" ");
 }
 
-function requiredCommand(
-  commands: readonly (readonly string[])[],
-  index: number,
-): readonly string[] {
+function requiredCommand(commands: readonly (readonly string[])[], index: number): readonly string[] {
   const command = commands[index];
   if (command === undefined) {
     throw new Error(`Dependency upgrade policy is missing command ${String(index)}.`);

@@ -13,10 +13,7 @@ export type WithTimeoutOptions = {
   readonly signal?: AbortSignal;
 };
 
-export async function pollUntil<T>(
-  check: () => Promise<T | false>,
-  options: PollUntilOptions,
-): Promise<T> {
+export async function pollUntil<T>(check: () => Promise<T | false>, options: PollUntilOptions): Promise<T> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < options.timeoutMs) {
     throwIfAborted(options.signal);

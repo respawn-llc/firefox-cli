@@ -51,8 +51,7 @@ export async function sendLocalIpcRequest<C extends RequestEnvelope["command"]>(
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCAL_IPC_CLIENT_TIMEOUT_MS;
   const socket = await connectLocalIpcSocket(endpoint, {
-    timeoutMs:
-      options.connectTimeoutMs ?? Math.min(timeoutMs, DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS),
+    timeoutMs: options.connectTimeoutMs ?? Math.min(timeoutMs, DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS),
   });
   const rawResponse = await writeAndReadLocalIpcResponse(
     socket,
@@ -107,17 +106,11 @@ export async function sendNegotiatedLocalIpcRequest<C extends RequestEnvelope["c
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCAL_IPC_CLIENT_TIMEOUT_MS;
   const socket = await connectLocalIpcSocket(endpoint, {
-    timeoutMs:
-      options.connectTimeoutMs ?? Math.min(timeoutMs, DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS),
+    timeoutMs: options.connectTimeoutMs ?? Math.min(timeoutMs, DEFAULT_LOCAL_IPC_CONNECT_TIMEOUT_MS),
   });
   let destroySocketOnReturn = true;
   try {
-    const rawHelloResponse = await writeAndReadLocalIpcResponse(
-      socket,
-      encodedHello,
-      request.id,
-      timeoutMs,
-    );
+    const rawHelloResponse = await writeAndReadLocalIpcResponse(socket, encodedHello, request.id, timeoutMs);
     const parsedHello = parseBoundaryResponse("cli-to-host", "hello", rawHelloResponse, {
       hello: {
         local: protocolRange,

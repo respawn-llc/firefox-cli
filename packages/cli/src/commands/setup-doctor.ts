@@ -53,10 +53,7 @@ export async function setup(
   return setupNativeHost(args, dependencies);
 }
 
-async function setupNativeHost(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+async function setupNativeHost(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   const dryRun = args.includes("--dry-run");
   const json = args.includes("--json");
   const plan = await createManifestPlan(dependencies);
@@ -80,10 +77,7 @@ async function setupNativeHost(
   );
 }
 
-export async function doctor(
-  args: readonly string[],
-  dependencies: CliDependencies,
-): Promise<CliResult> {
+export async function doctor(args: readonly string[], dependencies: CliDependencies): Promise<CliResult> {
   const fix = args.includes("--fix");
   const json = args.includes("--json");
   const plan = await createManifestPlan(dependencies);
@@ -124,9 +118,7 @@ export async function doctor(
       "nextAction" in payload.nativeHostManifest
         ? `Next action: ${payload.nativeHostManifest.nextAction}`
         : undefined,
-      connection.nextAction === undefined
-        ? undefined
-        : `Connection next action: ${connection.nextAction}`,
+      connection.nextAction === undefined ? undefined : `Connection next action: ${connection.nextAction}`,
       "",
     ]
       .filter((line): line is string => line !== undefined)
@@ -174,9 +166,7 @@ function formatExtensionSetupInstruction(extensionPath: string): string {
     : `Extension: load ${extensionPath} in Firefox about:debugging.`;
 }
 
-async function readNativeHostManifestStatus(
-  plan: Awaited<ReturnType<typeof createManifestPlan>>,
-): Promise<
+async function readNativeHostManifestStatus(plan: Awaited<ReturnType<typeof createManifestPlan>>): Promise<
   | {
       readonly status: "installed";
       readonly path: string;
@@ -255,19 +245,12 @@ function isNativeMessagingManifestCanonical(
     installed.path === expected.path &&
     installed.type === expected.type &&
     installed.allowed_extensions.length === expected.allowed_extensions.length &&
-    installed.allowed_extensions.every(
-      (value, index) => value === expected.allowed_extensions[index],
-    )
+    installed.allowed_extensions.every((value, index) => value === expected.allowed_extensions[index])
   );
 }
 
 async function checkExtensionConnection(dependencies: CliDependencies): Promise<{
-  readonly status:
-    | "connected"
-    | "not-approved"
-    | "version-mismatch"
-    | "pairing-mismatch"
-    | "disconnected";
+  readonly status: "connected" | "not-approved" | "version-mismatch" | "pairing-mismatch" | "disconnected";
   readonly nextAction?: string;
 }> {
   const response = await sendOrUnavailable(dependencies, createNoopRequest());

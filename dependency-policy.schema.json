@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["packageManager", "directDependencyAllowlist"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "packageManager": { "const": "bun" },
+    "trustedDependenciesAllowlist": { "$ref": "#/$defs/dependencyNames" },
+    "directDependencyAllowlist": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dependencies": { "$ref": "#/$defs/dependencyNames" },
+          "devDependencies": { "$ref": "#/$defs/dependencyNames" },
+          "peerDependencies": { "$ref": "#/$defs/dependencyNames" },
+          "optionalDependencies": { "$ref": "#/$defs/dependencyNames" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dependencyNames": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+  }
+}

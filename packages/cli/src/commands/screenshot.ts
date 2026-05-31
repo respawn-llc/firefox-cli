@@ -28,10 +28,7 @@ export function buildScreenshotRequest(
   dependencies: CliDependencies,
 ): RequestEnvelope {
   const parsedArgs = parseScreenshotArguments(argv.slice(1));
-  const outputPath = resolve(
-    dependencies.cwd ?? process.cwd(),
-    parsedArgs.outputPath ?? "screenshot.png",
-  );
+  const outputPath = resolve(dependencies.cwd ?? process.cwd(), parsedArgs.outputPath ?? "screenshot.png");
   return createValidatedRequest("screenshot", {
     path: outputPath,
     format: parsedArgs.format,
@@ -60,10 +57,7 @@ function parseScreenshotArguments(args: readonly string[]): ParsedScreenshotArgu
     throw new CliUsageError("Specify at most one screenshot path.");
   }
 
-  const formatValue = getOptionValue(parsed.optionArgs, [
-    "--format",
-    "--screenshot-format",
-  ])?.toLowerCase();
+  const formatValue = getOptionValue(parsed.optionArgs, ["--format", "--screenshot-format"])?.toLowerCase();
   if (formatValue !== undefined && !isScreenshotFormat(formatValue)) {
     throw new CliUsageError("Only PNG and JPEG screenshots are supported.");
   }

@@ -14,19 +14,11 @@ import type { ElementRefRegistry } from "../element-ref-registry.js";
 import { isDisabled, isVisible, summarizeElement, summarizeWaitElement } from "./accessibility.js";
 import { createFindResult, createFrameResult } from "./commands/find-frame.js";
 import { createGetResult, createIsResult } from "./commands/get-is.js";
-import {
-  createClipboardResult,
-  createDialogResult,
-  createStorageResult,
-} from "./commands/page-state.js";
+import { createClipboardResult, createDialogResult, createStorageResult } from "./commands/page-state.js";
 import { createContentElementResolver, type ContentElementResolver } from "./element-resolver.js";
 import { ContentSnapshotError, createContentErrorResponseForRequest } from "./errors.js";
 import { applyElementHighlight, type HighlightScheduler } from "./highlight.js";
-import {
-  createConsoleResult,
-  createErrorsResult,
-  type ContentLogCaptureService,
-} from "./log-capture.js";
+import { createConsoleResult, createErrorsResult, type ContentLogCaptureService } from "./log-capture.js";
 import { createSnapshotResult } from "./snapshot-render.js";
 
 type ContentScriptRequestContext = {
@@ -55,10 +47,7 @@ type DirectContentCommand =
   | "errors"
   | "highlight";
 
-const directContentHandlers: CommandHandlerMap<
-  DirectContentCommand,
-  [ContentScriptRequestContext]
-> = {
+const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScriptRequestContext]> = {
   snapshot: (request, options) => {
     try {
       return createOkResponse(
@@ -72,9 +61,7 @@ const directContentHandlers: CommandHandlerMap<
   "ref.resolve": (request, options) => {
     try {
       const resolved = options.registry.resolveRef(request.params.ref, {
-        ...(request.params.generationId === undefined
-          ? {}
-          : { generationId: request.params.generationId }),
+        ...(request.params.generationId === undefined ? {} : { generationId: request.params.generationId }),
         ...(options.now === undefined ? {} : { now: options.now }),
       });
       return createOkResponse(request, {
@@ -185,9 +172,7 @@ const directContentHandlers: CommandHandlerMap<
       if (view !== null && element instanceof view.HTMLElement) {
         applyElementHighlight(element, {
           ...(params.durationMs === undefined ? {} : { durationMs: params.durationMs }),
-          ...(options.highlightScheduler === undefined
-            ? {}
-            : { scheduler: options.highlightScheduler }),
+          ...(options.highlightScheduler === undefined ? {} : { scheduler: options.highlightScheduler }),
         });
       }
       return createOkResponse(request, {
@@ -246,8 +231,7 @@ function handleActionCommand(
         params: request.params,
         now: options.now ?? Date.now(),
         elementResolver: getElementResolver(options),
-        resolveRef: (ref, resolveOptions) =>
-          getElementResolver(options).resolveRef(ref, resolveOptions),
+        resolveRef: (ref, resolveOptions) => getElementResolver(options).resolveRef(ref, resolveOptions),
         queryElement: (selector) => getElementResolver(options).queryOptional(selector),
         summarizeElement: summarizeWaitElement,
         isVisible,
@@ -264,9 +248,7 @@ function isActionRequest(request: RequestEnvelope): request is RequestEnvelope<A
   return isActionCommand(request.command);
 }
 
-function isDirectContentRequest(
-  request: RequestEnvelope,
-): request is RequestEnvelope<DirectContentCommand> {
+function isDirectContentRequest(request: RequestEnvelope): request is RequestEnvelope<DirectContentCommand> {
   return Object.hasOwn(directContentHandlers, request.command);
 }
 

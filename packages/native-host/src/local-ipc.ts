@@ -48,8 +48,7 @@ export type {
   LocalIpcServerOptions,
 } from "./local-ipc-types.js";
 
-const DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS =
-  timeoutPolicies.localIpcServerRequestLine.timeoutMs;
+const DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS = timeoutPolicies.localIpcServerRequestLine.timeoutMs;
 const DEFAULT_LOCAL_IPC_STARTUP_LOCK_TIMEOUT_MS = timeoutPolicies.localIpcStartupLock.timeoutMs;
 
 export class LocalIpcServer {
@@ -66,10 +65,8 @@ export class LocalIpcServer {
     this.#endpoint = options.endpoint;
     this.#authToken = options.authToken;
     this.#enableProtocolNegotiation = options.enableProtocolNegotiation ?? false;
-    this.#requestLineTimeoutMs =
-      options.requestLineTimeoutMs ?? DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS;
-    this.#startupLockTimeoutMs =
-      options.startupLockTimeoutMs ?? DEFAULT_LOCAL_IPC_STARTUP_LOCK_TIMEOUT_MS;
+    this.#requestLineTimeoutMs = options.requestLineTimeoutMs ?? DEFAULT_LOCAL_IPC_REQUEST_LINE_TIMEOUT_MS;
+    this.#startupLockTimeoutMs = options.startupLockTimeoutMs ?? DEFAULT_LOCAL_IPC_STARTUP_LOCK_TIMEOUT_MS;
     this.#handleMessage = options.handleMessage;
   }
 

@@ -119,9 +119,7 @@ export function getElementChecked(element: Element): boolean | undefined {
   if (element.localName === "input" && "type" in element && "checked" in element) {
     const type = element.type;
     const checked = element.checked;
-    return typeof type === "string" &&
-      typeof checked === "boolean" &&
-      ["checkbox", "radio"].includes(type)
+    return typeof type === "string" && typeof checked === "boolean" && ["checkbox", "radio"].includes(type)
       ? checked
       : undefined;
   }
@@ -162,9 +160,7 @@ export function isDisabled(element: Element): boolean {
 
 function isNativelyDisabledFallback(element: Element): boolean {
   if (
-    !["button", "fieldset", "input", "optgroup", "option", "select", "textarea"].includes(
-      element.localName,
-    )
+    !["button", "fieldset", "input", "optgroup", "option", "select", "textarea"].includes(element.localName)
   ) {
     return false;
   }
@@ -352,11 +348,7 @@ export function isInteractive(element: Element, role: string): boolean {
     return true;
   }
 
-  if (
-    ["button", "link", "textbox", "checkbox", "radio", "combobox", "slider", "switch"].includes(
-      role,
-    )
-  ) {
+  if (["button", "link", "textbox", "checkbox", "radio", "combobox", "slider", "switch"].includes(role)) {
     return true;
   }
 
@@ -413,20 +405,14 @@ function isSelfHidden(element: Element): boolean {
 export function isScrollableContainer(element: Element): boolean {
   const view = element.ownerDocument.defaultView;
   const style =
-    view === null
-      ? (element.getAttribute("style")?.toLowerCase() ?? "")
-      : view.getComputedStyle(element);
-  const overflowX =
-    typeof style === "string" ? readInlineStyle(style, "overflow-x") : style.overflowX;
-  const overflowY =
-    typeof style === "string" ? readInlineStyle(style, "overflow-y") : style.overflowY;
+    view === null ? (element.getAttribute("style")?.toLowerCase() ?? "") : view.getComputedStyle(element);
+  const overflowX = typeof style === "string" ? readInlineStyle(style, "overflow-x") : style.overflowX;
+  const overflowY = typeof style === "string" ? readInlineStyle(style, "overflow-y") : style.overflowY;
   const overflow = typeof style === "string" ? readInlineStyle(style, "overflow") : style.overflow;
   const canScroll =
-    [overflowX, overflowY, overflow].some((value) => value === "auto" || value === "scroll") ||
-    false;
+    [overflowX, overflowY, overflow].some((value) => value === "auto" || value === "scroll") || false;
   return (
-    canScroll &&
-    (element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth)
+    canScroll && (element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth)
   );
 }
 

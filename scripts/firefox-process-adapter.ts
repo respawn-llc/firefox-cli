@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  parseDisposableFirefoxProcesses,
-  type DisposableFirefoxProcess,
-} from "./e2e-firefox-cleanup.js";
+import { parseDisposableFirefoxProcesses, type DisposableFirefoxProcess } from "./e2e-firefox-cleanup.js";
 import { pollUntil } from "./script-timing.js";
 import {
   runProcess,
@@ -12,9 +9,7 @@ import {
 } from "./process-runner.js";
 
 export type FirefoxProcessAdapter = {
-  readonly findProfileProcesses: (
-    profileDir: string,
-  ) => Promise<readonly DisposableFirefoxProcess[]>;
+  readonly findProfileProcesses: (profileDir: string) => Promise<readonly DisposableFirefoxProcess[]>;
   readonly stopProfile: (profileDir: string) => Promise<void>;
 };
 
@@ -131,9 +126,7 @@ export function parseWindowsFirefoxProcesses(
     return [];
   }
   const parsed = JSON.parse(output) as unknown;
-  const rows = z
-    .union([windowsProcessSchema, z.array(windowsProcessSchema), z.null()])
-    .parse(parsed);
+  const rows = z.union([windowsProcessSchema, z.array(windowsProcessSchema), z.null()]).parse(parsed);
   const processes = rows === null ? [] : Array.isArray(rows) ? rows : [rows];
   return parseDisposableFirefoxProcesses(
     processes
@@ -141,9 +134,7 @@ export function parseWindowsFirefoxProcesses(
         [
           String(process.ProcessId),
           process.Name,
-          process.CommandLine === null || process.CommandLine === undefined
-            ? ""
-            : process.CommandLine,
+          process.CommandLine === null || process.CommandLine === undefined ? "" : process.CommandLine,
         ].join(" "),
       )
       .join("\n"),

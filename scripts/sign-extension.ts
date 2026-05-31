@@ -25,10 +25,7 @@ if (channel !== "listed" && channel !== "unlisted") {
 const sourceDir = resolve("dist/extension");
 const artifactDir = resolve("dist/extension-artifacts");
 const signingDir = await mkdtemp(join(tmpdir(), "firefox-cli-sign-extension-"));
-const webExtBinary = resolve(
-  "node_modules/.bin",
-  process.platform === "win32" ? "web-ext.cmd" : "web-ext",
-);
+const webExtBinary = resolve("node_modules/.bin", process.platform === "win32" ? "web-ext.cmd" : "web-ext");
 
 await mkdir(artifactDir, { recursive: true });
 

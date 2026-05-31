@@ -29,9 +29,7 @@ export function resolveElementForContentCommand(
   registry: ElementRefRegistry<Element>,
   now: number,
 ): { readonly element: Element; readonly ref?: string; readonly generationId?: string } {
-  return createContentElementResolver({ document, registry, now }).resolveContentCommandTarget(
-    params,
-  );
+  return createContentElementResolver({ document, registry, now }).resolveContentCommandTarget(params);
 }
 
 export function querySingleElement(document: Document, selector: string): Element {

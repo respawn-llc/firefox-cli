@@ -39,10 +39,7 @@ export async function dispatchBrowserRequest(
   adapter: BackgroundBrowserAdapter,
 ): Promise<ResponseEnvelope> {
   const targetContext = createBrowserTargetContext(adapter);
-  const executeStep = async (
-    stepRequest: RequestEnvelope,
-    stepAdapter: BackgroundBrowserAdapter,
-  ) => {
+  const executeStep = async (stepRequest: RequestEnvelope, stepAdapter: BackgroundBrowserAdapter) => {
     try {
       return await dispatchBrowserRequest(stepRequest, stepAdapter);
     } catch (error) {
@@ -87,8 +84,6 @@ function isActionRequest(request: RequestEnvelope): request is RequestEnvelope<A
   return isActionCommand(request.command);
 }
 
-function isStaticBrowserRequest(
-  request: RequestEnvelope,
-): request is RequestEnvelope<StaticBrowserCommand> {
+function isStaticBrowserRequest(request: RequestEnvelope): request is RequestEnvelope<StaticBrowserCommand> {
   return Object.hasOwn(staticHandlers, request.command);
 }

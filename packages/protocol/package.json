@@ -5,5 +5,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "format": "biome format .",
+    "lint": "eslint .",
+    "test": "vitest run src/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --pretty false --noEmit"
   }
 }

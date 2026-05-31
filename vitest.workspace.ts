@@ -1,11 +1,9 @@
-import { defineWorkspace } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
-export default defineWorkspace([
-  {
-    test: {
-      name: "unit",
-      include: ["packages/**/*.test.ts", "scripts/**/*.test.ts"],
-      environment: "node",
-    },
+export default defineConfig({
+  test: {
+    name: "unit",
+    include: ["packages/**/*.test.ts", "scripts/**/*.test.ts"],
+    environment: "node",
   },
-]);
+});

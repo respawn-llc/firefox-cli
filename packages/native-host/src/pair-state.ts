@@ -341,10 +341,7 @@ export class FileHostIdentityStore implements HostIdentityStore {
   }
 }
 
-function createPairTokenRotation(
-  state: PairState,
-  dependencies: PairStateDependencies,
-): PairTokenRotation {
+function createPairTokenRotation(state: PairState, dependencies: PairStateDependencies): PairTokenRotation {
   const token = createPairToken(dependencies);
   const approvedAt = (dependencies.now?.() ?? new Date()).toISOString();
 

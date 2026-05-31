@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  MAX_EVAL_RESULT_BYTES,
-  MAX_EVAL_SCRIPT_BYTES,
-  MAX_SCREENSHOT_BYTES,
-} from "../constants.js";
+import { MAX_EVAL_RESULT_BYTES, MAX_EVAL_SCRIPT_BYTES, MAX_SCREENSHOT_BYTES } from "../constants.js";
 import { encodedByteLength } from "../core.js";
 import { resolvedTargetSchema, targetSelectorSchema } from "../target.js";
 

@@ -207,9 +207,7 @@ describe("browser batch command handling", () => {
   });
 
   it("continues failed steps unless bail is enabled", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.contentFailure = new Error("Cannot access tab");
 
     const response = await handleBrowserRequest(
@@ -238,9 +236,7 @@ describe("browser batch command handling", () => {
       },
     });
 
-    const bailAdapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const bailAdapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     bailAdapter.contentFailure = new Error("Cannot access tab");
 
     const bailResponse = await handleBrowserRequest(
@@ -269,9 +265,7 @@ describe("browser batch command handling", () => {
   });
 
   it("keeps nested batch dispatcher errors inside the nested batch result", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
     adapter.contentFailure = new Error("Cannot access tab");
 
     const response = await handleBrowserRequest(
@@ -318,9 +312,7 @@ describe("browser batch command handling", () => {
   });
 
   it("applies remaining outer timeout to timeout-aware steps", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -345,9 +337,7 @@ describe("browser batch command handling", () => {
   });
 
   it("applies remaining outer timeout to duration waits", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -372,9 +362,7 @@ describe("browser batch command handling", () => {
   });
 
   it("enforces batch public-result size limits", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(
@@ -397,9 +385,7 @@ describe("browser batch command handling", () => {
   });
 
   it("returns screenshot step bytes internally while sizing the public batch result", async () => {
-    const adapter = new FakeBrowserAdapter([
-      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
-    ]);
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
     const response = await handleBrowserRequest(
       createRequest(

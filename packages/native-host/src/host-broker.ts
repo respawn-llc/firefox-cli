@@ -32,19 +32,14 @@ export type ExtensionConnection = {
   send(request: RequestEnvelope): Promise<unknown>;
 };
 
-export type ExtensionProtocolState = Exclude<
-  ProtocolConnectionState,
-  { readonly state: "disconnected" }
->;
+export type ExtensionProtocolState = Exclude<ProtocolConnectionState, { readonly state: "disconnected" }>;
 
 export type NativeHostBrokerOptions = {
   readonly hostIdentity: HostIdentity;
   readonly productVersion?: string;
   readonly protocolRange?: ProtocolVersionRange;
   writeFile?(path: string, data: Uint8Array): Promise<void>;
-  verifyPairToken?(
-    token: string | undefined,
-  ): Promise<PairTokenVerification> | PairTokenVerification;
+  verifyPairToken?(token: string | undefined): Promise<PairTokenVerification> | PairTokenVerification;
 };
 
 function rebaseResponseProtocolVersion<C extends CommandId>(
@@ -171,9 +166,7 @@ export class NativeHostBroker {
 
     if (isRequestCommand(request, "screenshot")) {
       const response = await this.#forwardToExtension(request, extensionSession.value, cliSession);
-      return response.ok
-        ? this.#writeScreenshotResponse(request, response.result, cliSession)
-        : response;
+      return response.ok ? this.#writeScreenshotResponse(request, response.result, cliSession) : response;
     }
 
     if (isRequestCommand(request, "batch")) {
@@ -217,12 +210,7 @@ export class NativeHostBroker {
     result: ScreenshotResult,
     protocolSession: ProtocolSession,
   ): Promise<ResponseEnvelope<"screenshot">> {
-    const writeResult = await this.#writeScreenshotResult(
-      request,
-      request.params,
-      result,
-      protocolSession,
-    );
+    const writeResult = await this.#writeScreenshotResult(request, request.params, result, protocolSession);
     if (!writeResult.ok) {
       return writeResult.response;
     }

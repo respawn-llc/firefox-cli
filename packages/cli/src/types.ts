@@ -1,9 +1,4 @@
-import type {
-  CliRouteMetadata,
-  CommandId,
-  RequestEnvelope,
-  ResponseEnvelope,
-} from "@firefox-cli/protocol";
+import type { CliRouteMetadata, CommandId, RequestEnvelope, ResponseEnvelope } from "@firefox-cli/protocol";
 
 export type CliExitCode = 0 | 1;
 

@@ -11,10 +11,7 @@ import {
 } from "@firefox-cli/native-host";
 import { createTempDir } from "@firefox-cli/test-support";
 import { runAgentWorkflowE2e, startWorkflowFixtureServer } from "./e2e-disposable-workflow.js";
-import {
-  approveExtensionWithMarionette,
-  type MarionetteApprovalResult,
-} from "./marionette-client.js";
+import { approveExtensionWithMarionette, type MarionetteApprovalResult } from "./marionette-client.js";
 import { createFirefoxProcessAdapter } from "./firefox-process-adapter.js";
 import {
   raceWithProcessFailure,
@@ -66,18 +63,13 @@ const manualApprovalTimeoutMs = parsePositiveIntegerEnv(
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
 const extensionDir = resolve("dist/extension");
-const webExtBinary = resolve(
-  "node_modules/.bin",
-  process.platform === "win32" ? "web-ext.cmd" : "web-ext",
-);
+const webExtBinary = resolve("node_modules/.bin", process.platform === "win32" ? "web-ext.cmd" : "web-ext");
 await access(binaryPath);
 await access(extensionDir);
 await access(webExtBinary);
 
 if (process.platform === "win32") {
-  console.log(
-    "Disposable Firefox E2E skipped: Windows native-host registration requires registry.",
-  );
+  console.log("Disposable Firefox E2E skipped: Windows native-host registration requires registry.");
   process.exit(0);
 }
 

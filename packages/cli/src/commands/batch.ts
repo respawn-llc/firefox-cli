@@ -19,12 +19,7 @@ import {
   parseTargetOptions,
 } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
-import {
-  createUploadBudget,
-  parseUploadArguments,
-  statUploadFiles,
-  uploadTotalTooLarge,
-} from "../upload.js";
+import { createUploadBudget, parseUploadArguments, statUploadFiles, uploadTotalTooLarge } from "../upload.js";
 import {
   CliUsageError,
   InvalidBatchArgvCommandError,
@@ -244,11 +239,7 @@ function batchArgvReadsStdin(argv: readonly string[]): boolean {
   return argv[0] === "eval" && argv.includes("--stdin");
 }
 
-function stripImplicitBatchTarget(
-  command: CommandId,
-  params: unknown,
-  argv: readonly string[],
-): unknown {
+function stripImplicitBatchTarget(command: CommandId, params: unknown, argv: readonly string[]): unknown {
   if (!isImplicitBatchDefaultTargetCommand(command) || !isRecord(params)) {
     return params;
   }

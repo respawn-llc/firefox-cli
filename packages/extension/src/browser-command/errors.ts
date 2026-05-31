@@ -13,11 +13,7 @@ export class BrowserCommandError extends Error {
 
   readonly details: Record<string, unknown> | undefined;
 
-  constructor(
-    code: BrowserCommandError["code"],
-    message: string,
-    details?: Record<string, unknown>,
-  ) {
+  constructor(code: BrowserCommandError["code"], message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = "BrowserCommandError";
     this.code = code;
