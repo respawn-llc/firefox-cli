@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
+import { listRegularFilesUnder, readRegularFile } from "./safe-extension-files.js";
 import { calculateCrc32 } from "./zip-archive.js";
 
 const sourceDir = resolve("dist/extension");
@@ -9,13 +10,15 @@ const artifactPath = resolve(artifactDir, `firefox-cli-${rootPackage.version}.zi
 
 await mkdir(artifactDir, { recursive: true });
 
-const files = await listFiles(sourceDir);
+const files = await listRegularFilesUnder(sourceDir, "development extension archive");
 const records = await Promise.all(
-  files.map(async (filePath) => {
-    const name = relative(sourceDir, filePath).split(sep).join("/");
-    const data = await readFile(filePath);
+  files.map(async (file) => {
+    const data = await readRegularFile(
+      file.absolutePath,
+      `development extension archive ${file.relativePath}`,
+    );
     return {
-      name,
+      name: file.relativePath,
       data,
       crc32: calculateCrc32(data),
     };
@@ -64,18 +67,6 @@ const endRecord = createEndRecord({
 await writeFile(artifactPath, Buffer.concat([localDirectory, centralDirectory, endRecord]));
 
 console.log(`Built deterministic extension archive: ${artifactPath}`);
-
-async function listFiles(directory: string): Promise<string[]> {
-  const entries = await readdir(directory);
-  const nested = await Promise.all(
-    entries.map(async (entry) => {
-      const path = resolve(directory, entry);
-      const info = await stat(path);
-      return info.isDirectory() ? listFiles(path) : [path];
-    }),
-  );
-  return nested.flat().sort();
-}
 
 function createLocalHeader(input: {
   readonly crc32Value: number;

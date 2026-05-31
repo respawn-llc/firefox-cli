@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import rootPackage from "../package.json" with { type: "json" };
 import {
   FIREFOX_CLI_EXTENSION_ID,
@@ -22,9 +21,13 @@ import {
   extensionManifestSchema,
   parseJsonManifestContent,
   packageManifestSchema,
-  readJsonManifestFile,
   type ExtensionManifest,
 } from "./manifest-validation.js";
+import {
+  listRegularFilesUnder,
+  readOptionalRegularFileUnder,
+  readRegularFileUnder,
+} from "./safe-extension-files.js";
 import { readZipArchive } from "./zip-archive.js";
 
 const SIGNED_EXTENSION_REQUIRED_METADATA = [
@@ -64,18 +67,26 @@ export async function verifyPackageLayout(
     "lib/platform-binary.js",
   ];
 
-  await Promise.all(artifacts.map((artifact) => access(resolve(options.packageRoot, artifact))));
+  await Promise.all(
+    artifacts.map((artifact) => readRegularFileUnder(options.packageRoot, artifact, artifact)),
+  );
   await verifyPackageJson(options.packageRoot);
-  await resolvePackagedBinary(options.packageRoot, options.platform);
+  const binaryPath = await resolvePackagedBinary(options.packageRoot, options.platform);
+  await readRegularFileUnder(
+    options.packageRoot,
+    relative(options.packageRoot, binaryPath),
+    "platform binary",
+  );
   await verifyExtensionArtifact(options);
 
   return artifacts;
 }
 
 async function verifyPackageJson(packageRoot: string): Promise<void> {
-  const packageJson = await readJsonManifestFile(
-    resolve(packageRoot, "package.json"),
+  const packageJson = parseJsonManifestContent(
+    (await readRegularFileUnder(packageRoot, "package.json", "package manifest")).toString("utf8"),
     "package manifest",
+    resolve(packageRoot, "package.json"),
     packageManifestSchema,
   );
 
@@ -96,7 +107,11 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
 
 async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<void> {
   const signedXpiPath = resolve(options.packageRoot, "extension/firefox-cli.xpi");
-  const signedXpi = await readOptionalFile(signedXpiPath);
+  const signedXpi = await readOptionalRegularFileUnder(
+    options.packageRoot,
+    "extension/firefox-cli.xpi",
+    "signed extension XPI",
+  );
 
   if (signedXpi !== undefined) {
     await verifySignedExtensionArtifact({
@@ -112,9 +127,16 @@ async function verifyExtensionArtifact(options: PackageCheckOptions): Promise<vo
   }
 
   const developmentPayload = await readDevelopmentExtensionPayload(options.packageRoot);
-  const manifest = await readJsonManifestFile(
-    resolve(options.packageRoot, "extension/development/manifest.json"),
+  const manifest = parseJsonManifestContent(
+    (
+      await readRegularFileUnder(
+        options.packageRoot,
+        "extension/development/manifest.json",
+        "development extension manifest",
+      )
+    ).toString("utf8"),
     "development extension manifest",
+    resolve(options.packageRoot, "extension/development/manifest.json"),
     extensionManifestSchema,
   );
   verifyExpectedExtensionManifest(manifest);
@@ -512,36 +534,23 @@ async function readDevelopmentExtensionPayload(
 ): Promise<ReadonlyMap<string, Buffer>> {
   const extensionRoot = resolve(packageRoot, "extension/development");
   const packageOnlyFiles = new Set(["README.md", `firefox-cli-${rootPackage.version}.zip`]);
-  const files = (await listRelativeFiles(extensionRoot)).filter(
-    (file) => !packageOnlyFiles.has(file),
-  );
+  const files = (
+    await listRegularFilesUnder(extensionRoot, "development extension payload")
+  ).filter((file) => !packageOnlyFiles.has(file.relativePath));
   const payload = await Promise.all(
-    files.map(async (file) => [file, await readFile(resolve(extensionRoot, file))] as const),
+    files.map(
+      async (file) =>
+        [
+          file.relativePath,
+          await readRegularFileUnder(
+            extensionRoot,
+            file.relativePath,
+            "development extension payload",
+          ),
+        ] as const,
+    ),
   );
   return new Map(payload);
-}
-
-async function listRelativeFiles(root: string, prefix = ""): Promise<readonly string[]> {
-  const entries = await readdir(resolve(root, prefix), { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const relativePath = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
-      return entry.isDirectory() ? listRelativeFiles(root, relativePath) : [relativePath];
-    }),
-  );
-
-  return files.flat();
-}
-
-async function readOptionalFile(path: string): Promise<Buffer | undefined> {
-  try {
-    return await readFile(path);
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  }
 }
 
 if (import.meta.main) {

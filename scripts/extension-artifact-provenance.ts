@@ -1,8 +1,13 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { z } from "zod";
-import { parseJsonWithSchema, readJsonManifestFile } from "./manifest-validation.js";
+import { parseJsonWithSchema } from "./manifest-validation.js";
+import {
+  listRegularFilesUnder,
+  readRegularFile,
+  readRegularFileUnder,
+} from "./safe-extension-files.js";
 
 export const packagedSignedExtensionProvenanceFile = "firefox-cli.xpi.provenance.json";
 
@@ -49,7 +54,10 @@ export async function writeSignedExtensionProvenance(input: {
 export async function readSignedExtensionProvenance(
   path: string,
 ): Promise<SignedExtensionProvenance> {
-  return readJsonManifestFile(path, "signed extension provenance", signedExtensionProvenanceSchema);
+  return parseSignedExtensionProvenance(
+    (await readRegularFile(path, "signed extension provenance")).toString("utf8"),
+    path,
+  );
 }
 
 export function parseSignedExtensionProvenance(
@@ -66,17 +74,19 @@ export function parseSignedExtensionProvenance(
 
 export async function hashFile(path: string): Promise<string> {
   return createHash("sha256")
-    .update(await readFile(path))
+    .update(await readRegularFile(path, "extension artifact"))
     .digest("hex");
 }
 
 export async function hashDirectoryPayload(root: string): Promise<string> {
-  const files = await listRelativeFiles(root);
+  const files = await listRegularFilesUnder(root, "extension source payload");
   const hash = createHash("sha256");
-  for (const file of [...files].sort((left, right) => left.localeCompare(right))) {
-    hash.update(file);
+  for (const file of [...files].sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  )) {
+    hash.update(file.relativePath);
     hash.update("\0");
-    hash.update(await readFile(resolve(root, file)));
+    hash.update(await readRegularFileUnder(root, file.relativePath, "extension source payload"));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -93,15 +103,4 @@ export function hashPayloadMap(payload: ReadonlyMap<string, Buffer>): string {
     hash.update("\0");
   }
   return hash.digest("hex");
-}
-
-async function listRelativeFiles(root: string, prefix = ""): Promise<readonly string[]> {
-  const entries = await readdir(resolve(root, prefix), { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const relativePath = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
-      return entry.isDirectory() ? listRelativeFiles(root, relativePath) : [relativePath];
-    }),
-  );
-  return files.flat();
 }

@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import rootPackage from "../../package.json" with { type: "json" };
 import { createTempDir } from "@firefox-cli/test-support";
 import { getBinaryName, getPlatformKey, type PlatformInput } from "@firefox-cli/native-host";
 import {
+  hashDirectoryPayload,
   hashPayloadMap,
   packagedSignedExtensionProvenanceFile,
 } from "../extension-artifact-provenance.js";
@@ -286,6 +287,39 @@ describe("verifyPackageLayout", () => {
 
     await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
       "Expected standalone extension script",
+    );
+  });
+
+  it("rejects symlinks in the packaged development extension payload", async () => {
+    const packageRoot = await createPackageRoot();
+    const outsideFile = join(await createTempDir("firefox-cli-outside-extension"), "secret.txt");
+    await writeFile(outsideFile, "outside package\n");
+    await symlink(outsideFile, join(packageRoot, "extension/development/outside.txt"));
+
+    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
+      "Refusing to traverse symlink",
+    );
+  });
+
+  it("rejects symlinked signed extension artifacts before reading them", async () => {
+    const packageRoot = await createPackageRoot();
+    const outsideFile = join(await createTempDir("firefox-cli-outside-xpi"), "firefox-cli.xpi");
+    await writeFile(outsideFile, "not really an xpi\n");
+    await symlink(outsideFile, join(packageRoot, "extension/firefox-cli.xpi"));
+
+    await expect(verifyPackageLayout({ packageRoot, platform })).rejects.toThrow(
+      "Refusing to read symlink",
+    );
+  });
+
+  it("rejects symlinks when hashing extension source provenance", async () => {
+    const packageRoot = await createPackageRoot();
+    const outsideFile = join(await createTempDir("firefox-cli-outside-provenance"), "secret.txt");
+    await writeFile(outsideFile, "outside package\n");
+    await symlink(outsideFile, join(packageRoot, "extension/development/outside.txt"));
+
+    await expect(hashDirectoryPayload(join(packageRoot, "extension/development"))).rejects.toThrow(
+      "Refusing to traverse symlink",
     );
   });
 });
