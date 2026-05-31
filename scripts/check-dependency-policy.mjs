@@ -11,8 +11,12 @@ export async function checkDependencyPolicy(root = rootDefault) {
   const policy = JSON.parse(await readFile(join(root, "dependency-policy.json"), "utf8"));
   const rootPackage = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   const errors = [];
+  const rootVersion = typeof rootPackage.version === "string" ? rootPackage.version : undefined;
 
   if (policy.packageManager !== "bun") errors.push("dependency-policy.json must set packageManager to bun.");
+  if (rootVersion === undefined || rootVersion.length === 0) {
+    errors.push("Root package.json must declare a non-empty version.");
+  }
   if (typeof rootPackage.packageManager !== "string" || !rootPackage.packageManager.startsWith("bun@")) {
     errors.push("Root package.json must declare packageManager as bun@<version>.");
   }
@@ -34,6 +38,16 @@ export async function checkDependencyPolicy(root = rootDefault) {
     }
 
     packages.set(packageJson.name, packagePath);
+    if (
+      rootVersion !== undefined &&
+      packagePath !== join(root, "package.json") &&
+      packageJson.version !== rootVersion
+    ) {
+      errors.push(
+        `${relative(root, packagePath)} version must match root package.json version ${rootVersion}.`,
+      );
+    }
+
     for (const dependency of packageJson.trustedDependencies ?? []) {
       if (!trustedAllowlist.has(dependency)) {
         errors.push(`${packageJson.name} trustedDependencies contains unreviewed dependency ${dependency}.`);

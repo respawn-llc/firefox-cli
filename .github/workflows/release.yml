@@ -2,13 +2,70 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional x.y.z version to release; defaults to package.json."
+        required: false
+        type: string
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
   push:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.event_name == 'push' && github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
+  prepare-tag:
+    name: Prepare Release Tag
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        contains(github.event.pull_request.labels.*.name, 'autorelease'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || 'main' }}
+          fetch-depth: 0
+          token: ${{ secrets.OPENSOURCE_PAT }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Prepare available release version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            bun scripts/prepare-release-version.ts --version "${{ inputs.version }}"
+          else
+            bun scripts/prepare-release-version.ts
+          fi
+      - name: Commit patch-version bump
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json bun.lock packages/cli/package.json packages/extension/package.json packages/native-host/package.json packages/protocol/package.json packages/test-support/package.json packages/extension/src/manifest.json
+          git commit -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main
+      - name: Create release tag
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
   signed-extension:
     name: Signed Extension
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +81,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firefox-cli-signed-extension
-          path: dist/extension-artifacts/*.xpi
+          path: dist/extension-artifacts/*.xpi*
 
   package:
     name: Package (${{ matrix.os }})
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs:
       - signed-extension
     runs-on: ${{ matrix.os }}
@@ -50,9 +108,37 @@ jobs:
           name: firefox-cli-signed-extension
           path: dist/extension-artifacts
       - run: bun run release:check:signed
+      - name: Archive package
+        if: runner.os != 'Windows'
+        run: tar -czf "firefox-cli-${{ github.ref_name }}-${{ runner.os }}-${{ runner.arch }}.tar.gz" -C dist package extension-artifacts
+      - name: Archive package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/package,dist/extension-artifacts -DestinationPath "firefox-cli-${{ github.ref_name }}-${{ runner.os }}-${{ runner.arch }}.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: firefox-cli-${{ runner.os }}-${{ runner.arch }}
+          name: firefox-cli-package-${{ runner.os }}-${{ runner.arch }}
           path: |
-            dist/package
-            dist/extension-artifacts
+            firefox-cli-*.tar.gz
+            firefox-cli-*.zip
+
+  github-release:
+    name: GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firefox-cli-package-*
+          path: release-artifacts
+      - uses: ncipollo/release-action@v1.20.0
+        with:
+          artifactErrorsFailBuild: true
+          artifacts: "release-artifacts/**/*"
+          draft: true
+          prerelease: false
+          tag: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPENSOURCE_PAT }}

@@ -38,6 +38,18 @@ test("dependency policy enforces Bun package manager ownership", async () => {
   assert.match((await checkDependencyPolicy(root)).join("\n"), /packageManager as bun@<version>/);
 });
 
+test("dependency policy rejects workspace package versions that drift from root", async () => {
+  const root = await createWorkspace({
+    policyDependencies: [],
+    packageDependencies: {},
+    workspacePackages: [{ name: "fixture-child", version: "9.9.9" }],
+  });
+  assert.match(
+    (await checkDependencyPolicy(root)).join("\n"),
+    /packages\/fixture-child\/package\.json version must match root package\.json version 0\.1\.0/,
+  );
+});
+
 async function createWorkspace(options) {
   const root = join(tmpdir(), `firefox-cli-deps-policy-${Date.now()}-${Math.random()}`);
   await mkdir(root, { recursive: true });
@@ -46,6 +58,7 @@ async function createWorkspace(options) {
     join(root, "package.json"),
     JSON.stringify({
       name: "fixture",
+      version: "0.1.0",
       packageManager: options.packageManager ?? "bun@1.3.14",
       dependencies: options.packageDependencies,
     }),
@@ -58,5 +71,15 @@ async function createWorkspace(options) {
       directDependencyAllowlist: { fixture: { dependencies: options.policyDependencies } },
     }),
   );
+  for (const workspacePackage of options.workspacePackages ?? []) {
+    await mkdir(join(root, "packages", workspacePackage.name), { recursive: true });
+    await writeFile(
+      join(root, "packages", workspacePackage.name, "package.json"),
+      JSON.stringify({
+        name: workspacePackage.name,
+        version: workspacePackage.version,
+      }),
+    );
+  }
   return root;
 }

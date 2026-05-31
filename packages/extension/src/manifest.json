@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "firefox-cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Firefox extension shell for firefox-cli.",
   "browser_specific_settings": {
     "gecko": {

@@ -1,0 +1,132 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { syncVersion } from "./sync-version.js";
+
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+
+export type PreparedReleaseVersion = {
+  readonly previousVersion: string;
+  readonly version: string;
+  readonly tag: string;
+  readonly changedFiles: readonly string[];
+};
+
+export async function prepareReleaseVersion(
+  options: { readonly root?: string; readonly targetVersion?: string; readonly unavailableTags?: readonly string[]; readonly tagPrefix?: string } = {},
+): Promise<PreparedReleaseVersion> {
+  const root = options.root ?? repoRoot;
+  const tagPrefix = options.tagPrefix ?? "v";
+  const rootPackagePath = join(root, "package.json");
+  const rootPackage = await readPackageJson(rootPackagePath);
+  const previousVersion = readPackageVersion(rootPackage, rootPackagePath);
+  const requestedVersion = options.targetVersion ?? previousVersion;
+  const unavailableTags = options.unavailableTags ?? (await gitTags(root));
+  const version = selectReleaseVersion(requestedVersion, unavailableTags, tagPrefix);
+  const changedFiles = [];
+
+  if (version !== previousVersion) {
+    rootPackage.version = version;
+    await writeFile(rootPackagePath, `${JSON.stringify(rootPackage, null, 2)}\n`);
+    changedFiles.push("package.json");
+  }
+
+  changedFiles.push(...(await syncVersion({ root })));
+  return {
+    previousVersion,
+    version,
+    tag: `${tagPrefix}${version}`,
+    changedFiles: [...new Set(changedFiles)],
+  };
+}
+
+export function selectReleaseVersion(requestedVersion: string, unavailableTags: readonly string[], tagPrefix = "v"): string {
+  let candidate = parsePatchVersion(requestedVersion);
+  const unavailable = new Set(unavailableTags);
+
+  while (unavailable.has(`${tagPrefix}${formatPatchVersion(candidate)}`)) {
+    candidate = { ...candidate, patch: candidate.patch + 1 };
+  }
+
+  return formatPatchVersion(candidate);
+}
+
+function parsePatchVersion(version: string): {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+} {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (match === null) {
+    throw new Error(`Expected release version to use x.y.z format: ${version}`);
+  }
+
+  const [, major, minor, patch] = match;
+  return {
+    major: Number(major),
+    minor: Number(minor),
+    patch: Number(patch),
+  };
+}
+
+function formatPatchVersion(version: { readonly major: number; readonly minor: number; readonly patch: number }): string {
+  return `${version.major}.${version.minor}.${version.patch}`;
+}
+
+async function readPackageJson(path: string): Promise<Record<string, unknown>> {
+  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${path} must contain a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function readPackageVersion(packageJson: Record<string, unknown>, path: string): string {
+  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+    throw new Error(`${path} must declare a non-empty version.`);
+  }
+  return packageJson.version;
+}
+
+async function gitTags(root: string): Promise<readonly string[]> {
+  const process = Bun.spawn(["git", "tag", "--list"], {
+    cwd: root,
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited]);
+  if (exitCode !== 0) {
+    throw new Error(`Failed to list git tags: ${stderr.trim()}`);
+  }
+  return stdout
+    .split("\n")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+}
+
+function parseTargetVersionArg(argv: readonly string[]): string | undefined {
+  const versionIndex = argv.indexOf("--version");
+  if (versionIndex === -1) return undefined;
+  const version = argv[versionIndex + 1];
+  if (version === undefined || version.startsWith("--")) {
+    throw new Error("--version requires a value.");
+  }
+  return version;
+}
+
+if (import.meta.main) {
+  const result = await prepareReleaseVersion({
+    targetVersion: parseTargetVersionArg(process.argv.slice(2)),
+  });
+  const output = JSON.stringify(result, null, 2);
+  console.log(output);
+
+  const githubOutput = process.env.GITHUB_OUTPUT;
+  if (githubOutput !== undefined && githubOutput.length > 0) {
+    await writeFile(
+      githubOutput,
+      [`version=${result.version}`, `tag=${result.tag}`, `changed=${result.changedFiles.length > 0 ? "true" : "false"}`].join("\n") + "\n",
+      { flag: "a" },
+    );
+  }
+}
