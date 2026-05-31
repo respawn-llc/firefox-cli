@@ -20,8 +20,7 @@
 }
 
 body {
-  background:
-    radial-gradient(circle at top left, rgba(0, 212, 106, 0.2), transparent 34%), linear-gradient(145deg, #0b0d10 0%, var(--surface) 58%, #0a1610 100%);
+  background: var(--surface);
   color: var(--text);
   font: 13px / 1.45 var(--base-font);
   margin: 0;
@@ -32,18 +31,8 @@ body {
   padding: 16px;
 }
 
-.eyebrow {
-  color: var(--flow-primary-light);
-  font-family: var(--heading-font);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-}
-
 .status-panel {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)), var(--surface-elevated);
+  background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 12px 28px var(--shadow);
@@ -63,10 +52,6 @@ body {
   font-family: var(--heading-font);
   font-size: 15px;
   font-weight: 700;
-}
-
-.approval-state::first-letter {
-  color: var(--flow-primary);
 }
 
 .approval-state[data-state="approved"] {
@@ -126,7 +111,7 @@ button[hidden] {
 }
 
 .primary-action {
-  background: linear-gradient(135deg, var(--flow-primary-light), var(--flow-primary) 45%, var(--flow-primary-dark));
+  background: var(--flow-primary);
   color: #041008;
   box-shadow: 0 10px 22px rgba(0, 212, 106, 0.28);
 }
