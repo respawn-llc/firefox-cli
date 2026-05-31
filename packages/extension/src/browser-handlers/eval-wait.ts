@@ -12,15 +12,13 @@ import {
   DEFAULT_WAIT_TIMEOUT_MS,
 } from "../browser-command/constants.js";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
-import { withBrowserCommandDeadline } from "../browser-command/deadline.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
-import { getOrderedWindows, resolveTarget } from "../browser-command/targets.js";
 import { waitForFunction, waitForUrl } from "../browser-command/wait.js";
 import type { EvalExecutorResult } from "../eval-executor.js";
 import type { BrowserHandlerMap } from "./types.js";
 
 export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
-  wait: async (request, adapter) => {
+  wait: async (request, adapter, context) => {
     if (request.params.kind === "ms") {
       const startedAt = Date.now();
       const durationMs = request.params.durationMs ?? 0;
@@ -61,14 +59,10 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
     }
 
     const waitTimeoutMs = request.params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-    const resolved = resolveTarget(
-      await withBrowserCommandDeadline(
-        getOrderedWindows(adapter),
-        waitTimeoutMs,
-        () => `Timed out after ${waitTimeoutMs}ms resolving wait target.`,
-      ),
-      request.params.target,
-    );
+    const resolved = await context.targetContext.resolveTarget(request.params.target, {
+      deadlineMs: waitTimeoutMs,
+      timeoutMessage: () => `Timed out after ${waitTimeoutMs}ms resolving wait target.`,
+    });
     if (request.params.kind === "url") {
       const result = await waitForUrl(adapter, resolved.tab.id, request.params);
       return createOkResponse(request, result);
@@ -106,8 +100,8 @@ export const evalWaitHandlers: BrowserHandlerMap<"wait" | "eval"> = {
     };
     return createOkResponse(request, result);
   },
-  eval: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  eval: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     let evalResponse: EvalExecutorResult;
     try {
       evalResponse = await adapter.executeEval(resolved.tab.id, {

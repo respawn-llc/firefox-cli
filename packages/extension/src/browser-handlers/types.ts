@@ -5,10 +5,12 @@ import type {
   ResponseEnvelope,
 } from "@firefox-cli/protocol";
 import type { ExecuteBatchStep } from "../browser-command/batch.js";
+import type { BrowserTargetContext } from "../browser-command/target-context.js";
 import type { BackgroundBrowserAdapter } from "../browser-command/types.js";
 
 export type BrowserHandlerContext = {
   readonly executeStep: ExecuteBatchStep;
+  readonly targetContext: BrowserTargetContext;
 };
 
 export type BrowserCommandHandler<C extends CommandId = CommandId> = (

@@ -8,15 +8,10 @@ import { withTimeout } from "../browser-command/async.js";
 import { DEFAULT_SCREENSHOT_TIMEOUT_MS } from "../browser-command/constants.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
 import { parseImageDataUrl } from "../browser-command/screenshot.js";
-import {
-  getOrderedWindows,
-  resolveFreshTarget,
-  resolveTarget,
-} from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
 export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
-  screenshot: async (request, adapter) => {
+  screenshot: async (request, adapter, context) => {
     if (request.params.fullPage === true) {
       return createErrorResponseForRequest(request, {
         code: "UNSUPPORTED_CAPABILITY",
@@ -24,7 +19,7 @@ export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
           "Full-page screenshots are unsupported because Firefox WebExtensions expose visible-tab capture only.",
       });
     }
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const tabActivated = !resolved.tab.active;
     const windowFocused = !resolved.window.focused;
     try {
@@ -34,6 +29,9 @@ export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
       if (windowFocused) {
         await adapter.focusWindow(resolved.window.id);
       }
+      if (tabActivated || windowFocused) {
+        context.targetContext.invalidate();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new BrowserCommandError(
@@ -42,7 +40,12 @@ export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
       );
     }
 
-    const target = await resolveFreshTarget(adapter, { tab: { kind: "id", id: resolved.tab.id } });
+    const target =
+      tabActivated || windowFocused
+        ? await context.targetContext.resolveFreshTarget({
+            tab: { kind: "id", id: resolved.tab.id },
+          })
+        : resolved.target;
     let dataUrl: string;
     try {
       dataUrl = await withTimeout(

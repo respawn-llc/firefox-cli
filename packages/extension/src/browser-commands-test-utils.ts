@@ -43,6 +43,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   }[] = [];
   clipboardText = "";
   networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
+  listWindowCalls = 0;
   contentFailure: Error | undefined;
   contentResponse: unknown | undefined;
   evalFailure: Error | undefined;
@@ -64,6 +65,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   }
 
   async listWindows(): Promise<readonly BrowserWindowSnapshot[]> {
+    this.listWindowCalls += 1;
     return this.#windows;
   }
 

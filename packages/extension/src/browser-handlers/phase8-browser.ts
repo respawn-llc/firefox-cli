@@ -8,12 +8,7 @@ import {
 } from "@firefox-cli/protocol";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
-import {
-  getOrderedWindows,
-  resolveTarget,
-  toOrderedWindows,
-  toWindowSummary,
-} from "../browser-command/targets.js";
+import { toOrderedWindows, toWindowSummary } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
 type Phase8BrowserCommand =
@@ -33,7 +28,7 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
     });
     return createOkResponse(request, result);
   },
-  clipboard: async (request, adapter) => {
+  clipboard: async (request, adapter, context) => {
     if (request.params.action === "read") {
       const result: ClipboardResult = {
         action: "read",
@@ -46,7 +41,7 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
       await adapter.writeClipboard(request.params.text ?? "");
       return createOkResponse(request, { action: "write", ok: true });
     }
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const contentCommand: RequestEnvelope<"clipboard"> =
       request.params.action === "paste"
         ? {
@@ -95,8 +90,8 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
     };
     return createOkResponse(request, result);
   },
-  network: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  network: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     if (request.params.action === "clear") {
       await adapter.clearNetworkRequests({
         tabId: resolved.tab.id,
@@ -120,12 +115,13 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
         "PDF export is unsupported because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.",
     });
   },
-  "set.viewport": async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  "set.viewport": async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const window = await adapter.resizeWindow(resolved.window.id, {
       width: request.params.width,
       height: request.params.height,
     });
+    context.targetContext.invalidate();
     const ordered = toOrderedWindows([window])[0];
     if (ordered === undefined) {
       throw new BrowserCommandError("INVALID_TARGET", "Firefox did not return the resized window.");

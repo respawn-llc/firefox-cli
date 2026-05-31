@@ -4,6 +4,6 @@ import type { BrowserCommandHandler } from "./types.js";
 
 export const createBatchHandler =
   (): BrowserCommandHandler<"batch"> => async (request, adapter, context) => {
-    const result = await executeBatch(request, adapter, context.executeStep);
+    const result = await executeBatch(request, adapter, context.executeStep, context.targetContext);
     return createOkResponse(request, result);
   };

@@ -18,6 +18,7 @@ import { phase8BrowserHandlers } from "./browser-handlers/phase8-browser.js";
 import { screenshotHandlers } from "./browser-handlers/screenshots.js";
 import { tabsWindowsHandlers } from "./browser-handlers/tabs-windows.js";
 import { BrowserCommandError } from "./browser-command/errors.js";
+import { createBrowserTargetContext } from "./browser-command/target-context.js";
 import type { BackgroundBrowserAdapter } from "./browser-command/types.js";
 
 const staticHandlers = mergeDisjointHandlerMaps(
@@ -37,6 +38,7 @@ export async function dispatchBrowserRequest(
   request: RequestEnvelope,
   adapter: BackgroundBrowserAdapter,
 ): Promise<ResponseEnvelope> {
+  const targetContext = createBrowserTargetContext(adapter);
   const executeStep = async (
     stepRequest: RequestEnvelope,
     stepAdapter: BackgroundBrowserAdapter,
@@ -57,16 +59,21 @@ export async function dispatchBrowserRequest(
   if (isRequestCommand(request, "batch")) {
     return await batchHandler(request, adapter, {
       executeStep,
+      targetContext,
     });
   }
 
   if (isActionRequest(request)) {
-    return await handleActionCommand(request, adapter);
+    return await handleActionCommand(request, adapter, {
+      executeStep,
+      targetContext,
+    });
   }
 
   if (isStaticBrowserRequest(request)) {
     return await dispatchCommandHandler(staticHandlers, request, adapter, {
       executeStep,
+      targetContext,
     });
   }
 

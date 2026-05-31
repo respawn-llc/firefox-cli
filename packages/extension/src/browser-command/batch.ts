@@ -15,7 +15,7 @@ import {
   type TargetSelector,
 } from "@firefox-cli/protocol";
 import { BrowserCommandError } from "./errors.js";
-import { getOrderedWindows, resolveTarget } from "./targets.js";
+import type { BrowserTargetContext } from "./target-context.js";
 import type { BackgroundBrowserAdapter } from "./types.js";
 
 export type ExecuteBatchStep = (
@@ -27,14 +27,12 @@ export async function executeBatch(
   command: RequestEnvelope<"batch">,
   adapter: BackgroundBrowserAdapter,
   executeStep: ExecuteBatchStep,
+  targetContext: BrowserTargetContext,
 ): Promise<BatchResult> {
   const startedAt = Date.now();
   const timeoutMs = command.params.timeoutMs;
   const maxResultBytes = command.params.maxResultBytes ?? MAX_BATCH_RESULT_BYTES;
-  const defaultTarget = resolveTarget(
-    await getOrderedWindows(adapter),
-    command.params.target,
-  ).target;
+  const defaultTarget = (await targetContext.resolveTarget(command.params.target)).target;
   const defaultSelector: TargetSelector = {
     window: { kind: "id", id: defaultTarget.windowId },
     tab: { kind: "id", id: defaultTarget.tabId },

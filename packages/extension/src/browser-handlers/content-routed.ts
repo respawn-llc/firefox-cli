@@ -19,9 +19,8 @@ import {
 } from "@firefox-cli/protocol";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
-import { getOrderedWindows, resolveTarget } from "../browser-command/targets.js";
 import type { BackgroundBrowserAdapter } from "../browser-command/types.js";
-import type { BrowserHandlerMap } from "./types.js";
+import type { BrowserHandlerContext, BrowserHandlerMap } from "./types.js";
 
 type ContentRoutedCommand =
   | "snapshot"
@@ -38,8 +37,8 @@ type ContentRoutedCommand =
   | "diff";
 
 export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
-  snapshot: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  snapshot: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const snapshotResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!snapshotResponse.ok) {
       return createErrorResponseForRequest(request, snapshotResponse.error);
@@ -51,8 +50,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     };
     return createOkResponse(request, result);
   },
-  "ref.resolve": async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  "ref.resolve": async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const refResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!refResponse.ok) {
       return createErrorResponseForRequest(request, refResponse.error);
@@ -64,8 +63,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     };
     return createOkResponse(request, result);
   },
-  get: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  get: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     if (request.params.kind === "title" || request.params.kind === "url") {
       return createOkResponse(request, {
         kind: request.params.kind,
@@ -86,8 +85,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     };
     return createOkResponse(request, result);
   },
-  is: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  is: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const isResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!isResponse.ok) {
       return createErrorResponseForRequest(request, isResponse.error);
@@ -99,8 +98,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     };
     return createOkResponse(request, result);
   },
-  find: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  find: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const findResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!findResponse.ok) {
       return createErrorResponseForRequest(request, findResponse.error);
@@ -108,8 +107,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     const result: FindResult = { ...findResponse.result, target: resolved.target };
     return createOkResponse(request, result);
   },
-  frame: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  frame: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const frameResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!frameResponse.ok) {
       return createErrorResponseForRequest(request, frameResponse.error);
@@ -117,16 +116,16 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     const result: FrameResult = { ...frameResponse.result, target: resolved.target };
     return createOkResponse(request, result);
   },
-  dialog: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  dialog: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const dialogResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!dialogResponse.ok) {
       return createErrorResponseForRequest(request, dialogResponse.error);
     }
     return createOkResponse(request, dialogResponse.result);
   },
-  storage: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  storage: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const storageResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!storageResponse.ok) {
       return createErrorResponseForRequest(request, storageResponse.error);
@@ -134,10 +133,10 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     const result: StorageResult = storageResponse.result;
     return createOkResponse(request, result);
   },
-  console: async (request, adapter) => handleLogCommand(request, adapter),
-  errors: async (request, adapter) => handleLogCommand(request, adapter),
-  highlight: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  console: async (request, adapter, context) => handleLogCommand(request, adapter, context),
+  errors: async (request, adapter, context) => handleLogCommand(request, adapter, context),
+  highlight: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const highlightResponse = await sendContentCommand(adapter, resolved.tab.id, request);
     if (!highlightResponse.ok) {
       return createErrorResponseForRequest(request, highlightResponse.error);
@@ -145,8 +144,8 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
     const result: HighlightResult = { ...highlightResponse.result, target: resolved.target };
     return createOkResponse(request, result);
   },
-  diff: async (request, adapter) => {
-    const resolved = resolveTarget(await getOrderedWindows(adapter), request.params.target);
+  diff: async (request, adapter, context) => {
+    const resolved = await context.targetContext.resolveTarget(request.params.target);
     const actual =
       request.params.kind === "url"
         ? (resolved.tab.url ?? "")
@@ -166,8 +165,9 @@ export const contentRoutedHandlers: BrowserHandlerMap<ContentRoutedCommand> = {
 export async function handleActionCommand(
   command: RequestEnvelope<ActionKind>,
   adapter: BackgroundBrowserAdapter,
+  context: BrowserHandlerContext,
 ) {
-  const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+  const resolved = await context.targetContext.resolveTarget(command.params.target);
   const actionResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!actionResponse.ok) {
     return createErrorResponseForRequest(command, actionResponse.error);
@@ -183,8 +183,9 @@ export async function handleActionCommand(
 async function handleLogCommand(
   command: RequestEnvelope<"console" | "errors">,
   adapter: BackgroundBrowserAdapter,
+  context: BrowserHandlerContext,
 ) {
-  const resolved = resolveTarget(await getOrderedWindows(adapter), command.params.target);
+  const resolved = await context.targetContext.resolveTarget(command.params.target);
   const logResponse = await sendContentCommand(adapter, resolved.tab.id, command);
   if (!logResponse.ok) {
     return createErrorResponseForRequest(command, logResponse.error);
