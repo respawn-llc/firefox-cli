@@ -4,15 +4,7 @@ import type {
   SnapshotResult,
 } from "@firefox-cli/protocol";
 import type { ElementRefRegistry } from "../element-ref-registry.js";
-import {
-  describeFrame,
-  getAccessibleName,
-  getMetadata,
-  getRole,
-  isInteractive,
-  isSemantic,
-  isVisible,
-} from "./accessibility.js";
+import { defaultSnapshotSemantics, type SnapshotSemantics } from "./snapshot-semantics.js";
 import { resolveScope } from "./dom.js";
 import { DEFAULT_MAX_OUTPUT_BYTES, truncateText } from "./format.js";
 
@@ -29,11 +21,12 @@ export function createSnapshotResult(
   params: SnapshotParams,
   registry: ElementRefRegistry<Element>,
   now = Date.now(),
+  semantics: SnapshotSemantics = defaultSnapshotSemantics,
 ): SnapshotResult {
   const scope = resolveScope(document, params.selector);
   const entries: SnapshotEntry[] = [];
   const frames: SnapshotFrameDiagnostic[] = [];
-  collectEntries(scope, params, entries, frames, 0);
+  collectEntries(scope, params, entries, frames, 0, semantics);
   const generation = registry.createGeneration(
     entries.map((entry) => entry.element),
     now,
@@ -65,29 +58,31 @@ function collectEntries(
   entries: SnapshotEntry[],
   frames: SnapshotFrameDiagnostic[],
   depth: number,
+  semantics: SnapshotSemantics,
 ): void {
   const maxDepth = params.maxDepth ?? 8;
-  if (depth > maxDepth || !isVisible(element)) {
+  if (depth > maxDepth || !semantics.isVisible(element)) {
     return;
   }
 
-  const role = getRole(element);
-  const name = getAccessibleName(element);
-  const interactive = isInteractive(element, role);
-  const include = params.interactiveOnly === true ? interactive : isSemantic(element, role, name);
+  const role = semantics.getRole(element);
+  const name = semantics.getAccessibleName(element);
+  const interactive = semantics.isInteractive(element, role);
+  const include =
+    params.interactiveOnly === true ? interactive : semantics.isSemantic(element, role, name);
   if (include) {
     entries.push({
       element,
       depth,
       role,
       ...(name === undefined ? {} : { name }),
-      metadata: getMetadata(element, role),
+      metadata: semantics.getMetadata(element, role),
     });
   }
 
   if (element.localName === "iframe") {
     frames.push({
-      selector: describeFrame(element),
+      selector: semantics.describeFrame(element),
       ...(element.getAttribute("title") === null
         ? {}
         : { title: element.getAttribute("title") ?? "" }),
@@ -99,7 +94,7 @@ function collectEntries(
   }
 
   for (const child of Array.from(element.children)) {
-    collectEntries(child, params, entries, frames, depth + 1);
+    collectEntries(child, params, entries, frames, depth + 1, semantics);
   }
 }
 

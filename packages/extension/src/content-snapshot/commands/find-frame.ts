@@ -1,9 +1,13 @@
 import type { FindParams, FindResult, FrameResult } from "@firefox-cli/protocol";
-import { findLabelText, getRole, summarizeWaitElement } from "../accessibility.js";
+import { defaultSnapshotSemantics, type SnapshotSemantics } from "../snapshot-semantics.js";
 
-export function createFindResult(document: Document, params: FindParams): FindResult {
+export function createFindResult(
+  document: Document,
+  params: FindParams,
+  semantics: SnapshotSemantics = defaultSnapshotSemantics,
+): FindResult {
   const matches = Array.from(document.querySelectorAll("*")).filter((element) =>
-    matchesFindParams(element, params),
+    matchesFindParams(element, params, semantics),
   );
   const selected =
     params.nth !== undefined
@@ -14,20 +18,24 @@ export function createFindResult(document: Document, params: FindParams): FindRe
           ? matches.slice(-1)
           : matches;
   return {
-    elements: selected.map((element) => summarizeWaitElement(element)),
+    elements: selected.map((element) => semantics.summarizeWaitElement(element)),
   };
 }
 
-function matchesFindParams(element: Element, params: FindParams): boolean {
+function matchesFindParams(
+  element: Element,
+  params: FindParams,
+  semantics: SnapshotSemantics,
+): boolean {
   const value = params.value.toLowerCase();
   if (params.kind === "role") {
-    return getRole(element).toLowerCase() === value;
+    return semantics.getRole(element).toLowerCase() === value;
   }
   if (params.kind === "text") {
     return (element.textContent ?? "").toLowerCase().includes(value);
   }
   if (params.kind === "label") {
-    return findLabelText(element).toLowerCase().includes(value);
+    return semantics.findLabelText(element).toLowerCase().includes(value);
   }
   if (params.kind === "placeholder") {
     return (element.getAttribute("placeholder") ?? "").toLowerCase().includes(value);
