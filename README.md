@@ -59,3 +59,7 @@ FIREFOX_CLI_E2E_DISPOSABLE=1 bun scripts/e2e-disposable-firefox.ts
 ```
 
 `bun run test:e2e` does not launch Firefox unless `FIREFOX_CLI_E2E_DISPOSABLE=1` is set. See `docs/development.md` for local safety rules.
+
+## License
+
+MIT © Nikita Vaizin aka Nek.12. See `LICENSE`.
