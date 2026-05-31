@@ -61,9 +61,12 @@ jobs:
           git commit -m "Release ${{ steps.version.outputs.tag }}"
           git push origin HEAD:main
       - name: Create release tag
-        run: |
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPENSOURCE_PAT }}
+          CUSTOM_TAG: ${{ steps.version.outputs.tag }}
+          WITH_V: false
+          PRERELEASE: false
 
   signed-extension:
     name: Signed Extension
@@ -131,14 +134,24 @@ jobs:
       - package
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           pattern: firefox-cli-package-*
           path: release-artifacts
+      - name: Generate Changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        id: build_changelog
+        with:
+          commitMode: true
+          configuration: ".github/changelog_config.json"
       - uses: ncipollo/release-action@v1.20.0
         with:
           artifactErrorsFailBuild: true
           artifacts: "release-artifacts/**/*"
+          body: ${{ steps.build_changelog.outputs.changelog }}
           draft: true
           prerelease: false
           tag: ${{ github.ref_name }}
