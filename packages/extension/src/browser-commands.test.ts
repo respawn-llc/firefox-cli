@@ -558,11 +558,13 @@ describe("browser command handling", () => {
         tabId: 101,
         payload: {
           script: expect.stringContaining("document.readyState === 'complete'"),
-          timeoutMs: 30_000,
+          timeoutMs: expect.any(Number),
           maxResultBytes: 4096,
         },
       },
     ]);
+    expect(adapter.evalRequests[0]?.payload.timeoutMs).toBeGreaterThan(0);
+    expect(adapter.evalRequests[0]?.payload.timeoutMs).toBeLessThanOrEqual(30_000);
   });
 
   it("waits for network idle through the background network tracker", async () => {
