@@ -15,7 +15,7 @@ import {
   approveExtensionWithMarionette,
   type MarionetteApprovalResult,
 } from "./marionette-client.js";
-import { parseDisposableFirefoxProcessIds } from "./e2e-firefox-cleanup.js";
+import { createFirefoxProcessAdapter } from "./firefox-process-adapter.js";
 import {
   raceWithProcessFailure,
   runProcess,
@@ -86,6 +86,7 @@ const homeDir = await createTempDir("firefox-cli-e2e-firefox-home");
 const profileDir = await createTempDir("firefox-cli-e2e-firefox-profile");
 const fixture = await startWorkflowFixtureServer();
 const env = e2eEnvironment(homeDir);
+const firefoxProcessAdapter = createFirefoxProcessAdapter();
 let webExt: ManagedProcess | undefined;
 let lastDoctorStatus = "<not run>";
 let approvalResult: MarionetteApprovalResult | undefined;
@@ -195,7 +196,7 @@ try {
   throw error;
 } finally {
   await webExt?.stop();
-  await stopFirefoxProcessesForProfile(profileDir);
+  await firefoxProcessAdapter.stopProfile(profileDir);
   await restoreFirefoxVisibleManifest?.();
   await new Promise<void>((resolveClose) => fixture.server.close(() => resolveClose()));
   const output = webExtOutput().trim();
@@ -425,53 +426,6 @@ async function findFirefoxBinary(): Promise<string> {
   }
 
   throw new Error("Firefox binary was not found. Set FIREFOX_BINARY to run disposable E2E.");
-}
-
-async function stopFirefoxProcessesForProfile(profileDir: string): Promise<void> {
-  const pids = await findDisposableFirefoxProcessIds(profileDir);
-  await terminateProcesses(pids, false);
-
-  await pollUntil(async () => (await findDisposableFirefoxProcessIds(profileDir)).length === 0, {
-    timeoutMs: 5000,
-    intervalMs: 100,
-    timeoutMessage: () => `Disposable Firefox did not exit for profile ${profileDir}.`,
-  }).catch(async () => {
-    await terminateProcesses(await findDisposableFirefoxProcessIds(profileDir), true);
-    await pollUntil(async () => (await findDisposableFirefoxProcessIds(profileDir)).length === 0, {
-      timeoutMs: 3000,
-      intervalMs: 100,
-      timeoutMessage: () => `Disposable Firefox survived force cleanup for profile ${profileDir}.`,
-    });
-  });
-}
-
-async function findDisposableFirefoxProcessIds(profileDir: string): Promise<number[]> {
-  const result = await runProcess("ps", ["-axo", "pid=,comm=,args="], {
-    timeoutMs: 5000,
-    maxOutputBytes: 512 * 1024,
-    label: "profile-scoped Firefox process scan",
-  });
-  return parseDisposableFirefoxProcessIds(result.stdout, { profileDir });
-}
-
-async function terminateProcesses(pids: readonly number[], force: boolean): Promise<void> {
-  await Promise.all(
-    pids.map(async (pid) => {
-      if (process.platform === "win32") {
-        await runProcess("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], {
-          expectedExitCodes: [0, 128],
-          timeoutMs: 5000,
-          label: `taskkill Firefox process ${String(pid)}`,
-        }).catch(() => undefined);
-        return;
-      }
-      try {
-        process.kill(pid, force ? "SIGKILL" : "SIGTERM");
-      } catch {
-        // Process already exited.
-      }
-    }),
-  );
 }
 
 function webExtOutput(): string {

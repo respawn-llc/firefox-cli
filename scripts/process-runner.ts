@@ -64,6 +64,31 @@ export type ManagedProcess = {
   stop(options?: StopProcessOptions): Promise<ProcessResult>;
 };
 
+export async function stopProcessTree(
+  pid: number,
+  options: StopProcessOptions = {},
+): Promise<void> {
+  if (!isProcessRunning(pid)) {
+    return;
+  }
+
+  await signalProcessTree(pid, "interrupt");
+  if (!(await waitForProcessExit(pid, options.interruptGraceMs ?? DEFAULT_INTERRUPT_GRACE_MS))) {
+    await signalProcessTree(pid, "terminate");
+  }
+  if (!(await waitForProcessExit(pid, options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS))) {
+    await signalProcessTree(pid, "force");
+  }
+  if (!(await waitForProcessExit(pid, options.forceGraceMs ?? DEFAULT_FORCE_GRACE_MS))) {
+    throw new ProcessRunnerError(
+      `Process tree ${String(pid)} did not stop after force termination.`,
+      {
+        pid,
+      },
+    );
+  }
+}
+
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
 const DEFAULT_INTERRUPT_GRACE_MS = timeoutPolicies.processStop.interruptGraceMs;
 const DEFAULT_TERMINATE_GRACE_MS = timeoutPolicies.processStop.terminateGraceMs;
@@ -258,6 +283,34 @@ async function signalProcessTree(
     if (!isNodeErrorCode(error, "ESRCH")) {
       throw error;
     }
+    try {
+      process.kill(pid, signal);
+    } catch (fallbackError) {
+      if (!isNodeErrorCode(fallbackError, "ESRCH")) {
+        throw fallbackError;
+      }
+    }
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+  try {
+    await waitForStop(
+      new Promise<void>((resolve) => {
+        const poll = () => {
+          if (!isProcessRunning(pid)) {
+            resolve();
+            return;
+          }
+          setTimeout(poll, 50);
+        };
+        poll();
+      }),
+      timeoutMs,
+    );
+    return true;
+  } catch {
+    return false;
   }
 }
 
