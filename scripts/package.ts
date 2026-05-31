@@ -62,7 +62,7 @@ async function writePackageJson(path: string): Promise<void> {
       "firefox-cli": "./bin/firefox-cli.js",
     },
     files: ["bin", "lib", "extension", "README.md", "LICENSE"],
-    license: "MIT",
+    license: "AGPL-3.0-only",
   };
 
   await writeFile(resolve(path, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);

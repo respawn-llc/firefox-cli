@@ -62,4 +62,4 @@ FIREFOX_CLI_E2E_DISPOSABLE=1 bun scripts/e2e-disposable-firefox.ts
 
 ## License
 
-MIT © Nikita Vaizin aka Nek.12. See `LICENSE`.
+AGPL-3.0-only. See `LICENSE`.

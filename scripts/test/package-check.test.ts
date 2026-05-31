@@ -34,7 +34,7 @@ beforeAll(async () => {
   signingMaterial = await createTestSigningMaterial();
 });
 
-const testSignatureVerifier: SignedExtensionSignatureVerifier = (input) =>
+const testSignatureVerifier: SignedExtensionSignatureVerifier = async (input) =>
   verifySignedExtensionSignature({
     ...input,
     expectation: signingMaterial.expectation,
@@ -404,7 +404,7 @@ async function createPackageRoot(
     )}\n`,
   );
   await writeFile(join(packageRoot, "README.md"), "# test\n");
-  await writeFile(join(packageRoot, "LICENSE"), "MIT\n");
+  await writeFile(join(packageRoot, "LICENSE"), "AGPL-3.0-only\n");
   await writeFile(join(packageRoot, "bin/firefox-cli.js"), "#!/usr/bin/env node\n");
   await mkdir(join(packageRoot, "lib"), { recursive: true });
   await writeFile(join(packageRoot, "lib/platform-binary.js"), "export {};\n");
@@ -587,7 +587,7 @@ async function readDevelopmentPayload(packageRoot: string): Promise<Map<string, 
 async function listRelativeFiles(root: string, prefix = ""): Promise<readonly string[]> {
   const entries = await readdir(join(root, prefix), { withFileTypes: true });
   const files = await Promise.all(
-    entries.map((entry) => {
+    entries.map(async (entry) => {
       const relativePath = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
       return entry.isDirectory() ? listRelativeFiles(root, relativePath) : [relativePath];
     }),
