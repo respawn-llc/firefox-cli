@@ -4,16 +4,13 @@ interface Status {
   readonly connected: boolean;
   readonly approved: boolean;
   readonly lastError?: string;
-  readonly diagnostics: string;
 }
 
 const statusElement = document.querySelector<HTMLParagraphElement>("#status");
 const approvalElement = document.querySelector<HTMLParagraphElement>("#approval");
 const errorElement = document.querySelector<HTMLParagraphElement>("#error");
-const diagnosticsElement = document.querySelector<HTMLTextAreaElement>("#diagnostics");
 const approveButton = document.querySelector<HTMLButtonElement>("#approve");
 const resetButton = document.querySelector<HTMLButtonElement>("#reset");
-const diagnosticsButton = document.querySelector<HTMLButtonElement>("#copy-diagnostics");
 
 async function loadStatus(): Promise<void> {
   const status = await sendMessage<Status>("firefox-cli:get-status");
@@ -22,11 +19,13 @@ async function loadStatus(): Promise<void> {
 
 function renderStatus(status: Status): void {
   if (statusElement) {
-    statusElement.textContent = status.connected ? "Native host connected." : "Native host disconnected.";
+    statusElement.textContent = status.connected ? "Native host connected" : "Native host disconnected";
+    statusElement.dataset.state = status.connected ? "connected" : "disconnected";
   }
 
   if (approvalElement) {
-    approvalElement.textContent = status.approved ? "Approved for CLI control." : "Not approved. Approve before running CLI commands.";
+    approvalElement.textContent = status.approved ? "Browser control approved" : "Approval required";
+    approvalElement.dataset.state = status.approved ? "approved" : "pending";
   }
 
   if (errorElement) {
@@ -34,8 +33,8 @@ function renderStatus(status: Status): void {
     errorElement.textContent = status.lastError ?? "";
   }
 
-  if (diagnosticsElement) {
-    diagnosticsElement.value = status.diagnostics;
+  if (approveButton) {
+    approveButton.hidden = status.approved;
   }
 }
 
@@ -50,16 +49,6 @@ approveButton?.addEventListener("click", () => {
 
 resetButton?.addEventListener("click", () => {
   sendMessage<Status>("firefox-cli:reset").then(renderStatus).catch(renderError);
-});
-
-diagnosticsButton?.addEventListener("click", () => {
-  if (diagnosticsElement) {
-    diagnosticsElement.select();
-    const execCommand: unknown = Reflect.get(document, "execCommand");
-    if (typeof execCommand === "function") {
-      Reflect.apply(execCommand, document, ["copy"]);
-    }
-  }
 });
 
 loadStatus().catch(renderError);
@@ -93,7 +82,7 @@ async function requestHostAccess(): Promise<boolean> {
   }
 
   if (!(await permissions.request(required))) {
-    throw new Error("Approve host access for all websites to use firefox-cli commands.");
+    throw new Error("Approve host access for all websites to enable browser control.");
   }
   return true;
 }
