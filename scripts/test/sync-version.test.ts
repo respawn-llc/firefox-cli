@@ -15,11 +15,13 @@ describe("syncVersion", () => {
       "packages/protocol/package.json",
       "packages/test-support/package.json",
       "packages/extension/src/manifest.json",
+      ".claude-plugin/plugin.json",
       "bun.lock",
     ]);
 
     await expect(readJsonVersion(join(root, "packages/cli/package.json"))).resolves.toBe("0.1.0");
     await expect(readJsonVersion(join(root, "packages/extension/src/manifest.json"))).resolves.toBe("0.1.0");
+    await expect(readJsonVersion(join(root, ".claude-plugin/plugin.json"))).resolves.toBe("0.1.0");
     await expect(readFile(join(root, "bun.lock"), "utf8")).resolves.toContain('"version": "0.1.0"');
   });
 
@@ -80,6 +82,10 @@ async function createVersionFixture(rootVersion: string, staleVersion: string): 
   }
   await writeJson(join(root, "packages/extension/src/manifest.json"), {
     manifest_version: 3,
+    name: "firefox-cli",
+    version: staleVersion,
+  });
+  await writeJson(join(root, ".claude-plugin/plugin.json"), {
     name: "firefox-cli",
     version: staleVersion,
   });

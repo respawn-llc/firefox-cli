@@ -1,0 +1,6 @@
+{
+  "name": "firefox-cli",
+  "description": "Firefox control CLI skill for AI agents",
+  "version": "0.1.0",
+  "repository": "https://github.com/Nek-12/firefox-cli"
+}

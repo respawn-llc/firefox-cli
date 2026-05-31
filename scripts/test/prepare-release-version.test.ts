@@ -33,12 +33,14 @@ describe("prepareReleaseVersion", () => {
         "packages/protocol/package.json",
         "packages/test-support/package.json",
         "packages/extension/src/manifest.json",
+        ".claude-plugin/plugin.json",
         "bun.lock",
       ],
     });
     await expect(readJsonVersion(join(root, "package.json"))).resolves.toBe("0.1.1");
     await expect(readJsonVersion(join(root, "packages/cli/package.json"))).resolves.toBe("0.1.1");
     await expect(readJsonVersion(join(root, "packages/extension/src/manifest.json"))).resolves.toBe("0.1.1");
+    await expect(readJsonVersion(join(root, ".claude-plugin/plugin.json"))).resolves.toBe("0.1.1");
     await expect(readFile(join(root, "bun.lock"), "utf8")).resolves.toContain('"version": "0.1.1"');
   });
 
@@ -70,6 +72,7 @@ async function createReleaseFixture(version: string): Promise<string> {
     await writeVersionJson(join(root, path), path, version);
   }
   await writeVersionJson(join(root, "packages/extension/src/manifest.json"), "firefox-cli", version);
+  await writeVersionJson(join(root, ".claude-plugin/plugin.json"), "firefox-cli", version);
   await writeFile(
     join(root, "bun.lock"),
     [

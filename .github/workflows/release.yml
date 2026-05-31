@@ -67,6 +67,30 @@ jobs:
           CUSTOM_TAG: ${{ steps.version.outputs.tag }}
           WITH_V: false
           PRERELEASE: false
+      - name: Checkout Claude plugin marketplace
+        uses: actions/checkout@v4
+        with:
+          repository: respawn-app/claude-plugin-marketplace
+          path: claude-plugin-marketplace
+          token: ${{ secrets.OPENSOURCE_PAT }}
+      - name: Sync Claude plugin marketplace version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd claude-plugin-marketplace
+          jq -e '.plugins[] | select(.name == "firefox-cli")' .claude-plugin/marketplace.json >/dev/null
+          tmp="$(mktemp)"
+          jq --arg version "$VERSION" '(.plugins[] | select(.name == "firefox-cli") | .version) = $version' .claude-plugin/marketplace.json > "$tmp"
+          mv "$tmp" .claude-plugin/marketplace.json
+          if git diff --quiet -- .claude-plugin/marketplace.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .claude-plugin/marketplace.json
+          git commit -m "Update firefox-cli plugin to ${VERSION}"
+          git push origin HEAD:main
 
   signed-extension:
     name: Signed Extension

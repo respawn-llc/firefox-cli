@@ -12,6 +12,7 @@ const packageManifestPaths = [
   "packages/test-support/package.json",
 ];
 const extensionManifestPath = "packages/extension/src/manifest.json";
+const claudePluginManifestPath = ".claude-plugin/plugin.json";
 const lockfileWorkspacePaths = ["packages/cli", "packages/extension", "packages/native-host", "packages/protocol", "packages/test-support"];
 
 export type SyncVersionOptions = {
@@ -39,7 +40,7 @@ async function readRootVersion(root: string): Promise<string> {
 
 async function syncJsonManifestVersions(root: string, version: string, check: boolean): Promise<readonly string[]> {
   const changes = [];
-  for (const path of [...packageManifestPaths, extensionManifestPath]) {
+  for (const path of [...packageManifestPaths, extensionManifestPath, claudePluginManifestPath]) {
     const absolutePath = join(root, path);
     const manifest = await readJsonFile(absolutePath);
     if (manifest.version === version) continue;
