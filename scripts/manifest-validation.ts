@@ -46,6 +46,7 @@ export const extensionManifestSchema = z
       })
       .loose()
       .optional(),
+    description: z.string().min(1).optional(),
   })
   .loose();
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;

@@ -12,7 +12,7 @@ export async function copyExtensionAssets(options: { readonly sourceDir: string;
   const manifest = await readJsonManifestFile(resolve(options.sourceDir, "manifest.json"), "source extension manifest", extensionManifestSchema);
   manifest.version = options.version;
 
-  await writeFile(resolve(options.outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(resolve(options.outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   await cp(resolve(options.sourceDir, "popup.html"), resolve(options.outputDir, "popup.html"));
   await cp(resolve(options.sourceDir, "popup.css"), resolve(options.outputDir, "popup.css"));
 }
