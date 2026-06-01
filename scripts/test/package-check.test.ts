@@ -1,8 +1,8 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createTempDir } from "@firefox-cli/test-support";
 import { beforeAll, describe, expect, it } from "vitest";
 import rootPackage from "../../package.json" with { type: "json" };
-import { createTempDir } from "@firefox-cli/test-support";
 import { hashDirectoryPayload } from "../extension-artifact-provenance.js";
 import { verifyPackageLayout } from "../package-check.js";
 import {
@@ -243,7 +243,7 @@ describe("verifyPackageLayout", () => {
       join(wrongShape, "extension/development/manifest.json"),
       JSON.stringify({
         manifest_version: 3,
-        name: "firefox-cli",
+        name: "FF-CLI Bridge",
         version: rootPackage.version,
         background: { scripts: "background.js" },
         permissions: "scripting",

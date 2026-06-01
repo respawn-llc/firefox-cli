@@ -26,7 +26,7 @@ describe("copyExtensionAssets", () => {
       join(sourceDir, "manifest.json"),
       JSON.stringify({
         manifest_version: 3,
-        name: "firefox-cli",
+        name: "FF-CLI Bridge",
         version: "0.0.0",
         background: { scripts: "background.js" },
         permissions: "scripting",
@@ -50,7 +50,7 @@ async function createExtensionAssetFixture(): Promise<{
     join(sourceDir, "manifest.json"),
     JSON.stringify({
       manifest_version: 3,
-      name: "firefox-cli",
+      name: "FF-CLI Bridge",
       version: "0.0.0",
       background: { scripts: ["background.js"] },
       permissions: ["nativeMessaging", "scripting"],

@@ -71,7 +71,7 @@ async function createReleaseFixture(version: string): Promise<string> {
   ]) {
     await writeVersionJson(join(root, path), path, version);
   }
-  await writeVersionJson(join(root, "packages/extension/src/manifest.json"), "firefox-cli", version);
+  await writeVersionJson(join(root, "packages/extension/src/manifest.json"), "FF-CLI Bridge", version);
   await writeVersionJson(join(root, ".claude-plugin/plugin.json"), "firefox-cli", version);
   await writeFile(
     join(root, "bun.lock"),

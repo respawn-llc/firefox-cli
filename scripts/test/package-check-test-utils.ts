@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import rootPackage from "../../package.json" with { type: "json" };
-import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import { getBinaryName, getPlatformKey, type PlatformInput } from "@firefox-cli/native-host";
+import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
+import rootPackage from "../../package.json" with { type: "json" };
 import { hashPayloadMap, packagedSignedExtensionProvenanceFile } from "../extension-artifact-provenance.js";
 import type { SignedExtensionSignatureVerifier } from "../signed-extension-signature.js";
 import { createPkcs7Signature, createTestSigningMaterial, type TestSigningMaterial } from "./signature-test-utils.js";
@@ -63,9 +63,9 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
     `${JSON.stringify(
       {
         manifest_version: 3,
-        name: "firefox-cli",
+        name: "FF-CLI Bridge",
         version: options.extensionVersion ?? rootPackage.version,
-        description: "Firefox extension shell for firefox-cli.",
+        description: "Browser extension bridge for CLI control.",
         browser_specific_settings: {
           gecko: {
             id: "firefox-cli@example.invalid",
@@ -76,7 +76,7 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
         background: { scripts: ["background.js"] },
         permissions: extensionRequirements.manifestPermissions,
         host_permissions: extensionRequirements.hostPermissions,
-        action: { default_popup: "popup.html", default_title: "firefox-cli" },
+        action: { default_popup: "popup.html", default_title: "FF-CLI Bridge" },
       },
       null,
       2,

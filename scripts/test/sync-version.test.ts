@@ -82,7 +82,7 @@ async function createVersionFixture(rootVersion: string, staleVersion: string): 
   }
   await writeJson(join(root, "packages/extension/src/manifest.json"), {
     manifest_version: 3,
-    name: "firefox-cli",
+    name: "FF-CLI Bridge",
     version: staleVersion,
   });
   await writeJson(join(root, ".claude-plugin/plugin.json"), {

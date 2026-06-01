@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "firefox-cli",
+  "name": "FF-CLI Bridge",
   "version": "0.1.0",
-  "description": "Firefox extension shell for firefox-cli.",
+  "description": "Browser extension bridge for CLI control.",
   "browser_specific_settings": {
     "gecko": {
       "id": "firefox-cli@example.invalid",
@@ -19,7 +19,7 @@
     "scripts": ["background.js"]
   },
   "action": {
-    "default_title": "firefox-cli",
+    "default_title": "FF-CLI Bridge",
     "default_popup": "popup.html"
   }
 }
