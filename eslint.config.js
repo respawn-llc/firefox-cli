@@ -53,6 +53,7 @@ export default [
           "./packages/protocol/tsconfig.json",
           "./packages/test-support/tsconfig.json",
           "./scripts/tsconfig.json",
+          "./tsconfig.eslint.json",
         ],
         tsconfigRootDir: import.meta.dirname,
       },

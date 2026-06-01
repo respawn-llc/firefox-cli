@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runProcess } from "./process-runner.js";
 import { syncVersion } from "./sync-version.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -89,16 +90,12 @@ function readPackageVersion(packageJson: Record<string, unknown>, path: string):
 }
 
 async function gitTags(root: string): Promise<readonly string[]> {
-  const process = Bun.spawn(["git", "tag", "--list"], {
+  const result = await runProcess("git", ["tag", "--list"], {
     cwd: root,
-    stderr: "pipe",
     stdout: "pipe",
+    stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited]);
-  if (exitCode !== 0) {
-    throw new Error(`Failed to list git tags: ${stderr.trim()}`);
-  }
-  return stdout
+  return result.stdout
     .split("\n")
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);

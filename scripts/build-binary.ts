@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
 import { copyPackagedBinary } from "./packaged-binary.js";
+import { runProcess } from "./process-runner.js";
 
 const platformKey = getPlatformKey();
 const binaryName = getBinaryName();
@@ -15,21 +16,14 @@ await mkdir(dirname(outputPath), { recursive: true });
 
 const buildWorkdir = await mkdtemp(join(tmpdir(), "firefox-cli-bun-build-"));
 
-let exitCode = 1;
 try {
-  const build = Bun.spawn(["bun", "build", entrypointPath, "--compile", "--outfile", outputPath], {
+  await runProcess("bun", ["build", entrypointPath, "--compile", "--outfile", outputPath], {
     cwd: buildWorkdir,
     stderr: "inherit",
     stdout: "inherit",
   });
-
-  exitCode = await build.exited;
 } finally {
   await moveToTrash(buildWorkdir);
-}
-
-if (exitCode !== 0) {
-  process.exit(exitCode);
 }
 
 await assertNoRootBunBuildArtifacts(rootDir);
@@ -51,14 +45,10 @@ if (syncedPackageBinaryPath !== undefined) {
 }
 
 async function moveToTrash(path: string): Promise<void> {
-  const trash = Bun.spawn(["trash", path], {
+  await runProcess("trash", [path], {
     stderr: "inherit",
     stdout: "inherit",
   });
-  const exitCode = await trash.exited;
-  if (exitCode !== 0) {
-    throw new Error(`Failed to move temporary Bun build directory to Trash: ${path}`);
-  }
 }
 
 async function assertNoRootBunBuildArtifacts(root: string): Promise<void> {
