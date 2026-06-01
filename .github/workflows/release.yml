@@ -33,7 +33,7 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'autorelease'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || 'main' }}
           fetch-depth: 0
@@ -68,7 +68,7 @@ jobs:
           WITH_V: false
           PRERELEASE: false
       - name: Checkout Claude plugin marketplace
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: respawn-llc/claude-plugin-marketplace
           path: claude-plugin-marketplace
@@ -97,7 +97,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -107,7 +107,7 @@ jobs:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
           FIREFOX_CLI_AMO_CHANNEL: unlisted
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firefox-cli-signed-extension
           path: dist/extension-artifacts/*.xpi*
@@ -126,13 +126,13 @@ jobs:
           - macos-latest
           - windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: firefox-cli-signed-extension
           path: dist/extension-artifacts
@@ -144,7 +144,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path dist/package,dist/extension-artifacts -DestinationPath "firefox-cli-${{ github.ref_name }}-${{ runner.os }}-${{ runner.arch }}.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firefox-cli-package-${{ runner.os }}-${{ runner.arch }}
           path: |
@@ -158,14 +158,14 @@ jobs:
       - package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: firefox-cli-package-*
           path: release-artifacts
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: firefox-cli-signed-extension
           path: release-artifacts/signed-extension
@@ -175,7 +175,7 @@ jobs:
         with:
           commitMode: true
           configuration: ".github/changelog_config.json"
-      - uses: ncipollo/release-action@v1.20.0
+      - uses: ncipollo/release-action@v1.21.0
         with:
           artifactErrorsFailBuild: true
           artifacts: "release-artifacts/**/*"
