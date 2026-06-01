@@ -1,4 +1,4 @@
-import { join, win32 } from "node:path";
+import { posix, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NATIVE_HOST_NAME, createLocalIpcEndpointScope } from "@firefox-cli/native-host";
 import { planPhase2E2e } from "../e2e-phase2-plan.js";
@@ -15,7 +15,7 @@ describe("phase 2 E2E planning", () => {
     expect(plan.stateRoot).toBe("/tmp/fc-home/Library/Application Support/firefox-cli");
     expect(plan.endpoint).toEqual({
       kind: "unix-socket",
-      path: join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
+      path: posix.join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
     });
     expect(plan.manifestPlan.manifestPath).toBe(`/tmp/fc-home/Library/Application Support/Mozilla/NativeMessagingHosts/${NATIVE_HOST_NAME}.json`);
     expect(plan.env).toMatchObject({
@@ -36,7 +36,7 @@ describe("phase 2 E2E planning", () => {
     expect(plan.stateRoot).toBe("/tmp/fc-home/.config/firefox-cli");
     expect(plan.endpoint).toEqual({
       kind: "unix-socket",
-      path: join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
+      path: posix.join(plan.stateRoot, "ipc", `${NATIVE_HOST_NAME}.sock`),
     });
     expect(plan.manifestPlan.manifestPath).toBe(`/tmp/fc-home/.mozilla/native-messaging-hosts/${NATIVE_HOST_NAME}.json`);
   });

@@ -27,6 +27,7 @@ export interface ProcessRunnerOptions {
   readonly maxOutputBytes?: number;
   readonly expectedExitCodes?: readonly number[];
   readonly timeoutMs?: number;
+  readonly timeoutStopOptions?: StopProcessOptions;
   readonly label?: string;
   readonly redactArgValues?: readonly string[];
 }
@@ -97,7 +98,7 @@ export async function runProcess(command: string, args: readonly string[] = [], 
       : withTimeout(managed.wait(), {
           timeoutMs: options.timeoutMs,
           onTimeout: async () => {
-            await managed.stop();
+            await managed.stop(options.timeoutStopOptions);
           },
           timeoutMessage: () => `${processLabel(command, options)} timed out after ${String(options.timeoutMs)}ms.\n${managed.output()}`,
           createError: (message) => new ProcessRunnerError(message, errorDetails({ pid: managed.pid })),

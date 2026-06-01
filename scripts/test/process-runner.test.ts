@@ -47,6 +47,7 @@ describe("process runner", () => {
     try {
       await runProcess(node, ["-e", "setInterval(() => undefined, 1000);"], {
         timeoutMs: 50,
+        timeoutStopOptions: { interruptGraceMs: 50, terminateGraceMs: 50, forceGraceMs: 500 },
       });
     } catch (error) {
       failure = error;
@@ -72,6 +73,7 @@ describe("process runner", () => {
       try {
         await runProcess(node, processTreeArgs(grandchildPidFile), {
           timeoutMs: 1000,
+          timeoutStopOptions: { interruptGraceMs: 50, terminateGraceMs: 50, forceGraceMs: 500 },
         });
       } catch (error) {
         failure = error;

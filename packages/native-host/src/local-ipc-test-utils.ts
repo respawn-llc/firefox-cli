@@ -12,7 +12,14 @@ export async function startRawLocalIpcServer(rawServers: Server[], endpoint: Loc
     await mkdir(dirname(endpoint.path), { recursive: true });
   }
 
-  const server = createServer(handleConnection);
+  const server = createServer((socket) => {
+    socket.on("error", (error) => {
+      if (!isBenignRawSocketCloseError(error)) {
+        throw error;
+      }
+    });
+    handleConnection(socket);
+  });
   rawServers.push(server);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -183,4 +190,12 @@ export async function stopRawServer(server: Server): Promise<void> {
       reject(error);
     });
   });
+}
+
+function isBenignRawSocketCloseError(error: Error): boolean {
+  return isNodeErrorCode(error, "ECONNRESET") || isNodeErrorCode(error, "EPIPE") || isNodeErrorCode(error, "ERR_STREAM_DESTROYED");
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

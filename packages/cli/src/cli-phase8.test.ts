@@ -131,6 +131,7 @@ describe("runCli Phase 8 commands", () => {
       const requests: RequestEnvelope[] = [];
       const output = await runCli(testCase.argv, {
         ...baseDependencies(),
+        platform: process.platform,
         cwd,
         sendRequest: async (request) => {
           requests.push(request);
