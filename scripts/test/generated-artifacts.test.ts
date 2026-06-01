@@ -25,7 +25,7 @@ describe("generated artifact reset", () => {
     await expect(resetGeneratedArtifact(join(repoRoot, "dist"), { repoRoot })).rejects.toThrow("dist root");
   });
 
-  it("resets a generated symlink without trashing the symlink target", async () => {
+  it("resets a generated symlink without deleting the symlink target", async () => {
     const repoRoot = await createTempDir("firefox-cli-generated-artifacts");
     const outsideTarget = join(repoRoot, "outside-target");
     const generatedLink = join(repoRoot, "dist/package");

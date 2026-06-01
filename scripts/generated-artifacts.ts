@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { lstat, mkdir, rm } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -14,7 +13,7 @@ export async function resetGeneratedArtifact(targetPath: string, options: { read
 
   await mkdir(dirname(target), { recursive: true });
   if (await pathExists(target)) {
-    await trashPath(target);
+    await rm(target, { recursive: true, force: true });
   }
   await mkdir(target, { recursive: true });
 }
@@ -32,28 +31,5 @@ async function pathExists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
-  }
-}
-
-async function trashPath(path: string): Promise<void> {
-  if (process.env.CI === "true") {
-    await rm(path, { recursive: true, force: true });
-    return;
-  }
-
-  const trash = spawn("trash", [path], { stdio: ["ignore", "ignore", "pipe"] });
-  let stderr = "";
-  trash.stderr.setEncoding("utf8");
-  trash.stderr.on("data", (chunk: string) => {
-    stderr += chunk;
-  });
-  const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
-    trash.once("error", rejectExit);
-    trash.once("close", (code) => {
-      resolveExit(code ?? 1);
-    });
-  });
-  if (exitCode !== 0) {
-    throw new Error(`Failed to reset generated artifact ${path}: ${stderr.trim()}`);
   }
 }
