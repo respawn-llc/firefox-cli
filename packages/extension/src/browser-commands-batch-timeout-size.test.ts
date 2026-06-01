@@ -36,8 +36,8 @@ describe("browser batch command handling", () => {
       createRequest(
         "batch",
         {
-          timeoutMs: 1,
-          steps: [{ command: "wait", params: { kind: "ms", durationMs: 30 } }],
+          timeoutMs: 50,
+          steps: [{ command: "wait", params: { kind: "ms", durationMs: 100 } }],
         },
         "batch-duration-timeout",
       ),
