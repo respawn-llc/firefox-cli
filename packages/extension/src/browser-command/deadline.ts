@@ -48,7 +48,7 @@ export async function withBrowserCommandDeadline<T>(operation: Promise<T>, timeo
       operation,
       new Promise<T>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new BrowserCommandError("TIMEOUT", message()));
+          reject(createTimeoutError(message));
         }, timeoutMs);
       }),
     ]);
@@ -56,5 +56,16 @@ export async function withBrowserCommandDeadline<T>(operation: Promise<T>, timeo
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
+  }
+}
+
+function createTimeoutError(message: () => string): BrowserCommandError {
+  try {
+    return new BrowserCommandError("TIMEOUT", message());
+  } catch (error) {
+    if (error instanceof BrowserCommandError) {
+      return error;
+    }
+    return new BrowserCommandError("TIMEOUT", error instanceof Error ? error.message : String(error));
   }
 }
