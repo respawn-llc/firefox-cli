@@ -46,7 +46,7 @@ After the build, the add-on files are in `dist/extension`:
 The unsigned add-on archive is:
 
 ```text
-dist/extension-artifacts/firefox-cli-0.1.0.zip
+dist/extension-artifacts/firefox-cli-0.1.1.zip
 ```
 
 The submitted source archive does not include `dist/` or `node_modules/`; both are generated locally from source and dependencies.

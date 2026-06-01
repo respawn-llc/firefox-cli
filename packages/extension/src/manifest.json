@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FF-CLI Bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser extension bridge for CLI control.",
   "browser_specific_settings": {
     "gecko": {

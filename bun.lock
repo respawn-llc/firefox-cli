@@ -29,7 +29,7 @@
     },
     "packages/cli": {
       "name": "@firefox-cli/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@firefox-cli/native-host": "workspace:*",
         "@firefox-cli/protocol": "workspace:*",
@@ -37,22 +37,22 @@
     },
     "packages/extension": {
       "name": "@firefox-cli/extension",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@firefox-cli/protocol": "workspace:*",
       },
     },
     "packages/native-host": {
       "name": "@firefox-cli/native-host",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
     "packages/protocol": {
       "name": "@firefox-cli/protocol",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
     "packages/test-support": {
       "name": "@firefox-cli/test-support",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
   },
   "packages": {
