@@ -50,7 +50,6 @@ export async function verifySignedExtensionSignature(input: SignedExtensionSigna
           "-CAfile",
           trustRootsPath,
           "-no-CApath",
-          "-no-CAstore",
           "-purpose",
           "any",
           "-signer",
