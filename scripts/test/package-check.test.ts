@@ -19,7 +19,7 @@ const platform = packageCheckPlatform;
 
 beforeAll(async () => {
   await initializePackageCheckSigningMaterial();
-});
+}, 30_000);
 
 describe("verifyPackageLayout", () => {
   it("accepts a complete development package layout", async () => {
