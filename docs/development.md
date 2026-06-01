@@ -37,5 +37,5 @@ Safety rules:
 Release signing:
 
 - `bun run extension:sign` signs `dist/extension` with `web-ext sign`.
-- Set `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`, or `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`.
+- Set `WEB_EXT_JWT_ISSUER` to the Mozilla Add-ons JWT issuer and `WEB_EXT_JWT_SECRET` to the corresponding JWT secret.
 - `bun run release:check:signed` requires `dist/package/extension/firefox-cli.xpi` in the assembled package.

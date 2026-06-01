@@ -53,7 +53,7 @@ The npm package contains:
 
 Release candidates require a signed XPI. The signing workflow uses Mozilla Add-ons API credentials through `web-ext sign` with these secrets:
 
-- `WEB_EXT_API_KEY`
-- `WEB_EXT_API_SECRET`
+- `WEB_EXT_JWT_ISSUER`
+- `WEB_EXT_JWT_SECRET`
 
-`AMO_JWT_ISSUER` and `AMO_JWT_SECRET` are accepted by the local signing script as aliases. Store/public listing automation is not part of the package workflow; the signing channel is `unlisted`.
+These values are Mozilla Add-ons JWT credentials: the issuer identifies the API credential, and the secret signs authenticated API calls. Store/public listing automation is not part of the package workflow; the signing channel is `unlisted`.

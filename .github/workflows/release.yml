@@ -104,8 +104,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run extension:sign
         env:
-          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
-          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+          WEB_EXT_JWT_ISSUER: ${{ secrets.WEB_EXT_JWT_ISSUER }}
+          WEB_EXT_JWT_SECRET: ${{ secrets.WEB_EXT_JWT_SECRET }}
           FIREFOX_CLI_AMO_CHANNEL: unlisted
       - uses: actions/upload-artifact@v7
         with:
