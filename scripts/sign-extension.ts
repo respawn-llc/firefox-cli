@@ -6,9 +6,9 @@ import { signedExtensionProvenanceArtifactName, writeSignedExtensionProvenance }
 import { verifyExpectedExtensionManifest } from "./extension-manifest-check.js";
 import { extensionManifestSchema, readJsonManifestFile } from "./manifest-validation.js";
 import { runProcess } from "./process-runner.js";
+import { readWebExtJwtCredentials } from "./sign-extension-credentials.js";
 
-const jwtIssuer = requireEnv("WEB_EXT_JWT_ISSUER");
-const jwtSecret = requireEnv("WEB_EXT_JWT_SECRET");
+const credentials = readWebExtJwtCredentials(process.env);
 const channel = process.env.FIREFOX_CLI_AMO_CHANNEL ?? "unlisted";
 
 if (channel !== "listed" && channel !== "unlisted") {
@@ -48,14 +48,6 @@ await writeSignedExtensionProvenance({
 
 console.log(`Signed extension XPI: ${outputPath}`);
 
-function requireEnv(name: "WEB_EXT_JWT_ISSUER" | "WEB_EXT_JWT_SECRET"): string {
-  const value = process.env[name];
-  if (value === undefined || value.length === 0) {
-    throw new Error(`Missing ${name} for extension signing.`);
-  }
-  return value;
-}
-
 async function runWebExtSign(): Promise<void> {
   const args = [
     "sign",
@@ -66,9 +58,9 @@ async function runWebExtSign(): Promise<void> {
     "--channel",
     channel,
     "--api-key",
-    jwtIssuer,
+    credentials.issuer,
     "--api-secret",
-    jwtSecret,
+    credentials.secret,
     "--no-input",
   ];
 
@@ -78,7 +70,7 @@ async function runWebExtSign(): Promise<void> {
     stderr: "inherit",
     timeoutMs: 10 * 60_000,
     label: "web-ext sign",
-    redactArgValues: [jwtIssuer, jwtSecret],
+    redactArgValues: [credentials.issuer, credentials.secret],
   });
 }
 
