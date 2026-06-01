@@ -6,6 +6,8 @@ Source repository: `https://github.com/respawn-llc/firefox-cli`
 
 `FF-CLI Bridge` is free and open-source software under the AGPL-3.0-only license. The extension is distributed with the local `firefox-cli` package and communicates with the user-local native messaging host; it does not use a hosted backend service for browser control.
 
+The extension manifest uses `https://opensource.respawn.pro/firefox-cli/updates.json` as its Firefox update manifest URL.
+
 ## Build Environment
 
 - Operating system: macOS, Linux, or Windows.
@@ -56,5 +58,6 @@ The submitted source archive does not include `dist/` or `node_modules/`; both a
 - `packages/extension/src/popup.ts` builds to `dist/extension/popup.js`.
 - `packages/extension/src/manifest.json` is copied to `dist/extension/manifest.json` with the version synchronized from root `package.json`.
 - `packages/extension/src/popup.html` and `packages/extension/src/popup.css` are copied to `dist/extension`.
+- `docs/firefox-cli/updates.json` is the public update manifest published at `https://opensource.respawn.pro/firefox-cli/updates.json`.
 
 Vite/Rollup bundles the TypeScript modules and esbuild minifies the generated JavaScript. Source files in this archive are not generated, concatenated, transpiled, or minified.

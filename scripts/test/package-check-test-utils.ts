@@ -70,6 +70,7 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
         browser_specific_settings: {
           gecko: {
             id: "ff-cli-bridge@respawn.pro",
+            update_url: extensionDisplayMetadata.updateUrl,
             strict_min_version: extensionRequirements.firefoxStrictMinVersion,
             data_collection_permissions: extensionRequirements.dataCollection,
           },

@@ -33,6 +33,7 @@ export const extensionManifestSchema = z
         gecko: z
           .object({
             id: z.string().min(1),
+            update_url: z.string().url().optional(),
             strict_min_version: z.string().min(1).optional(),
             data_collection_permissions: z
               .object({

@@ -200,6 +200,7 @@ describe("verifyPackageLayout", () => {
           browser_specific_settings: {
             gecko: {
               id: "ff-cli-bridge@respawn.pro",
+              update_url: extensionDisplayMetadata.updateUrl,
               data_collection_permissions: { required: ["technicalAndInteraction"] },
             },
           },

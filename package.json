@@ -34,7 +34,7 @@
     "test": "bun run deps:policy && bun run ts:policy && bun run test:policy && vitest run --exclude \"scripts/check-*.test.mjs\"",
     "test:e2e": "bun run build && bun scripts/e2e-phase2.ts && bun scripts/e2e-disposable-firefox.ts",
     "extension:build": "bun scripts/build-extension.ts && bun scripts/copy-extension-assets.ts && bun scripts/build-extension-archive.ts",
-    "extension:lint": "bun run extension:build && web-ext lint --source-dir dist/extension",
+    "extension:lint": "bun run extension:build && web-ext lint --self-hosted --source-dir dist/extension",
     "extension:run": "bun run extension:build && web-ext run --source-dir dist/extension",
     "extension:sign": "bun run extension:build && bun scripts/sign-extension.ts",
     "build:binary": "bun scripts/build-binary.ts",

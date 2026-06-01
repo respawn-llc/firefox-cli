@@ -4,6 +4,7 @@ export const extensionDisplayMetadata = {
   name: "FF-CLI Bridge",
   description: "Browser extension bridge for CLI control.",
   actionTitle: "FF-CLI Bridge",
+  updateUrl: "https://opensource.respawn.pro/firefox-cli/updates.json",
 } as const;
 
 const amoTrademarkPattern = /\b(?:firefox|mozilla)\b/iu;
@@ -17,6 +18,11 @@ export function verifyExpectedExtensionDisplayMetadata(manifest: ExtensionManife
   }
   if (manifest.action.default_title !== extensionDisplayMetadata.actionTitle) {
     throw new Error(`Expected ${label} action title ${extensionDisplayMetadata.actionTitle}, received ${manifest.action.default_title ?? "<missing>"}`);
+  }
+  if (manifest.browser_specific_settings?.gecko.update_url !== extensionDisplayMetadata.updateUrl) {
+    throw new Error(
+      `Expected ${label} update URL ${extensionDisplayMetadata.updateUrl}, received ${formatOptionalText(manifest.browser_specific_settings?.gecko.update_url)}`,
+    );
   }
   assertAmoSafeDisplayText(manifest.name, `${label} name`);
   assertAmoSafeDisplayText(manifest.action.default_title, `${label} action title`);
