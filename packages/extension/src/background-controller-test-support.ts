@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, createOkResponse, createRequest, parseBoundaryRequest, type RequestEnvelope } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, PROTOCOL_VERSION, parseBoundaryRequest, type RequestEnvelope } from "@firefox-cli/protocol";
 import { expect } from "vitest";
 import type { BackgroundBrowserAdapter, BrowserWindowSnapshot, FirefoxCliBackgroundController, NativePortLike } from "./background-controller.js";
 
@@ -123,7 +123,7 @@ export async function approveWithNativeHost(controller: FirefoxCliBackgroundCont
   port.emitMessage(
     createOkResponse(request, {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
       token: "paired-token",
       generation: 1,
       approvedAt: "2026-01-02T03:04:05.000Z",

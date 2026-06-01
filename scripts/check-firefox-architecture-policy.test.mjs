@@ -1,6 +1,6 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import assert from "node:assert/strict";
 
 test("extension manifest keeps the stable Firefox CLI boundary contract", async () => {
   const manifest = JSON.parse(await readFile(new URL("../packages/extension/src/manifest.json", import.meta.url), "utf8"));
@@ -21,7 +21,7 @@ test("native messaging manifest defaults stay aligned with the stable extension 
   const nativeManifest = await readFile(new URL("../packages/native-host/src/native-manifest.ts", import.meta.url), "utf8");
   const extensionId = /FIREFOX_CLI_EXTENSION_ID = "([^"]+)"/.exec(constants)?.[1];
   const nativeHostName = /NATIVE_HOST_NAME = "([^"]+)"/.exec(constants)?.[1];
-  assert.equal(extensionId, "firefox-cli@example.invalid");
+  assert.equal(extensionId, "ff-cli-bridge@respawn.pro");
   assert.equal(nativeHostName, "firefox_cli");
   assert.match(nativeManifest, /name: options\.name \?\? NATIVE_HOST_NAME/);
   assert.match(nativeManifest, /type: "stdio"/);

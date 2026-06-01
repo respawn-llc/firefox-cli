@@ -1,9 +1,9 @@
 import { PassThrough } from "node:stream";
-import { MAX_UPLOAD_FILE_BYTES, PROTOCOL_VERSION, createOkResponse, createRequest, kernelCapabilities } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, kernelCapabilities, MAX_UPLOAD_FILE_BYTES, PROTOCOL_VERSION } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { NativeHostBroker } from "./host-broker.js";
-import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
 import { attachNativeMessagingConnection } from "./native-host-runtime.js";
+import { encodeNativeMessageFrame, NativeMessagingFrameReader } from "./native-messaging-frame.js";
 
 describe("native host runtime", () => {
   it("bridges broker requests to the extension over native messaging frames", async () => {
@@ -12,7 +12,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -45,7 +45,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -80,7 +80,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -117,7 +117,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -155,7 +155,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     const connection = await attachNativeMessagingConnection({
@@ -185,7 +185,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -228,7 +228,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -266,7 +266,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({
@@ -289,7 +289,7 @@ describe("native host runtime", () => {
     const broker = new NativeHostBroker({
       hostIdentity: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
       },
     });
     await attachNativeMessagingConnection({

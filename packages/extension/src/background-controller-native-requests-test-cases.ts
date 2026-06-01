@@ -232,7 +232,7 @@ export async function runCase06() {
       },
       pairing: {
         hostId: "host-1",
-        extensionId: "firefox-cli@example.invalid",
+        extensionId: "ff-cli-bridge@respawn.pro",
         approved: false,
         status: "invalid-pair-state",
         message: "Stored pair state is invalid.",

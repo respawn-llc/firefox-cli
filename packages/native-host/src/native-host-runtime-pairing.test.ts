@@ -1,11 +1,11 @@
 import { PassThrough } from "node:stream";
-import { PROTOCOL_VERSION, createOkResponse, createRequest } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, PROTOCOL_VERSION } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { NativeHostBroker } from "./host-broker.js";
 import { attachNativeMessagingConnection } from "./native-host-runtime.js";
-import { NativeMessagingFrameReader, encodeNativeMessageFrame } from "./native-messaging-frame.js";
+import { encodeNativeMessageFrame, NativeMessagingFrameReader } from "./native-messaging-frame.js";
+import { approvePairing, type PairState, type PairStateStatus, verifyPairStateStatus } from "./pair-state.js";
 import { PersistedJsonFileError } from "./persisted-json.js";
-import { approvePairing, verifyPairStateStatus, type PairState, type PairStateStatus } from "./pair-state.js";
 
 describe("native host runtime pairing", () => {
   it("approves pairing requests and then gates broker forwarding by the returned token", async () => {
@@ -13,7 +13,7 @@ describe("native host runtime pairing", () => {
     const extensionOutput = new PassThrough();
     const hostIdentity = {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
     };
     let pairState: PairState | null = null;
     const readStateStatus = (): PairStateStatus => (pairState === null ? { status: "missing" } : { status: "valid", state: pairState });
@@ -106,7 +106,7 @@ describe("native host runtime pairing", () => {
     const extensionOutput = new PassThrough();
     const hostIdentity = {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
     };
     const invalidState: PairStateStatus = {
       status: "invalid",

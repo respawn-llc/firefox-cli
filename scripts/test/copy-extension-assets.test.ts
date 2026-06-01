@@ -57,7 +57,7 @@ async function createExtensionAssetFixture(): Promise<{
       permissions: ["nativeMessaging", "scripting"],
       action: { default_popup: "popup.html" },
       browser_specific_settings: {
-        gecko: { id: "firefox-cli@example.invalid" },
+        gecko: { id: "ff-cli-bridge@respawn.pro" },
       },
     }),
   );

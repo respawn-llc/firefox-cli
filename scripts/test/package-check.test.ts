@@ -193,13 +193,13 @@ describe("verifyPackageLayout", () => {
       for (const manifestOverride of [
         { version: "9.9.9" },
         { browser_specific_settings: { gecko: { id: "wrong@example.invalid" } } },
-        { browser_specific_settings: { gecko: { id: "firefox-cli@example.invalid" } } },
+        { browser_specific_settings: { gecko: { id: "ff-cli-bridge@respawn.pro" } } },
         { permissions: ["nativeMessaging", "scripting"] },
         { host_permissions: [] },
         {
           browser_specific_settings: {
             gecko: {
-              id: "firefox-cli@example.invalid",
+              id: "ff-cli-bridge@respawn.pro",
               data_collection_permissions: { required: ["technicalAndInteraction"] },
             },
           },

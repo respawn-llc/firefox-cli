@@ -1,10 +1,10 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createTempDir } from "@firefox-cli/test-support";
 import { createErrorResponse } from "@firefox-cli/protocol";
+import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { runCli } from "./index.js";
 import { baseDependencies, baseDependenciesWithoutExtensionPath, parseSetupDryRunOutput } from "./cli-test-support.js";
+import { runCli } from "./index.js";
 
 describe("runCli setup and doctor", () => {
   it("writes a temp-safe native-host manifest during setup", async () => {
@@ -213,7 +213,7 @@ describe("runCli setup and doctor", () => {
           description: "Native messaging host for firefox-cli.",
           path: binaryPath,
           type: "stdio",
-          allowed_extensions: ["firefox-cli@example.invalid"],
+          allowed_extensions: ["ff-cli-bridge@respawn.pro"],
           unexpected: true,
         },
         null,

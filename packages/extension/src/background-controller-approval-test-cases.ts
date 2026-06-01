@@ -36,7 +36,7 @@ export async function runCase01() {
   port.emitMessage(
     createOkResponse(request, {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
       token: "late-token",
       generation: 1,
       approvedAt: "2026-01-02T03:04:05.000Z",
@@ -134,7 +134,7 @@ export async function runCase03() {
   secondPort.emitMessage(
     createOkResponse(approve, {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
       token: "paired-token",
       generation: 1,
       approvedAt: "2026-01-02T03:04:05.000Z",
@@ -183,7 +183,7 @@ export async function runCase04() {
   port.emitMessage(
     createOkResponse(approve, {
       hostId: "host-1",
-      extensionId: "firefox-cli@example.invalid",
+      extensionId: "ff-cli-bridge@respawn.pro",
       token: "late-token",
       generation: 1,
       approvedAt: "2026-01-02T03:04:05.000Z",

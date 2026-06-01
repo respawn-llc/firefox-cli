@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, createOkResponse, createRequest, kernelCapabilities, parseBoundaryRequest, parseBoundaryResponse } from "./index.js";
+import { createOkResponse, createRequest, kernelCapabilities, PROTOCOL_VERSION, parseBoundaryRequest, parseBoundaryResponse } from "./index.js";
 import { boundaries, cliIdentity } from "./protocol-test-support.js";
 
 describe("parseBoundaryResponse", () => {
@@ -26,7 +26,7 @@ describe("parseBoundaryResponse", () => {
         peer: cliIdentity,
         pairing: {
           hostId: "host-1",
-          extensionId: "firefox-cli@example.invalid",
+          extensionId: "ff-cli-bridge@respawn.pro",
           approved: true,
           status: "invalid-pair-state",
         },
