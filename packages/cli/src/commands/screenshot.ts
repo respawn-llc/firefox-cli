@@ -1,7 +1,7 @@
-import { resolve } from "node:path";
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import { getOptionValue, hasOption, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
+import { resolvePlatformPath } from "../platform-path.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
 import { isScreenshotFormat } from "./guards.js";
@@ -19,7 +19,7 @@ interface ParsedScreenshotArguments {
 
 export function buildScreenshotRequest(argv: readonly string[], dependencies: CliDependencies): RequestEnvelope {
   const parsedArgs = parseScreenshotArguments(argv.slice(1));
-  const outputPath = resolve(dependencies.cwd ?? process.cwd(), parsedArgs.outputPath ?? "screenshot.png");
+  const outputPath = resolvePlatformPath(dependencies.platform, dependencies.cwd ?? process.cwd(), parsedArgs.outputPath ?? "screenshot.png");
   return createValidatedRequest("screenshot", {
     path: outputPath,
     format: parsedArgs.format,

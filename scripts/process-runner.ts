@@ -238,7 +238,14 @@ function spawnOptions(options: ProcessRunnerOptions): SpawnOptions {
 
 async function signalProcessTree(pid: number, mode: "interrupt" | "terminate" | "force"): Promise<void> {
   if (process.platform === "win32") {
-    await taskkillProcessTree(pid, mode === "force");
+    const force = mode === "force";
+    try {
+      await taskkillProcessTree(pid, force);
+    } catch (error) {
+      if (force) {
+        throw error;
+      }
+    }
     return;
   }
 

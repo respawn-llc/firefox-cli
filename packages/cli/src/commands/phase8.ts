@@ -1,6 +1,6 @@
-import { resolve } from "node:path";
 import type { RequestEnvelope } from "@firefox-cli/protocol";
 import { getPositionals, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
+import { resolvePlatformPath } from "../platform-path.js";
 import { createValidatedRequest } from "../protocol-validation.js";
 import { CliUsageError, type CliDependencies } from "../types.js";
 
@@ -10,7 +10,7 @@ export function buildPdfRequest(argv: readonly string[], dependencies: CliDepend
     throw new CliUsageError("Missing PDF path.");
   }
   return createValidatedRequest("pdf", {
-    path: resolve(dependencies.cwd ?? process.cwd(), path),
+    path: resolvePlatformPath(dependencies.platform, dependencies.cwd ?? process.cwd(), path),
     ...optionalTarget(parseTargetOptions(argv.slice(1))),
   });
 }

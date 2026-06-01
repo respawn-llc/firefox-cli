@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NATIVE_HOST_NAME, createLocalIpcEndpointScope } from "@firefox-cli/native-host";
 import { planPhase2E2e } from "../e2e-phase2-plan.js";
@@ -43,13 +43,13 @@ describe("phase 2 E2E planning", () => {
 
   it("uses Windows APPDATA for state and native manifest planning", () => {
     const plan = planPhase2E2e({
-      binaryPath: "C:\\\\bin\\\\firefox-cli.exe",
-      homeDir: "C:\\\\Users\\\\e2e",
+      binaryPath: "C:\\bin\\firefox-cli.exe",
+      homeDir: "C:\\Users\\e2e",
       platform: "win32",
       baseEnv: {},
     });
 
-    expect(plan.stateRoot).toBe("C:\\\\Users\\\\e2e/AppData/Roaming");
+    expect(plan.stateRoot).toBe(win32.join("C:\\Users\\e2e", "AppData", "Roaming"));
     expect(plan.endpoint).toEqual({
       kind: "windows-named-pipe",
       path: `\\\\.\\pipe\\firefox-cli-${NATIVE_HOST_NAME}-${createLocalIpcEndpointScope("phase2-e2e-planning-token")}`,
@@ -59,9 +59,9 @@ describe("phase 2 E2E planning", () => {
       hive: "HKEY_CURRENT_USER",
     });
     expect(plan.env).toMatchObject({
-      HOME: "C:\\\\Users\\\\e2e",
-      USERPROFILE: "C:\\\\Users\\\\e2e",
-      APPDATA: "C:\\\\Users\\\\e2e/AppData/Roaming",
+      HOME: "C:\\Users\\e2e",
+      USERPROFILE: "C:\\Users\\e2e",
+      APPDATA: win32.join("C:\\Users\\e2e", "AppData", "Roaming"),
     });
   });
 });

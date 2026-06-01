@@ -1,4 +1,4 @@
-import { join, posix, win32 } from "node:path";
+import { posix, win32 } from "node:path";
 import { z } from "zod";
 import { resolvePackagedBinary, type PlatformInput } from "./platform-binary.js";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
@@ -132,7 +132,7 @@ function optionalAllowedExtensions(allowedExtensions: readonly string[] | undefi
 
 function getPerUserManifestPath(platform: PlatformInput["platform"], homeDir: string, name: string, options: { readonly appDataDir?: string }): string {
   if (platform === "darwin") {
-    return join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${name}.json`);
+    return posix.join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${name}.json`);
   }
 
   if (platform === "linux") {

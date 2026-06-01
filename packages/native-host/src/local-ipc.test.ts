@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import type { Server } from "node:net";
 import { createTempDir } from "@firefox-cli/test-support";
@@ -31,11 +31,11 @@ describe("local IPC", () => {
     const endpointScope = createLocalIpcEndpointScope("ipc-token");
     expect(planLocalIpcEndpoint({ platform: "darwin", rootDir: "/tmp/firefox-cli" })).toEqual({
       kind: "unix-socket",
-      path: join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
+      path: posix.join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
     });
     expect(planLocalIpcEndpoint({ platform: "linux", rootDir: "/tmp/firefox-cli" })).toEqual({
       kind: "unix-socket",
-      path: join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
+      path: posix.join("/tmp/firefox-cli", "ipc", "firefox_cli.sock"),
     });
     expect(planLocalIpcEndpoint({ platform: "win32", rootDir: "ignored", endpointScope })).toEqual({
       kind: "windows-named-pipe",

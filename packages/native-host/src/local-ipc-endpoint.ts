@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { posix } from "node:path";
 import { NATIVE_HOST_NAME } from "./host-launch.js";
 import { createLocalIpcEndpointScope } from "./reliability.js";
 import { LocalIpcError, type LocalIpcEndpoint, type LocalIpcEndpointOptions } from "./local-ipc-types.js";
@@ -18,7 +18,7 @@ export function planLocalIpcEndpoint(options: LocalIpcEndpointOptions): LocalIpc
 
   return {
     kind: "unix-socket",
-    path: join(options.rootDir, "ipc", `${name}.sock`),
+    path: posix.join(options.rootDir, "ipc", `${name}.sock`),
   };
 }
 

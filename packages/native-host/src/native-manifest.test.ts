@@ -23,11 +23,11 @@ describe("native messaging manifest generation", () => {
     const binaryPath = "/opt/firefox-cli/bin/darwin-arm64/firefox-cli";
 
     expect(planNativeMessagingManifest({ binaryPath, homeDir, platform: "darwin" })).toEqual({
-      manifestPath: join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
+      manifestPath: posix.join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
       manifest: createNativeMessagingManifest({ binaryPath }),
       registration: {
         kind: "file",
-        manifestPath: join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
+        manifestPath: posix.join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts", `${NATIVE_HOST_NAME}.json`),
       },
     });
   });

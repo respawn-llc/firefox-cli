@@ -1,5 +1,5 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { createErrorResponse } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
@@ -19,8 +19,8 @@ describe("runCli setup and doctor", () => {
 
     expect(output.exitCode).toBe(0);
     expect(output.stdout).toContain("Native host manifest installed:");
-    expect(output.stdout).toContain(join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json"));
-    await expect(readFile(join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json"), "utf8")).resolves.toContain(binaryPath);
+    expect(output.stdout).toContain(darwinManifestPath(homeDir));
+    await expect(readFile(darwinManifestPath(homeDir), "utf8")).resolves.toContain(binaryPath);
   });
 
   it("prints setup guidance with extension artifact location", async () => {
@@ -96,7 +96,7 @@ describe("runCli setup and doctor", () => {
     expect(output.exitCode).toBe(1);
     expect(output.stdout).toContain("Native host manifest: installed");
     expect(output.stdout).toContain("Extension connection: disconnected");
-    await expect(readFile(join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json"), "utf8")).resolves.toContain(binaryPath);
+    await expect(readFile(darwinManifestPath(homeDir), "utf8")).resolves.toContain(binaryPath);
   });
 
   it("repairs a stale native-host manifest path during doctor fix", async () => {
@@ -136,9 +136,7 @@ describe("runCli setup and doctor", () => {
         status: "installed",
       },
     });
-    await expect(readFile(join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json"), "utf8")).resolves.toContain(
-      newBinaryPath,
-    );
+    await expect(readFile(darwinManifestPath(homeDir), "utf8")).resolves.toContain(newBinaryPath);
   });
 
   it("reports and repairs invalid native-host manifest files during doctor", async () => {
@@ -150,7 +148,7 @@ describe("runCli setup and doctor", () => {
       homeDir,
       platform: "darwin",
     });
-    const manifestPath = join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json");
+    const manifestPath = darwinManifestPath(homeDir);
     await writeFile(manifestPath, "{");
 
     const checked = await runCli(["doctor", "--json"], {
@@ -190,7 +188,7 @@ describe("runCli setup and doctor", () => {
       homeDir,
       platform: "darwin",
     });
-    const manifestPath = join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json");
+    const manifestPath = darwinManifestPath(homeDir);
     await writeFile(manifestPath, `${JSON.stringify({ path: binaryPath })}\n`);
 
     const wrongShape = await runCli(["doctor", "--json"], {
@@ -308,3 +306,7 @@ describe("runCli setup and doctor", () => {
     expect(unpairCalls).toEqual(["cleared"]);
   });
 });
+
+function darwinManifestPath(homeDir: string): string {
+  return posix.join(homeDir, "Library/Application Support/Mozilla/NativeMessagingHosts/firefox_cli.json");
+}

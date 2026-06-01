@@ -1,7 +1,8 @@
 import { open as openFile, stat } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { basename } from "node:path";
 import { MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_FILES, MAX_UPLOAD_TOTAL_BYTES, type UploadParams } from "@firefox-cli/protocol";
 import { optionalStringOption, optionalTarget, parseElementTarget, parsePositionalsAndOptions, parseTargetOptions } from "./parse.js";
+import { resolvePlatformPath } from "./platform-path.js";
 import { CliUsageError, type CliDependencies, type UploadBudget, type UploadReadLimits } from "./types.js";
 
 export interface ParsedUploadArguments {
@@ -81,7 +82,7 @@ export async function statUploadFiles(paths: readonly string[], dependencies: Cl
 
   return Promise.all(
     paths.map(async (inputPath) => {
-      const absolutePath = resolve(dependencies.cwd ?? process.cwd(), inputPath);
+      const absolutePath = resolvePlatformPath(dependencies.platform, dependencies.cwd ?? process.cwd(), inputPath);
       const fileStat = await statUploadPath(absolutePath, dependencies);
       if (!fileStat.isFile) {
         throw new CliUsageError(`Upload path is not a file: ${inputPath}`);

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import { getDefaultStateRoot } from "@firefox-cli/cli";
 import {
   planLocalIpcEndpoint,
@@ -21,7 +21,8 @@ export function planPhase2E2e(options: {
   readonly platform: NodeJS.Platform;
   readonly baseEnv?: NodeJS.ProcessEnv;
 }): Phase2E2ePlan {
-  const appDataDir = join(options.homeDir, "AppData", "Roaming");
+  const pathApi = options.platform === "win32" ? win32 : posix;
+  const appDataDir = pathApi.join(options.homeDir, "AppData", "Roaming");
   const env: NodeJS.ProcessEnv = {
     ...options.baseEnv,
     HOME: options.homeDir,

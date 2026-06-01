@@ -1,4 +1,4 @@
-import { dirname, resolve } from "node:path";
+import { dirname, posix, resolve, win32 } from "node:path";
 import {
   FileLocalIpcAuthTokenStore,
   FilePairStateStore,
@@ -55,10 +55,10 @@ export function getDefaultStateRoot(platform: NodeJS.Platform, homeDir: string, 
 
 export function getUserStateRoot(platform: NodeJS.Platform, homeDir: string, appDataDir: string | undefined): string {
   if (platform === "win32") {
-    return appDataDir ?? resolve(homeDir, "AppData", "Roaming");
+    return appDataDir ?? win32.resolve(homeDir, "AppData", "Roaming");
   }
 
-  return platform === "darwin" ? resolve(homeDir, "Library/Application Support/firefox-cli") : resolve(homeDir, ".config/firefox-cli");
+  return platform === "darwin" ? posix.resolve(homeDir, "Library/Application Support/firefox-cli") : posix.resolve(homeDir, ".config/firefox-cli");
 }
 
 export function optionalAppDataDir(appDataDir: string | undefined): {

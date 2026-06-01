@@ -296,6 +296,15 @@ async function endSocketWithJsonLine(socket: Socket, message: unknown): Promise<
 }
 
 function endSocketWithLineSync(socket: Socket, line: Buffer): void {
+  const ignoreClosedSocketError = (error: Error): void => {
+    if (!isNodeErrorCode(error, "EPIPE") && !isNodeErrorCode(error, "ECONNRESET") && !isNodeErrorCode(error, "ERR_STREAM_DESTROYED")) {
+      throw error;
+    }
+  };
+  socket.on("error", ignoreClosedSocketError);
+  socket.once("close", () => {
+    socket.off("error", ignoreClosedSocketError);
+  });
   socket.resume();
   socket.write(line);
   socket.end();
@@ -306,4 +315,8 @@ function endSocketWithLineSync(socket: Socket, line: Buffer): void {
     }
   }, 10);
   destroyTimer.unref();
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
