@@ -5,7 +5,7 @@ import { firefoxCliArchitecture } from "./eslint-firefox-cli-plugin.js";
 
 RuleTester.afterAll = () => undefined;
 RuleTester.describe = (_name, fn) => fn();
-RuleTester.it = (name, fn) => test(name, fn);
+RuleTester.it = (_name, fn) => fn();
 
 const ruleTester = new RuleTester({
   languageOptions: {

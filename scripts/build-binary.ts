@@ -1,6 +1,6 @@
-import { chmod, mkdir, mkdtemp, readdir } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
 import { copyPackagedBinary } from "./packaged-binary.js";
 import { runProcess } from "./process-runner.js";
@@ -23,7 +23,7 @@ try {
     stdout: "inherit",
   });
 } finally {
-  await moveToTrash(buildWorkdir);
+  await removeBuildWorkdir(buildWorkdir);
 }
 
 await assertNoRootBunBuildArtifacts(rootDir);
@@ -44,11 +44,14 @@ if (syncedPackageBinaryPath !== undefined) {
   console.log(`Updated packaged binary ${syncedPackageBinaryPath}`);
 }
 
-async function moveToTrash(path: string): Promise<void> {
-  await runProcess("trash", [path], {
-    stderr: "inherit",
-    stdout: "inherit",
-  });
+async function removeBuildWorkdir(path: string): Promise<void> {
+  const resolvedPath = resolve(path);
+  const resolvedTempDir = resolve(tmpdir());
+  const relativePath = relative(resolvedTempDir, resolvedPath);
+  if (relativePath.startsWith("..") || relativePath.includes(`..${sep}`) || !relativePath.startsWith("firefox-cli-bun-build-")) {
+    throw new Error(`Refusing to remove unexpected Bun build directory: ${path}`);
+  }
+  await rm(resolvedPath, { recursive: true, force: true });
 }
 
 async function assertNoRootBunBuildArtifacts(root: string): Promise<void> {
