@@ -41,7 +41,10 @@ test("dependency policy rejects workspace package versions that drift from root"
     packageDependencies: {},
     workspacePackages: [{ name: "fixture-child", version: "9.9.9" }],
   });
-  assert.match((await checkDependencyPolicy(root)).join("\n"), /packages\/fixture-child\/package\.json version must match root package\.json version 0\.1\.0/);
+  assert.match(
+    (await checkDependencyPolicy(root)).join("\n"),
+    /packages[\\/]fixture-child[\\/]package\.json version must match root package\.json version 0\.1\.0/,
+  );
 });
 
 async function createWorkspace(options) {

@@ -17,6 +17,7 @@ import { raceWithProcessFailure, runProcess, startManagedProcess } from "./proce
 import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
+const simulatedExtensionProtocolVersion = 1;
 await access(binaryPath);
 
 const homeDir = await createTempDir("firefox-cli-e2e-home");
@@ -38,7 +39,26 @@ try {
   }
   const reader = new NativeMessagingFrameReader(nativeHost.child.stdout);
   await raceWithProcessFailure(nativeHost, waitForEndpoint(e2ePlan.endpoint), "phase2 native host endpoint");
-  const approve = createRequest("pair.approve", {}, "approve-1");
+  const initialHello = createRequest(
+    "hello",
+    {
+      component: "extension",
+      productName: "firefox-cli",
+      productVersion: "0.0.0",
+      protocolMin: simulatedExtensionProtocolVersion,
+      protocolMax: simulatedExtensionProtocolVersion,
+      features: [],
+    },
+    "hello-initial",
+    simulatedExtensionProtocolVersion,
+  );
+  nativeHost.child.stdin.write(encodeNativeMessageFrame(initialHello));
+  await withTimeout(reader.read(), {
+    timeoutMs: 5000,
+    timeoutMessage: () => "Native host did not answer initial hello.",
+  });
+
+  const approve = createRequest("pair.approve", {}, "approve-1", simulatedExtensionProtocolVersion);
   nativeHost.child.stdin.write(encodeNativeMessageFrame(approve));
   const approval = await withTimeout(reader.read(), {
     timeoutMs: 5000,
@@ -56,12 +76,13 @@ try {
       component: "extension",
       productName: "firefox-cli",
       productVersion: "0.0.0",
-      protocolMin: 1,
-      protocolMax: 1,
+      protocolMin: simulatedExtensionProtocolVersion,
+      protocolMax: simulatedExtensionProtocolVersion,
       features: [],
       pairToken: approved.result.token,
     },
     "hello-1",
+    simulatedExtensionProtocolVersion,
   );
   nativeHost.child.stdin.write(encodeNativeMessageFrame(hello));
   await withTimeout(reader.read(), {
@@ -78,7 +99,7 @@ try {
     timeoutMs: 5000,
     timeoutMessage: () => "Native host did not forward the CLI request to the extension.",
   });
-  const parsedRequest = parseBoundaryRequest("host-to-extension", request);
+  const parsedRequest = parseBoundaryRequest("host-to-extension", request, { protocolVersion: simulatedExtensionProtocolVersion });
   if (!parsedRequest.ok) {
     throw new Error(`Expected tabs.list request, received ${JSON.stringify(request)}`);
   }

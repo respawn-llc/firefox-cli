@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, rm } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 export async function resetGeneratedArtifact(targetPath: string, options: { readonly repoRoot?: string } = {}): Promise<void> {
   const repoRoot = resolve(options.repoRoot ?? process.cwd());
@@ -21,7 +21,7 @@ export async function resetGeneratedArtifact(targetPath: string, options: { read
 
 function assertInsideDirectory(path: string, directory: string, label: string): void {
   const inside = relative(directory, path);
-  if (inside.startsWith("..") || inside.includes(`..${sep}`)) {
+  if (inside === "" || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
     throw new Error(`Refusing to reset ${label} outside ${directory}: ${path}`);
   }
 }
@@ -36,6 +36,11 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 async function trashPath(path: string): Promise<void> {
+  if (process.env.CI === "true") {
+    await rm(path, { recursive: true, force: true });
+    return;
+  }
+
   const trash = spawn("trash", [path], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   trash.stderr.setEncoding("utf8");

@@ -1,5 +1,5 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve, win32 } from "node:path";
+import { join, posix, resolve, win32 } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME } from "./host-launch.js";
@@ -37,7 +37,7 @@ describe("native messaging manifest generation", () => {
     const binaryPath = "/opt/firefox-cli/bin/linux-x64/firefox-cli";
 
     expect(planNativeMessagingManifest({ binaryPath, homeDir, platform: "linux" }).manifestPath).toBe(
-      join(homeDir, ".mozilla/native-messaging-hosts", `${NATIVE_HOST_NAME}.json`),
+      posix.join(homeDir, ".mozilla/native-messaging-hosts", `${NATIVE_HOST_NAME}.json`),
     );
   });
 

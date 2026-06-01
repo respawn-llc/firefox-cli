@@ -1,8 +1,9 @@
 import { ESLint } from "eslint";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
-const eslint = new ESLint({ cwd: new URL("..", import.meta.url).pathname });
+const eslint = new ESLint({ cwd: fileURLToPath(new URL("..", import.meta.url)) });
 
 test("ESLint policy keeps type-aware safety rules enabled for TypeScript files", async () => {
   const rules = await rulesFor("packages/cli/src/index.ts");
