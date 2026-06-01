@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
+import { extensionDisplayMetadata } from "../extension-display-metadata.js";
 import { syncVersion, updateBunLockWorkspaceVersions } from "../sync-version.js";
 
 describe("syncVersion", () => {
@@ -82,7 +83,7 @@ async function createVersionFixture(rootVersion: string, staleVersion: string): 
   }
   await writeJson(join(root, "packages/extension/src/manifest.json"), {
     manifest_version: 3,
-    name: "FF-CLI Bridge",
+    name: extensionDisplayMetadata.name,
     version: staleVersion,
   });
   await writeJson(join(root, ".claude-plugin/plugin.json"), {

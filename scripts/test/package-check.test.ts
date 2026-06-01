@@ -4,6 +4,7 @@ import { createTempDir } from "@firefox-cli/test-support";
 import { beforeAll, describe, expect, it } from "vitest";
 import rootPackage from "../../package.json" with { type: "json" };
 import { hashDirectoryPayload } from "../extension-artifact-provenance.js";
+import { extensionDisplayMetadata } from "../extension-display-metadata.js";
 import { verifyPackageLayout } from "../package-check.js";
 import {
   createPackageCheckOptions,
@@ -243,7 +244,7 @@ describe("verifyPackageLayout", () => {
       join(wrongShape, "extension/development/manifest.json"),
       JSON.stringify({
         manifest_version: 3,
-        name: "FF-CLI Bridge",
+        name: extensionDisplayMetadata.name,
         version: rootPackage.version,
         background: { scripts: "background.js" },
         permissions: "scripting",

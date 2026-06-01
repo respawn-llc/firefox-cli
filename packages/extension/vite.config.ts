@@ -6,6 +6,7 @@ const root = resolve(import.meta.dirname, "../..");
 export default defineConfig({
   build: {
     emptyOutDir: true,
+    minify: "esbuild",
     outDir: resolve(root, "dist/extension"),
     rollupOptions: {
       input: {

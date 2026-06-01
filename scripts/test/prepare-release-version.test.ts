@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
+import { extensionDisplayMetadata } from "../extension-display-metadata.js";
 import { prepareReleaseVersion, selectReleaseVersion } from "../prepare-release-version.js";
 
 describe("prepareReleaseVersion", () => {
@@ -71,7 +72,7 @@ async function createReleaseFixture(version: string): Promise<string> {
   ]) {
     await writeVersionJson(join(root, path), path, version);
   }
-  await writeVersionJson(join(root, "packages/extension/src/manifest.json"), "FF-CLI Bridge", version);
+  await writeVersionJson(join(root, "packages/extension/src/manifest.json"), extensionDisplayMetadata.name, version);
   await writeVersionJson(join(root, ".claude-plugin/plugin.json"), "firefox-cli", version);
   await writeFile(
     join(root, "bun.lock"),

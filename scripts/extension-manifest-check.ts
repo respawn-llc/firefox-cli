@@ -1,6 +1,7 @@
 import { FIREFOX_CLI_EXTENSION_ID } from "@firefox-cli/native-host";
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import rootPackage from "../package.json" with { type: "json" };
+import { verifyExpectedExtensionDisplayMetadata } from "./extension-display-metadata.js";
 import type { ExtensionManifest } from "./manifest-validation.js";
 
 export function verifyExpectedExtensionManifest(manifest: ExtensionManifest): void {
@@ -27,9 +28,7 @@ function verifyExtensionIdentity(
   gecko: { readonly id: string; readonly strict_min_version?: string } | undefined,
   firefoxStrictMinVersion: string,
 ): void {
-  if (manifest.name !== "FF-CLI Bridge") {
-    throw new Error(`Expected extension name FF-CLI Bridge, received ${manifest.name}`);
-  }
+  verifyExpectedExtensionDisplayMetadata(manifest, "extension manifest");
   if (manifest.version !== rootPackage.version) {
     throw new Error(`Expected extension version ${rootPackage.version}, received ${manifest.version}`);
   }

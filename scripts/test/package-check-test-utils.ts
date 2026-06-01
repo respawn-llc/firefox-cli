@@ -6,6 +6,7 @@ import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
 import rootPackage from "../../package.json" with { type: "json" };
 import { hashPayloadMap, packagedSignedExtensionProvenanceFile } from "../extension-artifact-provenance.js";
+import { extensionDisplayMetadata } from "../extension-display-metadata.js";
 import type { SignedExtensionSignatureVerifier } from "../signed-extension-signature.js";
 import { createPkcs7Signature, createTestSigningMaterial, type TestSigningMaterial } from "./signature-test-utils.js";
 import { createZipFixture, type ZipFixtureEntryInput } from "./zip-test-utils.js";
@@ -63,9 +64,9 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
     `${JSON.stringify(
       {
         manifest_version: 3,
-        name: "FF-CLI Bridge",
+        name: extensionDisplayMetadata.name,
         version: options.extensionVersion ?? rootPackage.version,
-        description: "Browser extension bridge for CLI control.",
+        description: extensionDisplayMetadata.description,
         browser_specific_settings: {
           gecko: {
             id: "firefox-cli@example.invalid",
@@ -76,7 +77,7 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
         background: { scripts: ["background.js"] },
         permissions: extensionRequirements.manifestPermissions,
         host_permissions: extensionRequirements.hostPermissions,
-        action: { default_popup: "popup.html", default_title: "FF-CLI Bridge" },
+        action: { default_popup: "popup.html", default_title: extensionDisplayMetadata.actionTitle },
       },
       null,
       2,

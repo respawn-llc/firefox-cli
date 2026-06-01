@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
 import { copyExtensionAssets } from "../copy-extension-assets.js";
+import { extensionDisplayMetadata } from "../extension-display-metadata.js";
 
 describe("copyExtensionAssets", () => {
   it("validates and versions source extension manifests before copying", async () => {
@@ -26,7 +27,7 @@ describe("copyExtensionAssets", () => {
       join(sourceDir, "manifest.json"),
       JSON.stringify({
         manifest_version: 3,
-        name: "FF-CLI Bridge",
+        name: extensionDisplayMetadata.name,
         version: "0.0.0",
         background: { scripts: "background.js" },
         permissions: "scripting",
@@ -50,7 +51,7 @@ async function createExtensionAssetFixture(): Promise<{
     join(sourceDir, "manifest.json"),
     JSON.stringify({
       manifest_version: 3,
-      name: "FF-CLI Bridge",
+      name: extensionDisplayMetadata.name,
       version: "0.0.0",
       background: { scripts: ["background.js"] },
       permissions: ["nativeMessaging", "scripting"],
