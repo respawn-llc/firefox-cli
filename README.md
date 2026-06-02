@@ -15,13 +15,13 @@ Install the CLI package:
 npm install -g firefox-cli
 ```
 
-Print the extension path and native-host setup guidance:
+Print the extension download URL and native-host setup guidance:
 
 ```sh
 firefox-cli setup
 ```
 
-Install the extension shown by `firefox-cli setup` - a signed `extension/firefox-cli.xpi`; open it in Firefox and accept the install prompt.
+Install the extension from the URL shown by `firefox-cli setup`; open it in Firefox and accept the install prompt. The URL is selected from the update manifest for the matching CLI version.
 
 Register the native messaging host:
 

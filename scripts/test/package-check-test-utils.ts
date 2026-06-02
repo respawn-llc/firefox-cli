@@ -31,13 +31,14 @@ export const testSignatureVerifier: SignedExtensionSignatureVerifier = async (in
   return verifySignedExtensionSignatureWithMaterial(input, signingMaterial);
 };
 
-export async function createPackageRoot(options: { readonly includeBinary?: boolean; readonly extensionVersion?: string } = {}): Promise<string> {
+export async function createPackageRoot(
+  options: { readonly includeBinary?: boolean; readonly includeExtensionPayload?: boolean; readonly extensionVersion?: string } = {},
+): Promise<string> {
   const packageRoot = await createTempDir("firefox-cli-package-check");
   const platformKey = getPlatformKey(packageCheckPlatform);
   const extensionRequirements = getExtensionPermissionRequirements();
 
   await mkdir(join(packageRoot, "bin", platformKey), { recursive: true });
-  await mkdir(join(packageRoot, "extension/development"), { recursive: true });
 
   await writeFile(
     join(packageRoot, "package.json"),
@@ -59,36 +60,39 @@ export async function createPackageRoot(options: { readonly includeBinary?: bool
   await writeFile(join(packageRoot, "bin/firefox-cli.js"), "#!/usr/bin/env node\n");
   await mkdir(join(packageRoot, "lib"), { recursive: true });
   await writeFile(join(packageRoot, "lib/platform-binary.js"), "export {};\n");
-  await writeFile(
-    join(packageRoot, "extension/development/manifest.json"),
-    `${JSON.stringify(
-      {
-        manifest_version: 3,
-        name: extensionDisplayMetadata.name,
-        version: options.extensionVersion ?? rootPackage.version,
-        description: extensionDisplayMetadata.description,
-        browser_specific_settings: {
-          gecko: {
-            id: "ff-cli-bridge@respawn.pro",
-            update_url: extensionDisplayMetadata.updateUrl,
-            strict_min_version: extensionRequirements.firefoxStrictMinVersion,
-            data_collection_permissions: extensionRequirements.dataCollection,
+  if (options.includeExtensionPayload === true) {
+    await mkdir(join(packageRoot, "extension/development"), { recursive: true });
+    await writeFile(
+      join(packageRoot, "extension/development/manifest.json"),
+      `${JSON.stringify(
+        {
+          manifest_version: 3,
+          name: extensionDisplayMetadata.name,
+          version: options.extensionVersion ?? rootPackage.version,
+          description: extensionDisplayMetadata.description,
+          browser_specific_settings: {
+            gecko: {
+              id: "ff-cli-bridge@respawn.pro",
+              update_url: extensionDisplayMetadata.updateUrl,
+              strict_min_version: extensionRequirements.firefoxStrictMinVersion,
+              data_collection_permissions: extensionRequirements.dataCollection,
+            },
           },
+          background: { scripts: ["background.js"] },
+          permissions: extensionRequirements.manifestPermissions,
+          host_permissions: extensionRequirements.hostPermissions,
+          action: { default_popup: "popup.html", default_title: extensionDisplayMetadata.actionTitle },
         },
-        background: { scripts: ["background.js"] },
-        permissions: extensionRequirements.manifestPermissions,
-        host_permissions: extensionRequirements.hostPermissions,
-        action: { default_popup: "popup.html", default_title: extensionDisplayMetadata.actionTitle },
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(join(packageRoot, "extension/development/background.js"), "console.log('bg');\n");
-  await writeFile(join(packageRoot, "extension/development/content.js"), "console.log('cs');\n");
-  await writeFile(join(packageRoot, "extension/development/popup.js"), "console.log('popup');\n");
-  await writeFile(join(packageRoot, "extension/development/popup.html"), "<!doctype html>\n");
-  await writeFile(join(packageRoot, "extension/development/popup.css"), "body {}\n");
+        null,
+        2,
+      )}\n`,
+    );
+    await writeFile(join(packageRoot, "extension/development/background.js"), "console.log('bg');\n");
+    await writeFile(join(packageRoot, "extension/development/content.js"), "console.log('cs');\n");
+    await writeFile(join(packageRoot, "extension/development/popup.js"), "console.log('popup');\n");
+    await writeFile(join(packageRoot, "extension/development/popup.html"), "<!doctype html>\n");
+    await writeFile(join(packageRoot, "extension/development/popup.css"), "body {}\n");
+  }
 
   if (options.includeBinary !== false) {
     await writeFile(join(packageRoot, "bin", platformKey, getBinaryName(packageCheckPlatform)), "");

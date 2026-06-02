@@ -14,7 +14,7 @@ npm install -g firefox-cli
 firefox-cli setup
 ```
 
-`firefox-cli setup` prints the extension artifact path and native-host setup guidance. `firefox-cli setup --json` also includes the planned native-host manifest path.
+`firefox-cli setup` prints the extension download URL and native-host setup guidance. `firefox-cli setup --json` also includes the planned native-host manifest path.
 
 Repository checkouts use:
 
@@ -26,9 +26,9 @@ node dist/package/bin/firefox-cli.js setup
 
 ## Install The Extension
 
-Release packages include `extension/firefox-cli.xpi` when the signed XPI artifact is present. Open that file in Firefox and accept the install prompt.
+Open the extension URL printed by `firefox-cli setup` in Firefox and accept the install prompt. The URL points at the signed XPI for the matching CLI version.
 
-Development packages include an unsigned extension directory:
+Repository checkouts can build an unsigned extension directory:
 
 ```sh
 bun run extension:build

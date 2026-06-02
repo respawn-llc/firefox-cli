@@ -30,9 +30,9 @@ export interface CliDependencies {
   readonly appDataDir?: string;
   readonly packageRoot: string;
   readonly binaryPath?: string;
-  readonly extensionPath?: string;
   readonly cwd?: string;
   sendRequest?(request: RequestEnvelope): Promise<unknown>;
+  readonly fetchExtensionUpdates?: () => Promise<unknown>;
   readStdin?(): Promise<string>;
   statUploadFile?(path: string): Promise<CliUploadFileStat>;
   readUploadFile?(path: string, limits: UploadReadLimits): Promise<Uint8Array>;

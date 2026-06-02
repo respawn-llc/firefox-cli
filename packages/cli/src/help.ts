@@ -180,7 +180,7 @@ const builtinHelpSpecs = new Map<string, HelpSpec>([
   [
     "setup",
     helpSpec("Print extension installation guidance or register the native messaging host.", [
-      "`firefox-cli setup` prints the extension path and native-host setup command.",
+      "`firefox-cli setup` prints the matching extension download URL and native-host setup command.",
       "`firefox-cli setup native-host` writes the per-user native messaging manifest.",
     ]),
   ],

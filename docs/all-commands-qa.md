@@ -31,7 +31,7 @@ Create `UPLOAD_FILE` with any small text payload. Capture IDs from JSON output w
 ## Steps
 
 - [ ] Run `$CLI --version`; expect version text and exit code 0.
-- [ ] Run `$CLI setup --json`; expect extension and native-host manifest paths.
+- [ ] Run `$CLI setup --json`; expect an extension install URL and native-host manifest path.
 - [ ] Run `$CLI setup native-host --dry-run --json`; expect a manifest plan and `"dryRun": true`.
 - [ ] Run `$CLI setup native-host --json`; expect the disposable native-host manifest to be written.
 - [ ] Run `$CLI doctor --json`; expect the disposable extension connection to be `"connected"`.

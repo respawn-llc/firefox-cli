@@ -1,5 +1,4 @@
-import { access, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import {
   isPersistedJsonFileError,
   parseNativeMessagingManifestJson,
@@ -7,6 +6,7 @@ import {
   writeNativeMessagingManifest,
 } from "@firefox-cli/native-host";
 import { optionalAppDataDir } from "../default-dependencies.js";
+import { resolveExtensionInstallUrl } from "../extension-updates.js";
 import { ok } from "../result.js";
 import { createNoopRequest, sendOrUnavailable } from "../transport.js";
 import type { CliDependencies, CliResult } from "../types.js";
@@ -18,12 +18,12 @@ export async function setup(args: readonly string[], dependencies: CliDependenci
 
   if (args.length === 0 || args.includes("--json")) {
     const plan = await createManifestPlan(dependencies);
-    const extensionPath = await resolveExtensionInstallPath(dependencies);
+    const extensionInstallUrl = await resolveExtensionInstallUrl(dependencies.version, dependencies.fetchExtensionUpdates);
     if (args.includes("--json")) {
       return ok(
         `${JSON.stringify(
           {
-            extensionPath,
+            extensionInstallUrl,
             nativeHostManifestPath: plan.manifestPath,
           },
           null,
@@ -32,7 +32,7 @@ export async function setup(args: readonly string[], dependencies: CliDependenci
       );
     }
 
-    return ok(["firefox-cli setup", formatExtensionSetupInstruction(extensionPath), "Native host: run `firefox-cli setup native-host`.", ""].join("\n"));
+    return ok(["firefox-cli setup", formatExtensionSetupInstruction(extensionInstallUrl), "Native host: run `firefox-cli setup native-host`.", ""].join("\n"));
   }
 
   if (args[0] !== "native-host") {
@@ -129,22 +129,8 @@ async function createManifestPlan(dependencies: CliDependencies) {
   });
 }
 
-async function resolveExtensionInstallPath(dependencies: CliDependencies): Promise<string> {
-  if (dependencies.extensionPath !== undefined) {
-    return dependencies.extensionPath;
-  }
-
-  const signedXpiPath = resolve(dependencies.packageRoot, "extension/firefox-cli.xpi");
-  try {
-    await access(signedXpiPath);
-    return signedXpiPath;
-  } catch {
-    return resolve(dependencies.packageRoot, "extension/development");
-  }
-}
-
-function formatExtensionSetupInstruction(extensionPath: string): string {
-  return extensionPath.endsWith(".xpi") ? `Extension: install ${extensionPath} in Firefox.` : `Extension: load ${extensionPath} in Firefox about:debugging.`;
+function formatExtensionSetupInstruction(extensionInstallUrl: string): string {
+  return `Extension: download and install ${extensionInstallUrl} in Firefox.`;
 }
 
 async function readNativeHostManifestStatus(plan: Awaited<ReturnType<typeof createManifestPlan>>): Promise<

@@ -1,6 +1,7 @@
 export const PRODUCT_NAME = "firefox-cli";
 export const NATIVE_HOST_NAME = "firefox_cli";
 export const FIREFOX_CLI_EXTENSION_ID = "ff-cli-bridge@respawn.pro";
+export const FIREFOX_CLI_EXTENSION_UPDATE_URL = "https://opensource.respawn.pro/firefox-cli/updates.json";
 export const PROTOCOL_VERSION = 3;
 export const PROTOCOL_MIN_VERSION = 1;
 export const PROTOCOL_MAX_VERSION = PROTOCOL_VERSION;
