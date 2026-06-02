@@ -1,12 +1,9 @@
-import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
 import rootPackage from "../package.json" with { type: "json" };
-import { packagedSignedExtensionProvenanceFile, signedExtensionProvenanceArtifactName } from "./extension-artifact-provenance.js";
 import { resetGeneratedArtifact } from "./generated-artifacts.js";
-import { packagedSignedExtensionProvenanceJson, readValidatedSignedExtensionSource, SignedExtensionSourceNotFoundError } from "./package-signed-extension.js";
 import { copyPackagedBinary } from "./packaged-binary.js";
-import { packagedSignedExtensionXpiFile } from "./signed-extension-policy.js";
 
 const packageRoot = resolve("dist/package");
 const platformKey = getPlatformKey();
@@ -15,7 +12,6 @@ const binaryName = getBinaryName();
 await resetGeneratedPackage(packageRoot);
 
 await mkdir(resolve(packageRoot, "bin", platformKey), { recursive: true });
-await mkdir(resolve(packageRoot, "extension/development"), { recursive: true });
 
 await writePackageJson(packageRoot);
 await cp("README.md", resolve(packageRoot, "README.md"));
@@ -26,13 +22,6 @@ await cp("packages/native-host/src/platform-binary-runtime.js", resolve(packageR
 await chmod(resolve(packageRoot, "bin/firefox-cli.js"), 0o755);
 
 await copyPackagedBinary({ sourcePath: resolve("dist/bin", platformKey, binaryName), packageRoot, platformKey, binaryName });
-
-await cp("dist/extension", resolve(packageRoot, "extension/development"), {
-  recursive: true,
-});
-
-await copyExtensionArchive(packageRoot);
-await copySignedExtensionXpi(packageRoot);
 
 console.log(`Assembled package at ${packageRoot}`);
 
@@ -49,58 +38,9 @@ async function writePackageJson(path: string): Promise<void> {
     bin: {
       "firefox-cli": "./bin/firefox-cli.js",
     },
-    files: ["bin", "lib", "extension", "README.md", "LICENSE"],
+    files: ["bin", "lib", "README.md", "LICENSE"],
     license: "AGPL-3.0-only",
   };
 
   await writeFile(resolve(path, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
-}
-
-async function copyExtensionArchive(path: string): Promise<void> {
-  const artifactName = `firefox-cli-${rootPackage.version}.zip`;
-  const artifactPath = resolve("dist/extension-artifacts", artifactName);
-
-  try {
-    await cp(artifactPath, resolve(path, "extension/development", artifactName));
-    return;
-  } catch {
-    // The development directory is still useful for local extension loading.
-  }
-
-  const manifest = await readFile(resolve(path, "extension/development/manifest.json"), "utf8");
-  await writeFile(resolve(path, "extension/development/README.md"), `Development extension directory only. Manifest:\n\n${manifest}`);
-}
-
-async function copySignedExtensionXpi(path: string): Promise<void> {
-  const envPath = process.env.FIREFOX_CLI_SIGNED_XPI;
-  const sourcePath =
-    envPath === undefined || envPath.length === 0 ? resolve("dist/extension-artifacts", `firefox-cli-${rootPackage.version}.xpi`) : resolve(envPath);
-
-  try {
-    const source = await readValidatedSignedExtensionSource({
-      sourceXpiPath: sourcePath,
-      provenancePath: signedExtensionProvenanceSourcePath(sourcePath),
-    });
-    await writeFile(resolve(path, "extension", packagedSignedExtensionXpiFile), source.xpiData);
-    await writeFile(resolve(path, "extension", packagedSignedExtensionProvenanceFile), packagedSignedExtensionProvenanceJson(source.provenance));
-  } catch (error) {
-    if ((envPath === undefined || envPath.length === 0) && error instanceof SignedExtensionSourceNotFoundError) {
-      return;
-    }
-    if (envPath !== undefined && envPath.length > 0) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to copy FIREFOX_CLI_SIGNED_XPI from ${sourcePath}: ${message}`);
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to copy signed extension XPI from ${sourcePath}: ${message}`);
-  }
-}
-
-function signedExtensionProvenanceSourcePath(signedXpiPath: string): string {
-  const envPath = process.env.FIREFOX_CLI_SIGNED_XPI_PROVENANCE;
-  const defaultPath =
-    process.env.FIREFOX_CLI_SIGNED_XPI === undefined || process.env.FIREFOX_CLI_SIGNED_XPI.length === 0
-      ? resolve("dist/extension-artifacts", signedExtensionProvenanceArtifactName(rootPackage.version))
-      : `${signedXpiPath}.provenance.json`;
-  return envPath === undefined || envPath.length === 0 ? defaultPath : resolve(envPath);
 }

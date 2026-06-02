@@ -1,10 +1,11 @@
+import { FIREFOX_CLI_EXTENSION_UPDATE_URL } from "@firefox-cli/protocol";
 import type { ExtensionManifest } from "./manifest-validation.js";
 
 export const extensionDisplayMetadata = {
   name: "FF-CLI Bridge",
   description: "Browser extension bridge for CLI control.",
   actionTitle: "FF-CLI Bridge",
-  updateUrl: "https://opensource.respawn.pro/firefox-cli/updates.json",
+  updateUrl: FIREFOX_CLI_EXTENSION_UPDATE_URL,
 } as const;
 
 const amoTrademarkPattern = /\b(?:firefox|mozilla)\b/iu;

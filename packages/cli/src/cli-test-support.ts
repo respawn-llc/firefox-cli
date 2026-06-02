@@ -8,9 +8,9 @@ export function baseDependencies(): CliDependencies {
     arch: "arm64",
     homeDir: "/Users/tester",
     binaryPath: "/opt/firefox-cli/bin/darwin-arm64/firefox-cli",
-    extensionPath: "/opt/firefox-cli/extension/development",
     packageRoot: "/opt/firefox-cli",
     cwd: "/work",
+    fetchExtensionUpdates: async () => extensionUpdatesForVersion("0.0.0"),
     sendRequest: async (request) =>
       createErrorResponse(request.id, {
         code: "NATIVE_HOST_UNAVAILABLE",
@@ -20,21 +20,21 @@ export function baseDependencies(): CliDependencies {
   };
 }
 
-export function baseDependenciesWithoutExtensionPath(): CliDependencies {
+export function extensionUpdatesForVersion(
+  version: string,
+  updateLink = `https://github.com/respawn-llc/firefox-cli/releases/download/v${version}/firefox-cli-${version}.xpi`,
+) {
   return {
-    version: "0.0.0",
-    platform: "darwin",
-    arch: "arm64",
-    homeDir: "/Users/tester",
-    binaryPath: "/opt/firefox-cli/bin/darwin-arm64/firefox-cli",
-    packageRoot: "/opt/firefox-cli",
-    cwd: "/work",
-    sendRequest: async (request) =>
-      createErrorResponse(request.id, {
-        code: "NATIVE_HOST_UNAVAILABLE",
-        message: "firefox-cli native host is not running.",
-      }),
-    clearPairState: async () => undefined,
+    addons: {
+      "ff-cli-bridge@respawn.pro": {
+        updates: [
+          {
+            version,
+            update_link: updateLink,
+          },
+        ],
+      },
+    },
   };
 }
 

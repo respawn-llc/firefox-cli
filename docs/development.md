@@ -38,4 +38,4 @@ Release signing:
 
 - `bun run extension:sign` signs `dist/extension` with `web-ext sign`.
 - Set `WEB_EXT_JWT_ISSUER` to the Mozilla Add-ons JWT issuer and `WEB_EXT_JWT_SECRET` to the corresponding JWT secret.
-- `bun run release:check:signed` requires `dist/package/extension/firefox-cli.xpi` in the assembled package.
+- `bun run release:check:signed` requires a signed `dist/extension-artifacts/firefox-cli-<version>.xpi` artifact and matching provenance.

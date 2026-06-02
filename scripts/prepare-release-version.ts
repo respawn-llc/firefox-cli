@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { syncExtensionUpdateManifest } from "./extension-update-manifest.js";
 import { runProcess } from "./process-runner.js";
 import { syncVersion } from "./sync-version.js";
 
@@ -33,6 +34,7 @@ export async function prepareReleaseVersion(
   }
 
   changedFiles.push(...(await syncVersion({ root })));
+  changedFiles.push(...(await syncExtensionUpdateManifest({ root, version })));
   return {
     previousVersion,
     version,

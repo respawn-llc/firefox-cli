@@ -44,8 +44,8 @@ The npm package contains:
 - `bin/firefox-cli.js`, the user-facing launcher;
 - `bin/<platform>/<binary>`, the native executable for the package platform;
 - `lib/platform-binary.js`, runtime platform-binary resolution;
-- `extension/development`, an unsigned extension directory for local loading;
-- `extension/firefox-cli.xpi`, when a signed release extension artifact is packaged.
+
+The signed extension XPI is distributed through the update manifest URL reported by `firefox-cli setup`. The setup command selects the download whose extension version matches the CLI version.
 
 `doctor --fix` repairs native-host manifests after package moves or upgrades.
 

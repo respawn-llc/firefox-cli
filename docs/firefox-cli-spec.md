@@ -20,7 +20,7 @@ The CLI supports full browser control where Firefox WebExtensions allow it: navi
 The happy path:
 
 1. User installs the npm package and gets one executable: `firefox-cli`.
-2. User manually installs or temporarily loads the Firefox extension from the URL/path printed by `firefox-cli setup`.
+2. User manually installs or temporarily loads the Firefox extension from the URL printed by `firefox-cli setup`.
 3. User runs `firefox-cli setup native-host` or `firefox-cli doctor --fix` to register the native messaging host.
 4. User opens the extension popup and approves the first connection after seeing native-host identity details.
 5. Commands control the active Firefox tab/window unless a command or flag selects another target.
@@ -334,7 +334,7 @@ Global options:
 
 Setup and diagnostics:
 
-- `firefox-cli setup`: print extension install/load instructions and native-host setup status.
+- `firefox-cli setup`: print extension download instructions and native-host setup status.
 - `firefox-cli setup native-host`: register/update the native messaging host.
 - `firefox-cli doctor`: diagnose extension install, native manifest, host path, extension connection, approval, Firefox status, and protocol version.
 - `firefox-cli doctor --fix`: repair native-host registration when possible.
@@ -478,7 +478,7 @@ Batch:
 
 Errors should be concise and actionable:
 
-- If extension is not installed: print the install/load link or local path.
+- If extension is not installed: print the matching extension download URL.
 - If native host is not registered: print `firefox-cli setup native-host`.
 - If Firefox is not running or extension is disconnected: tell the user to open Firefox and check the extension popup.
 - If first-use approval is pending: tell the user to open the extension popup and approve.
@@ -551,7 +551,7 @@ Package requirements:
 - Postinstall may print setup guidance but must not silently mutate Firefox configuration without an explicit setup command.
 - `doctor --fix` handles moved package paths after npm upgrades.
 - Host-mode stdout is reserved for native messaging frames.
-- Release-candidate package verification requires `extension/firefox-cli.xpi` in the assembled package.
+- Release-candidate verification requires a signed `dist/extension-artifacts/firefox-cli-<version>.xpi` artifact and matching provenance.
 
 Manual extension install is in scope; Mozilla store/public listing automation is out of scope.
 

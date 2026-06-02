@@ -3,10 +3,16 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { FIREFOX_CLI_EXTENSION_ID, NATIVE_HOST_NAME, resolvePackagedBinary } from "@firefox-cli/native-host";
-import { parseJsonWithSchema, runCliJson } from "./manifest-validation.js";
+import { verifyExtensionUpdateManifestEntry } from "./extension-update-manifest.js";
+import { verifyExpectedExtensionManifest } from "./extension-manifest-check.js";
+import { verifyExtensionBundlePayload, verifyPayloadMatchesExtensionSource } from "./extension-payload-check.js";
+import { extensionManifestSchema, parseJsonManifestContent, parseJsonWithSchema, runCliJson } from "./manifest-validation.js";
 import { verifyPackageLayout } from "./package-check.js";
+import { readValidatedSignedExtensionSource } from "./package-signed-extension.js";
 import { runProcess } from "./process-runner.js";
 import { resolveReleaseSignedXpiPolicy } from "./release-policy.js";
+import { signedExtensionProvenanceArtifactName } from "./extension-artifact-provenance.js";
+import { readZipArchive } from "./zip-archive.js";
 import rootPackage from "../package.json" with { type: "json" };
 
 const packageRoot = resolve("dist/package");
@@ -47,7 +53,11 @@ const staleDoctorOutputSchema = z
   })
   .loose();
 
-await runCheck("package layout", async () => verifyPackageLayout({ packageRoot, requireSignedXpi: releasePolicy.requireSignedXpi }));
+await runCheck("package layout", async () => verifyPackageLayout({ packageRoot }));
+if (releasePolicy.requireSignedXpi) {
+  await runCheck("extension update manifest", async () => verifyExtensionUpdateManifestEntry({ root: resolve("."), version: rootPackage.version }));
+  await runCheck("signed extension release artifact", verifySignedExtensionReleaseArtifact);
+}
 await runCheck("temp install --version", async () => {
   const installRoot = await createTempInstall(packageRoot);
   const result = await runNodeLauncher(installRoot, ["--version"]);
@@ -100,6 +110,39 @@ async function runCheck(name: string, check: () => Promise<unknown>): Promise<vo
     const message = error instanceof Error ? error.message : String(error);
     errors.push(`${name}: ${message}`);
   }
+}
+
+async function verifySignedExtensionReleaseArtifact(): Promise<void> {
+  const sourceXpiPath = resolve("dist/extension-artifacts", `firefox-cli-${rootPackage.version}.xpi`);
+  const source = await readValidatedSignedExtensionSource({
+    sourceXpiPath,
+    provenancePath: resolve("dist/extension-artifacts", signedExtensionProvenanceArtifactName(rootPackage.version)),
+  });
+  const xpiPayload = readXpiPayload(source.xpiData);
+  await verifyExtensionBundlePayload(xpiPayload);
+  await verifyPayloadMatchesExtensionSource(resolve("dist/extension"), xpiPayload);
+  const manifestData = xpiPayload.get("manifest.json");
+  if (manifestData === undefined) {
+    throw new Error(`Expected signed extension manifest in ${source.sourceXpiPath}`);
+  }
+  const manifest = parseJsonManifestContent(
+    manifestData.toString("utf8"),
+    "signed extension manifest",
+    `${source.sourceXpiPath}!/manifest.json`,
+    extensionManifestSchema,
+  );
+  verifyExpectedExtensionManifest(manifest);
+}
+
+function readXpiPayload(xpiData: Buffer): ReadonlyMap<string, Buffer> {
+  const archive = readZipArchive(xpiData);
+  const payload = new Map<string, Buffer>();
+  for (const entry of archive.entries) {
+    if (!entry.isDirectory && !entry.name.startsWith("META-INF/")) {
+      payload.set(entry.name, archive.readEntry(entry));
+    }
+  }
+  return payload;
 }
 
 async function createTempInstall(sourcePackageRoot: string): Promise<string> {

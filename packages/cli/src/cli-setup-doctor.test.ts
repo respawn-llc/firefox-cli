@@ -1,9 +1,9 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { access, readFile, writeFile } from "node:fs/promises";
+import { posix } from "node:path";
 import { createErrorResponse } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { baseDependencies, baseDependenciesWithoutExtensionPath, parseSetupDryRunOutput } from "./cli-test-support.js";
+import { baseDependencies, extensionUpdatesForVersion, parseSetupDryRunOutput } from "./cli-test-support.js";
 import { runCli } from "./index.js";
 
 describe("runCli setup and doctor", () => {
@@ -23,17 +23,14 @@ describe("runCli setup and doctor", () => {
     await expect(readFile(darwinManifestPath(homeDir), "utf8")).resolves.toContain(binaryPath);
   });
 
-  it("prints setup guidance with extension artifact location", async () => {
-    const output = await runCli(["setup"], {
-      ...baseDependencies(),
-      extensionPath: "/opt/firefox-cli/extension/development",
-    });
+  it("prints setup guidance with a matching extension download URL", async () => {
+    const output = await runCli(["setup"], baseDependencies());
 
     expect(output).toEqual({
       exitCode: 0,
       stdout: [
         "firefox-cli setup",
-        "Extension: load /opt/firefox-cli/extension/development in Firefox about:debugging.",
+        "Extension: download and install https://github.com/respawn-llc/firefox-cli/releases/download/v0.0.0/firefox-cli-0.0.0.xpi in Firefox.",
         "Native host: run `firefox-cli setup native-host`.",
         "",
       ].join("\n"),
@@ -41,25 +38,93 @@ describe("runCli setup and doctor", () => {
     });
   });
 
-  it("prefers packaged signed extension path in setup guidance", async () => {
-    const packageRoot = await createTempDir("firefox-cli-package");
-    await mkdir(join(packageRoot, "extension"), { recursive: true });
-    await writeFile(join(packageRoot, "extension/firefox-cli.xpi"), "signed xpi\n");
-    const dependencies = baseDependenciesWithoutExtensionPath();
-
+  it("prints setup JSON with a matching extension download URL", async () => {
     const jsonOutput = await runCli(["setup", "--json"], {
-      ...dependencies,
-      packageRoot,
-    });
-    const textOutput = await runCli(["setup"], {
-      ...dependencies,
-      packageRoot,
+      ...baseDependencies(),
+      version: "0.1.1",
+      fetchExtensionUpdates: async () => extensionUpdatesForVersion("0.1.1"),
     });
 
     expect(JSON.parse(jsonOutput.stdout)).toMatchObject({
-      extensionPath: join(packageRoot, "extension/firefox-cli.xpi"),
+      extensionInstallUrl: "https://github.com/respawn-llc/firefox-cli/releases/download/v0.1.1/firefox-cli-0.1.1.xpi",
     });
-    expect(textOutput.stdout).toContain(`Extension: install ${join(packageRoot, "extension/firefox-cli.xpi")} in Firefox.`);
+  });
+
+  it("rejects setup guidance when the update manifest lacks the CLI version", async () => {
+    const output = await runCli(["setup"], {
+      ...baseDependencies(),
+      version: "0.1.1",
+      fetchExtensionUpdates: async () => extensionUpdatesForVersion("0.1.0"),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "No firefox-cli extension download found for CLI version 0.1.1 in https://opensource.respawn.pro/firefox-cli/updates.json.\n",
+    });
+  });
+
+  it("rejects setup guidance when the matching update version is duplicated", async () => {
+    const output = await runCli(["setup"], {
+      ...baseDependencies(),
+      fetchExtensionUpdates: async () => ({
+        addons: {
+          "ff-cli-bridge@respawn.pro": {
+            updates: [
+              { version: "0.0.0", update_link: "https://example.invalid/one.xpi" },
+              { version: "0.0.0", update_link: "https://example.invalid/two.xpi" },
+            ],
+          },
+        },
+      }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid firefox-cli extension update manifest: duplicate entries for version 0.0.0.\n",
+    });
+  });
+
+  it("rejects setup guidance when the update manifest is malformed", async () => {
+    const output = await runCli(["setup"], {
+      ...baseDependencies(),
+      fetchExtensionUpdates: async () => ({ addons: {} }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid firefox-cli extension update manifest: expected extension update manifest add-on ff-cli-bridge@respawn.pro to be an object.\n",
+    });
+  });
+
+  it("rejects setup guidance when the matching update URL is not HTTPS", async () => {
+    const output = await runCli(["setup"], {
+      ...baseDependencies(),
+      fetchExtensionUpdates: async () => extensionUpdatesForVersion("0.0.0", "http://example.invalid/firefox-cli-0.0.0.xpi"),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid firefox-cli extension download URL for version 0.0.0: expected HTTPS URL.\n",
+    });
+  });
+
+  it("reports update manifest fetch failures during setup", async () => {
+    const output = await runCli(["setup"], {
+      ...baseDependencies(),
+      fetchExtensionUpdates: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Failed to fetch firefox-cli extension update manifest from https://opensource.respawn.pro/firefox-cli/updates.json: offline\n",
+    });
   });
 
   it("prints setup native-host dry-run JSON without writing the manifest", async () => {
@@ -76,6 +141,20 @@ describe("runCli setup and doctor", () => {
     expect(output.exitCode).toBe(0);
     expect(parsed.manifest.path).toBe(binaryPath);
     await expect(access(parsed.manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not fetch extension update metadata for native-host setup", async () => {
+    const homeDir = await createTempDir("firefox-cli-home");
+    const output = await runCli(["setup", "native-host", "--dry-run"], {
+      ...baseDependencies(),
+      homeDir,
+      fetchExtensionUpdates: async () => {
+        throw new Error("network should not be used");
+      },
+    });
+
+    expect(output.exitCode).toBe(0);
+    expect(output.stdout).toContain("Native host manifest planned:");
   });
 
   it("reports doctor setup state and fixes a missing manifest", async () => {
