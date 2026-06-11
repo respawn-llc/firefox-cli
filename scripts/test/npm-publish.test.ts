@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { sep } from "node:path";
 import { resolveNpmPublishPlan } from "../npm-publish.js";
 
 describe("resolveNpmPublishPlan", () => {
@@ -11,7 +12,7 @@ describe("resolveNpmPublishPlan", () => {
     expect(plan.requireSignedXpi).toBe(false);
     expect(plan.registry).toBe("https://registry.npmjs.org");
     expect(plan.publishArgs).toEqual(["publish", "--access", "public", "--registry", "https://registry.npmjs.org"]);
-    expect(plan.packageRoots.at(-1)).toMatch(/dist\/npm\/firefox-cli$/);
+    expect(plan.packageRoots.at(-1)?.split(sep).slice(-3)).toEqual(["dist", "npm", "firefox-cli"]);
   });
 
   it("plans CI trusted-publishing release verification", () => {
