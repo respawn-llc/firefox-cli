@@ -59,8 +59,8 @@ async function verifyPackageJson(packageRoot: string): Promise<void> {
   if (packageJson.version !== rootPackage.version) {
     throw new Error(`Expected package version ${rootPackage.version}, received ${packageJson.version}`);
   }
-  if (packageJson.bin?.["firefox-cli"] !== "./bin/firefox-cli.js") {
-    throw new Error("Expected firefox-cli bin to point at ./bin/firefox-cli.js");
+  if (packageJson.bin?.["firefox-cli"] !== "bin/firefox-cli.js") {
+    throw new Error("Expected firefox-cli bin to point at bin/firefox-cli.js");
   }
 }
 
