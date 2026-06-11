@@ -37,6 +37,17 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("firefox-cli snapshot -i");
   });
 
+  it("renders wait examples accepted by the wait parser", async () => {
+    const output = await runCli(["wait", "--help"], baseDependencies());
+
+    expect(output.exitCode).toBe(0);
+    expect(output.stdout).toContain("Wait for a duration, element, text, URL, function predicate, load state, or download.");
+    expect(output.stdout).toContain("firefox-cli wait '#ready'");
+    expect(output.stdout).not.toContain("title");
+    expect(output.stdout).not.toContain("dialog");
+    expect(output.stdout).not.toContain("firefox-cli wait --selector");
+  });
+
   it("renders command help without sending a browser request", async () => {
     const sendRequest = vi.fn(async () => {
       throw new Error("help must not call transport");

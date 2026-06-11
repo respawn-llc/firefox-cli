@@ -43,7 +43,7 @@ const routeHelpSpecs = {
     "Pass a selector or `@ref` for element-scoped values.",
   ]),
   is: helpSpec("Check element/page state such as visible, enabled, checked, or selected."),
-  wait: helpSpec("Wait for URL, title, element, text, network-idle, download, or dialog conditions.", [
+  wait: helpSpec("Wait for a duration, element, text, URL, function predicate, load state, or download.", [
     "Use waits between navigation/actions and reads instead of fixed sleeps.",
   ]),
   eval: helpSpec("Evaluate JavaScript in the target page and return a serialized result.", [
@@ -206,7 +206,7 @@ const commandExamples: Partial<Record<RouteBindingId, readonly string[]>> = {
   open: ["firefox-cli open https://example.com", "firefox-cli open --new-tab https://example.com"],
   snapshot: ["firefox-cli snapshot -i", "firefox-cli snapshot -s main -d 3 --json"],
   get: ["firefox-cli get title", "firefox-cli get text '#content' --json"],
-  wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait --selector '#ready'"],
+  wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait '#ready'"],
   click: ["firefox-cli click 'button[type=submit]'", "firefox-cli click @e12"],
   fill: ["firefox-cli fill '#email' user@example.com"],
   notify: ["firefox-cli notify 'Action needed' 'Open Firefox to approve control'"],
@@ -258,7 +258,7 @@ export function renderHelp(): string {
     '  Inspect content:   firefox-cli get title --json; firefox-cli find text "Sign in"',
     '  Act on elements:   firefox-cli click "button[type=submit]"; firefox-cli fill "#email" user@example.com',
     "  Manage targets:    firefox-cli tab; firefox-cli tab select 1; firefox-cli window",
-    '  Synchronize:       firefox-cli wait --url "*dashboard*"; firefox-cli wait --network-idle',
+    '  Synchronize:       firefox-cli wait --url "*dashboard*"; firefox-cli wait --load networkidle',
     '  Run a workflow:    firefox-cli batch \'[["open","https://example.com"],["snapshot","-i"]]\'',
     "",
     "Usage:",
