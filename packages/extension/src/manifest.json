@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FF-CLI Bridge",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Browser extension bridge for CLI control.",
   "browser_specific_settings": {
     "gecko": {
@@ -9,15 +9,34 @@
       "update_url": "https://opensource.respawn.pro/firefox-cli/updates.json",
       "strict_min_version": "150.0",
       "data_collection_permissions": {
-        "required": ["browsingActivity", "websiteActivity", "websiteContent"],
+        "required": [
+          "browsingActivity",
+          "websiteActivity",
+          "websiteContent"
+        ],
         "optional": []
       }
     }
   },
-  "permissions": ["nativeMessaging", "scripting", "tabs", "storage", "downloads", "cookies", "notifications", "clipboardRead", "clipboardWrite", "webRequest"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "nativeMessaging",
+    "scripting",
+    "tabs",
+    "storage",
+    "downloads",
+    "cookies",
+    "notifications",
+    "clipboardRead",
+    "clipboardWrite",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "action": {
     "default_title": "FF-CLI Bridge",
