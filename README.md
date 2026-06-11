@@ -1,11 +1,6 @@
-`firefox-cli` gives AI agents terminal-driven control over a user's normal Firefox session.
-It is inspired by `agent-browser`, but for Firefox users. It talks to a Firefox extension so an agent can inspect pages, navigate, operate tabs and windows, interact with elements, read browser state, wait for page conditions, capture screenshots, observe logs/network activity, and run serial browser workflows from a CLI. using the real, authenticated user's session.
+`firefox-cli` gives AI agents terminal-driven **control over a user's Firefox** browser.
 
-## Security Warning
-
-Approving the `firefox-cli` extension grants the paired `firefox-cli` user full control over the Firefox browser session, including using & manipulating the signed-in sites, authentication, cookies, sensitive data & monitoring all activity. After approval, treat `firefox-cli` as able to control all reachable Firefox windows, profiles, and tabs.
-
-Do not approve the pairing unless you accept responsibility for every actor that can run `firefox-cli` on the machine.
+It is inspired by `agent-browser`, but for Firefox users. It talks to a Firefox extension so an agent can inspect pages, navigate, operate tabs and windows, interact with elements, read browser state, wait for page conditions, capture screenshots, observe logs/network activity, and run serial browser workflows from a CLI using the real, authenticated user's session.
 
 ## Installation
 
@@ -39,6 +34,40 @@ firefox-cli doctor
 
 `doctor` reports the native-host manifest state, extension connection state, approval state, and the next action when setup is incomplete.
 
+## Agent Skill
+
+Install the agent skill so coding agents know when `firefox-cli` is available and how to use it.
+
+### Claude Code
+
+Add the Respawn marketplace, then install the plugin:
+
+```text
+/plugin marketplace add respawn-llc/claude-plugin-marketplace
+/plugin install firefox-cli@respawn-tools
+```
+
+### Codex
+
+Install the skill from the public GitHub path:
+
+```text
+$skill-installer install https://github.com/respawn-llc/firefox-cli/tree/main/skills/firefox-cli
+```
+
+### Manual
+
+Copy the packaged skill directory into the shared agent skills directory:
+
+```sh
+mkdir -p ~/.agents/skills
+cp -R skills/firefox-cli ~/.agents/skills/
+```
+
+## Security Warning
+
+Approving the `firefox-cli` extension grants the paired `firefox-cli` user **full control over the Firefox browser** session, including using & manipulating the signed-in sites, **authentication, cookies, sensitive data** & monitoring all activity. Do not approve the pairing unless you accept responsibility for every actor that can run `firefox-cli` on the machine.
+
 ## Limitations 
 
 Not everything that Chrome/CDP / `agent-browser` tools support is supported by Firefox:
@@ -51,18 +80,8 @@ Not everything that Chrome/CDP / `agent-browser` tools support is supported by F
 
 See `docs/setup.md` for platform paths and troubleshooting, and `docs/commands.md` for command syntax.
 
-## Development
-
-```sh
-bun install --frozen-lockfile
-bun run check
-bun run test:e2e
-FIREFOX_CLI_E2E_DISPOSABLE=1 bun scripts/e2e-disposable-firefox.ts
-```
-
-`bun run test:e2e` does not launch Firefox unless `FIREFOX_CLI_E2E_DISPOSABLE=1` is set. See `docs/development.md` for local safety rules.
-
 ## License
 
 AGPL-3.0-only. See `LICENSE`.
-Copyright (c) 2026 Nikita "Nek.12" Vaizin
+
+Copyright (c) 2026 Respawn LLC
