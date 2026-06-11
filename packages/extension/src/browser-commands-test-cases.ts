@@ -8,7 +8,14 @@ import { browserSmokeRequests } from "./browser-commands-test-smoke.js";
 export async function runCase01() {
   const expectedCommands = Object.keys(commandSchemas)
     .filter(isCommandId)
-    .filter((command) => commandSchemas[command].owner === "extension" && command !== "capabilities" && command !== "noop");
+    .filter(
+      (command) =>
+        commandSchemas[command].owner === "extension" &&
+        command !== "capabilities" &&
+        command !== "noop" &&
+        command !== "pair.requestApproval" &&
+        command !== "pair.openApproval",
+    );
   const unsupportedPdfMessage: unknown = expect.stringContaining("PDF export is unsupported");
 
   expect([...browserSmokeRequests.keys()].sort()).toEqual(expectedCommands.sort());

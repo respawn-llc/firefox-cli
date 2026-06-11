@@ -227,7 +227,7 @@ async function checkExtensionConnection(dependencies: CliDependencies): Promise<
   if (response.error.code === "NOT_APPROVED") {
     return {
       status: "not-approved",
-      nextAction: "Open the firefox-cli extension popup and approve this native host.",
+      nextAction: "Run `firefox-cli connect` and respond to the approval request in Firefox.",
     };
   }
 

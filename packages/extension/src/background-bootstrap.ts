@@ -7,7 +7,12 @@ import { NetworkRequestTracker } from "./network-tracker.js";
 interface RuntimeMessage {
   readonly type?: string;
 }
-type RuntimeMessageListener = (message: RuntimeMessage) => Promise<unknown>;
+interface RuntimeMessageSender {
+  readonly tab?: {
+    readonly id?: number;
+  };
+}
+type RuntimeMessageListener = (message: RuntimeMessage, sender?: RuntimeMessageSender) => Promise<unknown>;
 
 export type BackgroundBrowserApi = typeof browser;
 
@@ -51,7 +56,8 @@ export function startBackground(options: {
     ...createControllerOptions(options.controllerOptions),
   });
 
-  const runtimeListener: RuntimeMessageListener = async (message) => controller.handleRuntimeMessage(message);
+  const runtimeListener: RuntimeMessageListener = async (message, sender) =>
+    controller.handleRuntimeMessage(message, sender?.tab?.id === undefined ? {} : { sourceTabId: sender.tab.id });
   const onTabRemoved = (tabId: number) => {
     networkObservation.pruneTab(tabId);
     contentScriptState.forgetTab(tabId);

@@ -9,6 +9,7 @@ const entries = [
   { name: "background", path: resolve(extensionRoot, "src/background.ts") },
   { name: "content", path: resolve(extensionRoot, "src/content.ts") },
   { name: "popup", path: resolve(extensionRoot, "src/popup.ts") },
+  { name: "approval-request", path: resolve(extensionRoot, "src/approval-request.ts") },
 ] as const;
 
 for (const [index, entry] of entries.entries()) {

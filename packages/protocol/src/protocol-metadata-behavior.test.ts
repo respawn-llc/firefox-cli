@@ -68,7 +68,7 @@ describe("protocol command metadata", () => {
     }
 
     const nonBatchableCommands = commandIds().filter((command) => !isBatchableCommandId(command));
-    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset", "pair.openApproval"]);
+    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset", "pair.requestApproval", "pair.openApproval"]);
   });
 
   it("marks only required tab/window selectors for protocol batch default targets", () => {
@@ -261,6 +261,28 @@ describe("request protocol compatibility", () => {
         ok: true,
       });
     }
+  });
+
+  it("requires protocol v4 for CLI approval requests", () => {
+    const request = createRequest("pair.requestApproval", {}, "approval-v4");
+
+    expect(getRequestProtocolCompatibility(request, 3)).toMatchObject({
+      compatible: false,
+      requiredProtocolVersion: 4,
+    });
+    expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 3 }, { protocolVersion: 3 })).toMatchObject({
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        details: {
+          requiredProtocolVersion: 4,
+          negotiatedProtocolVersion: 3,
+        },
+      },
+    });
+    expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 4 }, { protocolVersion: 4 })).toMatchObject({
+      ok: true,
+    });
   });
 
   it("keeps non-network commands compatible with protocol v1 sessions", () => {

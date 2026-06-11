@@ -22,7 +22,7 @@ The happy path:
 1. User installs the npm package and gets one executable: `firefox-cli`.
 2. User manually installs or temporarily loads the Firefox extension from the URL printed by `firefox-cli setup`.
 3. User runs `firefox-cli setup native-host` or `firefox-cli doctor --fix` to register the native messaging host.
-4. User runs `firefox-cli approve` or opens the extension popup and approves the first connection after seeing native-host identity details.
+4. User runs `firefox-cli connect` and responds to the Firefox approval request, or opens the extension popup and approves the first connection.
 5. Commands control the active Firefox tab/window unless a command or flag selects another target.
 
 Example workflow:
@@ -96,8 +96,8 @@ Unpaired handshake:
 
 1. Extension connects to the native host.
 2. Native host sends identity metadata: host name, executable path, package version, protocol min/max, native manifest path, extension ID, and a generated pairing nonce.
-3. The extension approval UI shows the metadata and asks the user to approve first use.
-4. Until approval, the native host rejects or queues CLI commands with `NOT_APPROVED`.
+3. The extension approval UI asks the user to approve first use.
+4. Until approval, the native host rejects CLI commands with `NOT_APPROVED`, except for the dedicated approval request command.
 5. On approval, extension and native host persist the minimum pair state needed to reconnect.
 
 After approval, all commands are allowed without per-action confirmations, domain allowlists, or action policies.
@@ -138,7 +138,7 @@ Keep the extension UI smaller than a control panel. The popup should show:
 - Approval/reset action for the first connection.
 - Copy diagnostics action.
 
-Do not mirror CLI commands in the popup. Setup text can tell users to run `firefox-cli approve` or click the Firefox extension popup to approve.
+Do not mirror CLI commands in the popup. Setup text can tell users to run `firefox-cli connect` or click the Firefox extension popup to approve.
 
 ## Permissions
 
@@ -322,7 +322,7 @@ Agent-browser family compatibility summary:
 | Dialogs, downloads, clipboard, cookies, storage, network list/clear | MVP with Firefox/WebExtension limits; HAR unsupported |
 | Debug/repro: console/errors, `highlight`, diff, trace/profiler, vitals | MVP for listed commands; deferred as listed below |
 | Auth/state/session/profile/security gates/content boundaries | Deferred or unsupported in MVP because this controls the existing Firefox session after pairing |
-| Chrome/CDP/provider/browser-install features: `connect`, `get cdp-url`, `inspect`, `--extension`, external providers, iOS, Chrome profile import, browser install/upgrade | Unsupported unless Firefox provides an equivalent |
+| Chrome/CDP/provider/browser-install features: CDP attach, `get cdp-url`, `inspect`, `--extension`, external providers, iOS, Chrome profile import, browser install/upgrade | Unsupported unless Firefox provides an equivalent |
 
 Global options:
 
@@ -403,7 +403,7 @@ Unsupported unless Firefox provides an equivalent:
 - Top-level `close`, `quit`, `exit`, and `close --all`; use explicit `tab close` and `window close`.
 - `confirm` and `deny`, because MVP has no per-action confirmation queue.
 - Chrome `debugger`/CDP-specific commands.
-- `connect <port|url>` and `get cdp-url`.
+- CDP attach by port/URL and `get cdp-url`.
 - DevTools opening/inspection behavior equivalent to `agent-browser inspect`.
 - Chrome extension loading flags such as `--extension`.
 - External browser providers and iOS provider.
@@ -480,8 +480,8 @@ Errors should be concise and actionable:
 
 - If extension is not installed: print the matching extension download URL.
 - If native host is not registered: print `firefox-cli setup native-host`.
-- If Firefox is not running or extension is disconnected: tell the user to open Firefox and check the extension popup.
-- If first-use approval is pending: tell the user to run `firefox-cli approve` or open the extension popup and approve.
+- If Firefox is not running or extension is disconnected: tell the user to open Firefox and run `firefox-cli connect`.
+- If first-use approval is pending: tell the user to run `firefox-cli connect` or open the extension popup and approve.
 - If a page is restricted: name the restriction and suggest trying a normal web page/tab.
 - If a ref is stale: tell the user to run `firefox-cli snapshot -i` again.
 - If a command is unsupported: name the Firefox limitation or missing implementation gate.

@@ -6,8 +6,8 @@ describe("FirefoxCliBackgroundController", () => {
   it("accepts valid hello responses regardless of request ID shape", runCase02);
   it("answers native-host capability and no-op requests", runCase03);
   it("lists tabs through the injected Firefox browser adapter", runCase04);
-  it("rejects native-host requests before popup approval", runCase05);
-  it("opens the existing approval UI before popup approval", runCase06);
+  it("rejects native-host requests before first-use approval", runCase05);
+  it("opens the dedicated approval UI before first-use approval", runCase06);
   it("gates unapproved privilege-sensitive native-host requests before browser handlers", runCase07);
   it("rejects malformed sensitive native-host requests before browser handlers", runCase08);
 });

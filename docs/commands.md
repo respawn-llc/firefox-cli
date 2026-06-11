@@ -26,7 +26,7 @@ Private windows are listed and readable. Mutating commands against private windo
 | `firefox-cli setup` | Print extension setup guidance and the native-host setup command. |
 | `firefox-cli setup native-host [--dry-run] [--json]` | Write or print the native messaging manifest. |
 | `firefox-cli doctor [--fix] [--json]` | Diagnose native-host manifest and extension connection state. |
-| `firefox-cli approve [--json]` | Open the extension approval UI in a Firefox tab. |
+| `firefox-cli connect [--json]` | Request Firefox control approval and wait for the user's decision. |
 | `firefox-cli unpair` | Clear CLI/native-host pair state. |
 | `firefox-cli capabilities [--json]` | List supported and gated protocol capabilities. |
 
@@ -168,4 +168,4 @@ Network route/mock/block and HAR export are unsupported.
 
 ## Unsupported Families
 
-The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `connect`, `inspect`, top-level `close`, `quit`, and `exit`.
+The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `inspect`, top-level `close`, `quit`, and `exit`.

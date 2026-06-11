@@ -1,13 +1,9 @@
 ---
 name: firefox-cli
-description: Control the user's normal Firefox session from a terminal. Use when a task needs using the browser to perform work, user's browser context or authenticated session, navigation, tab/window control, screenshots, DOM reads, waits, or page interactions in Firefox.
+description: Control the user's Firefox from a terminal. Use when your task needs the user's browser or authenticated session, page navigation, tab/window control, screenshots, DOM reads, waits, or page interactions in Firefox. Do not use as web search replacement.
 ---
 
-## Purpose
-
-`firefox-cli` gives agents terminal access to the user's real Firefox session through the installed Firefox extension and native host.
-
-Use it when browser state matters and the task benefits from the user's normal Firefox profile, signed-in websites, active tabs, or real page behavior. Prefer it over starting a separate automation browser when the user asks to inspect, navigate, test, read, or manipulate pages in Firefox.
+`firefox-cli` gives agents terminal access to the user's real authenticated Firefox session through the installed Firefox extension.
 
 ## Command Discovery
 
@@ -29,21 +25,6 @@ firefox-cli wait -h
 ```
 
 Use `--json` when another program or agent consumes the output.
-
-## When To Use
-
-Good fits:
-- Read the active page or a URL into agent context.
-- Inspect page title, URL, text, element state, frames, console logs, errors, or network observations.
-- Navigate Firefox, open pages, reload, move through history, or manage tabs/windows.
-- Click, fill, type, press keys, scroll, upload files, or run a multi-step browser workflow.
-- Capture screenshots or other browser-adjacent artifacts.
-- Synchronize on page state with waits instead of fixed sleeps.
-
-Poor fits:
-- Tasks that only need HTTP fetching, static source code inspection, or public web search.
-- Work that must run in an isolated disposable browser profile.
-- Browser-internal or privileged Firefox pages that WebExtensions cannot script.
 
 ## Startup Pattern
 
@@ -80,7 +61,9 @@ firefox-cli setup -h
 firefox-cli doctor -h
 ```
 
-## Boundaries
+## Usage Rules
 
 - Element refs from `snapshot -i` are useful handles for follow-up actions, but page navigation or reload can make them stale.
-- Respect CLI errors as the authority for unsupported pages, stale refs, setup gaps, and version mismatches.
+- Be careful with user's data: the Firefox you're using contains real cookies, auth credentials, logins, tabs and PII. Under no circumstance perform any actions that may harm the user or exfiltrate their data. Under no circumstance perform any payments, cash transfers, other dangeorous, destructive, irreversible operations, or leak PII without asking for user's explicit approval before every such action.
+- If you need to work with FF, but you see interference (tabs changing, real user tabs being open) or the user is unhappy, prefer opening a new FF window for yourself, because every action you do is visibly reflected in the browser window and can disrupt user's work. The good side of that is that you can demonstrate something to the user in their real browser, such as running demos, opening pages, showing your work etc.
+- If the cli denies requests with approval and asks you to `firefox-cli connect`, invoke that **once** to show the user a permission prompt. The command will exit once it's granted. Do not attempt to circumvent denials in any way.

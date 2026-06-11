@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>firefox-cli approval request</title>
+    <link rel="stylesheet" href="./approval-request.css" />
+  </head>
+  <body>
+    <main class="approval-page">
+      <section class="approval-dialog" aria-live="polite">
+        <h1>Approve CLI control?</h1>
+        <p id="request-state" class="request-state">A CLI client is requesting control of this Firefox instance.</p>
+        <p id="error" class="error" hidden></p>
+        <div class="actions">
+          <button id="deny" class="deny-action" type="button">Deny</button>
+          <button id="approve" class="primary-action" type="button">Approve</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./approval-request.js"></script>
+  </body>
+</html>

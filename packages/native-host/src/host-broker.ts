@@ -179,7 +179,7 @@ export class NativeHostBroker {
         ok: false,
         error: {
           code: "NOT_APPROVED",
-          message: "Approve firefox-cli in the extension popup before running CLI commands.",
+          message: "Run `firefox-cli connect` before running Firefox control commands.",
         },
       };
     }

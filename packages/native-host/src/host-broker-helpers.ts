@@ -14,7 +14,7 @@ export function pairVerificationToProtocolError(verification: PairTokenVerificat
   if (verification.ok) {
     return {
       code: "NOT_APPROVED",
-      message: "Approve firefox-cli in the extension popup before running CLI commands.",
+      message: "Run `firefox-cli connect` before running Firefox control commands.",
     };
   }
 

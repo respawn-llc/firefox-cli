@@ -23,8 +23,8 @@ interface BrowserWindow {
 declare const browser: {
   readonly runtime: {
     readonly onMessage: {
-      addListener(listener: (message: { readonly type?: string }) => unknown): void;
-      removeListener(listener: (message: { readonly type?: string }) => unknown): void;
+      addListener(listener: (message: { readonly type?: string }, sender?: { readonly tab?: { readonly id?: number } }) => unknown): void;
+      removeListener(listener: (message: { readonly type?: string }, sender?: { readonly tab?: { readonly id?: number } }) => unknown): void;
     };
     connectNative(name: string): {
       readonly onMessage: {
@@ -40,7 +40,7 @@ declare const browser: {
     reload(): void;
   };
   readonly windows: {
-    getAll(options: { readonly populate: true }): Promise<readonly BrowserWindow[]>;
+    getAll(options: { readonly populate: boolean }): Promise<readonly BrowserWindow[]>;
     create(options: { readonly url?: string }): Promise<BrowserWindow>;
     update(windowId: number, options: { readonly focused?: boolean; readonly width?: number; readonly height?: number }): Promise<BrowserWindow>;
     remove(windowId: number): Promise<void>;

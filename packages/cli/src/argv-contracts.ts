@@ -85,7 +85,7 @@ export const routeParserSpecs = {
     flags: ["--bail", "--stdin"],
     valueOptions: ["--timeout", "--max-output"],
   }),
-  approve: parser("approve"),
+  connect: parser("connect"),
   click: parser("click", { valueOptions: ["--generation"] }),
   dblclick: parser("dblclick", { valueOptions: ["--generation"] }),
   focus: parser("focus", { valueOptions: ["--generation"] }),

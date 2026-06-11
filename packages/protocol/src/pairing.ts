@@ -23,3 +23,11 @@ export const pairOpenApprovalResultSchema = z
     url: z.string().min(1),
   })
   .strict();
+
+export const pairRequestApprovalParamsSchema = z.object({}).strict();
+export const pairRequestApprovalResultSchema = z
+  .object({
+    ok: z.literal(true),
+    url: z.string().min(1),
+  })
+  .strict();

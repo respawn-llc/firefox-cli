@@ -57,5 +57,4 @@ export const browserSmokeRequests = new Map<CommandId, unknown>([
   ["scroll", actionParamsFor("scroll")],
   ["scrollintoview", actionParamsFor("scrollintoview")],
   ["swipe", actionParamsFor("swipe")],
-  ["pair.openApproval", {}],
 ]);

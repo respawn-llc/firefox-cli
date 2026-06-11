@@ -1,6 +1,7 @@
 import { createOkResponse, createRequest, PROTOCOL_VERSION, parseBoundaryRequest, type RequestEnvelope } from "@firefox-cli/protocol";
 import { expect } from "vitest";
-import type { BackgroundBrowserAdapter, BrowserWindowSnapshot, FirefoxCliBackgroundController, NativePortLike } from "./background-controller.js";
+import type { FirefoxCliBackgroundController, NativePortLike } from "./background-controller.js";
+import type { BackgroundBrowserAdapter, BrowserWindowSnapshot } from "./browser-commands.js";
 
 export class FakeNativePort implements NativePortLike {
   readonly messages: unknown[] = [];
@@ -112,6 +113,7 @@ export function createTestBrowserAdapter(
       ok: true,
       id: options.id ?? "notification-1",
     }),
+    getExtensionInstance: async () => ({ extensionUrl: "moz-extension://test/" }),
     openExtensionPage: async (path) => `moz-extension://test/${path}`,
     resizeWindow: async () => {
       throw new Error("not implemented");

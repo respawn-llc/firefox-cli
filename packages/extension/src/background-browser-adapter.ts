@@ -1,5 +1,5 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
-import type { BackgroundBrowserAdapter } from "./background-controller.js";
+import type { BackgroundBrowserAdapter } from "./browser-commands.js";
 import { createBrowserCommandDeadline } from "./browser-command/deadline.js";
 import { createContentScriptInjectionState, deliverContentScriptRequest, type ContentScriptInjectionState } from "./content-script-delivery.js";
 import { executeEvalInPage } from "./eval-executor.js";
@@ -181,6 +181,14 @@ export function createBackgroundBrowserAdapter(options: {
           notificationOptions.id === undefined
             ? await options.browser.notifications.create(payload)
             : await options.browser.notifications.create(notificationOptions.id, payload),
+      };
+    },
+    getExtensionInstance: async () => {
+      const windows = await options.browser.windows.getAll({ populate: false });
+      const focused = windows.find((window) => window.focused === true);
+      return {
+        extensionUrl: options.browser.runtime.getURL(""),
+        ...(focused?.id === undefined ? {} : { focusedWindowId: focused.id }),
       };
     },
     openExtensionPage: async (path) => {

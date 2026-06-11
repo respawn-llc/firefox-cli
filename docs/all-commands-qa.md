@@ -37,6 +37,7 @@ Create `UPLOAD_FILE` with any small text payload. Capture IDs from JSON output w
 - [ ] Run `$CLI doctor --json`; expect the disposable extension connection to be `"connected"`.
 - [ ] Run `$CLI doctor --fix --json`; expect the manifest status to be healthy and the connection to remain `"connected"`.
 - [ ] Run `$CLI capabilities --json`; expect MVP capabilities plus explicit unsupported entries.
+- [ ] Run `$CLI connect`; expect an already-approved rejection that identifies the extension instance.
 - [ ] Run `$CLI window new "$BASE" --json`; save `WINDOW` and `TAB`.
 - [ ] Run `$CLI window --json`; expect `WINDOW` in the window list.
 - [ ] Run `$CLI window select "id:$WINDOW" --json`; expect `WINDOW` to be selected.
@@ -140,7 +141,6 @@ Create `UPLOAD_FILE` with any small text payload. Capture IDs from JSON output w
 - [ ] Run `$CLI close`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI quit`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI exit`; expect `UNSUPPORTED_CAPABILITY`.
-- [ ] Run `$CLI connect`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI inspect`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI tab close "id:$TAB3" --json`; expect `TAB3` to close.
 - [ ] Run `$CLI tab close "id:$TAB2" --json`; expect `TAB2` to close.

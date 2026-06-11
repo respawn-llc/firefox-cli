@@ -3,6 +3,8 @@ import {
   pairApproveResultSchema,
   pairOpenApprovalParamsSchema,
   pairOpenApprovalResultSchema,
+  pairRequestApprovalParamsSchema,
+  pairRequestApprovalResultSchema,
   pairResetParamsSchema,
   pairResetResultSchema,
 } from "../pairing.js";
@@ -33,6 +35,26 @@ export const pairingCommandEntries = defineCommandEntries({
     batch: { allowed: false },
     cliRoutes: [],
   },
+  "pair.requestApproval": {
+    params: pairRequestApprovalParamsSchema,
+    result: pairRequestApprovalResultSchema,
+    status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    compatibility: {
+      requirements: [
+        {
+          minProtocolVersion: 4,
+          reason: "CLI approval requests use a dedicated decision page and wait for explicit user approval or denial.",
+        },
+      ],
+    },
+    batch: { allowed: false },
+    cliRoutes: [{ id: "connect", path: ["connect"], batch: false }],
+  },
   "pair.openApproval": {
     params: pairOpenApprovalParamsSchema,
     result: pairOpenApprovalResultSchema,
@@ -43,6 +65,6 @@ export const pairingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: false },
-    cliRoutes: [{ id: "approve", path: ["approve"], batch: false }],
+    cliRoutes: [],
   },
 });

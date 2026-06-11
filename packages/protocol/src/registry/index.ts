@@ -80,7 +80,7 @@ export const commandSchemas = assembleCommandRegistry(
 export type CommandId = keyof typeof commandSchemas;
 
 export function commandAllowedBeforeApproval(command: CommandId): boolean {
-  return command === "pair.openApproval";
+  return command === "pair.requestApproval" || command === "pair.openApproval";
 }
 
 type CommandsWithContentPolicy<P> = {

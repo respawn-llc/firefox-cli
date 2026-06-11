@@ -41,7 +41,7 @@ describe("CLI response formatting", () => {
       exitCode: 1,
       stdout: "",
       stderr:
-        "Native host unavailable: Native host is offline. Run `firefox-cli setup`, install the extension, run `firefox-cli setup native-host`, then approve the extension popup.\n",
+        "Native host unavailable: Native host is offline. Open Firefox, run `firefox-cli setup` if setup is incomplete, then run `firefox-cli connect`.\n",
     });
   });
 });

@@ -158,13 +158,13 @@ describe("NativeHostBroker", () => {
       ok: false,
       error: {
         code: "NOT_APPROVED",
-        message: "Approve firefox-cli in the extension popup before running CLI commands.",
+        message: "Run `firefox-cli connect` before running Firefox control commands.",
       },
     });
   });
 
-  it("allows opening the approval UI before extension approval", async () => {
-    const request = createRequest("pair.openApproval", {}, "approval-1");
+  it("allows requesting approval before extension approval", async () => {
+    const request = createRequest("pair.requestApproval", {}, "approval-1");
     let forwardedRequest: RequestEnvelope | undefined;
     const broker = new NativeHostBroker({
       hostIdentity: createHostIdentity({
@@ -177,12 +177,12 @@ describe("NativeHostBroker", () => {
       token: undefined,
       send: async (forwarded) => {
         forwardedRequest = forwarded;
-        return createOkResponse(forwarded, { ok: true, url: "moz-extension://test/popup.html" });
+        return createOkResponse(forwarded, { ok: true, url: "moz-extension://test/approval-request.html" });
       },
     });
 
-    await expect(broker.handleCliRequest(request)).resolves.toEqual(createOkResponse(request, { ok: true, url: "moz-extension://test/popup.html" }));
-    expect(forwardedRequest).toMatchObject({ command: "pair.openApproval" });
+    await expect(broker.handleCliRequest(request)).resolves.toEqual(createOkResponse(request, { ok: true, url: "moz-extension://test/approval-request.html" }));
+    expect(forwardedRequest).toMatchObject({ command: "pair.requestApproval" });
   });
 
   it("rejects CLI requests when the extension pair token is invalid", async () => {

@@ -14,7 +14,7 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("firefox-cli snapshot -i");
     expect(output.stdout).toContain("firefox-cli <command> -h");
     expect(output.stdout).not.toContain("extension popup");
-    expect(output.stdout).toContain("firefox-cli approve");
+    expect(output.stdout).toContain("firefox-cli connect");
   });
 
   it("renders grouped contextual help for command families", async () => {

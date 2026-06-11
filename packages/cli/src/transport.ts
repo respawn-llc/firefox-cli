@@ -43,7 +43,7 @@ export function formatProtocolError(error: ProtocolError): string {
   }
 
   if (error.code === "NATIVE_HOST_UNAVAILABLE") {
-    return `Native host unavailable: ${error.message} Run \`firefox-cli setup\`, install the extension, run \`firefox-cli setup native-host\`, then approve the extension popup.\n`;
+    return `Native host unavailable: ${error.message} Open Firefox, run \`firefox-cli setup\` if setup is incomplete, then run \`firefox-cli connect\`.\n`;
   }
 
   if (error.code === "VERSION_MISMATCH") {
@@ -56,6 +56,10 @@ export function formatProtocolError(error: ProtocolError): string {
 
   if (error.code === "SCRIPT_INJECTION_FAILED") {
     return `${error.code}: ${error.message} Try a normal web page tab and reload it after updating the extension.\n`;
+  }
+
+  if (error.code === "ACTION_REJECTED") {
+    return `${error.message}\n`;
   }
 
   return `${error.code}: ${error.message}\n`;

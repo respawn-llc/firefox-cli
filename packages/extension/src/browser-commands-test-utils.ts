@@ -278,6 +278,14 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return { ok: true as const, id: options.id ?? `notification-${String(this.notifications.length)}` };
   }
 
+  async getExtensionInstance(): Promise<{ readonly extensionUrl: string; readonly focusedWindowId?: number }> {
+    const focused = this.#windows.find((window) => window.focused);
+    return {
+      extensionUrl: "moz-extension://test/",
+      ...(focused === undefined ? {} : { focusedWindowId: focused.id }),
+    };
+  }
+
   async openExtensionPage(path: string): Promise<string> {
     this.extensionPages.push(path);
     return `moz-extension://test/${path}`;

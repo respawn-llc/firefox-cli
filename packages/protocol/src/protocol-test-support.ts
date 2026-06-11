@@ -81,5 +81,6 @@ export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliR
   scroll: [{ id: "scroll", path: ["scroll"], batch: true }],
   scrollintoview: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true }],
   swipe: [{ id: "swipe", path: ["swipe"], batch: true }],
-  "pair.openApproval": [{ id: "approve", path: ["approve"], batch: false }],
+  "pair.requestApproval": [{ id: "connect", path: ["connect"], batch: false }],
+  "pair.openApproval": [],
 } as const;

@@ -38,7 +38,7 @@ import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
-import { cliResponseFormatters } from "./format.js";
+import { cliResponseFormatters, formatApprovalRequest } from "./format.js";
 import { getPositionals } from "./parse.js";
 import type { CliRequestBuilder, CliResponseFormatter, CliResponseFormatterKind, CliRouteBinding, CliRouteParserSpec } from "./types.js";
 
@@ -98,7 +98,7 @@ const routeFormatterSpecs = {
   "set.viewport": routeFormatter("set.viewport", "json-object", cliResponseFormatters["json-object"]),
   diff: routeFormatter("diff", "json-object", cliResponseFormatters["json-object"]),
   batch: routeFormatter("batch", "batch", cliResponseFormatters.batch),
-  approve: routeFormatter("pair.openApproval", "json-object", cliResponseFormatters["json-object"]),
+  connect: routeFormatter("pair.requestApproval", "json-object", formatApprovalRequest),
   click: routeFormatter("click", "action", cliResponseFormatters.action),
   dblclick: routeFormatter("dblclick", "action", cliResponseFormatters.action),
   focus: routeFormatter("focus", "action", cliResponseFormatters.action),
@@ -193,7 +193,7 @@ export const cliRouteBindings = {
   "set.viewport": bindCliRoute("set.viewport", "firefox-cli set viewport <width> <height> [--json]", buildSetViewportRequest),
   diff: bindCliRoute("diff", "firefox-cli diff url|title|snapshot <expected> [--json]", buildDiffRequest),
   batch: bindCliRoute("batch", "firefox-cli batch <json> | --stdin [--bail] [--json]", buildBatchRequest),
-  approve: bindCliRoute("approve", "firefox-cli approve [--json]", buildOpenApprovalRequest),
+  connect: bindCliRoute("connect", "firefox-cli connect [--json]", buildOpenApprovalRequest),
   click: bindCliRoute("click", "firefox-cli click <selector|@ref> [--json]", buildElementActionRequest),
   dblclick: bindCliRoute("dblclick", "firefox-cli dblclick <selector|@ref> [--json]", buildElementActionRequest),
   focus: bindCliRoute("focus", "firefox-cli focus <selector|@ref> [--json]", buildElementActionRequest),
