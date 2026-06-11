@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import { runCase01, runCase02, runCase03, runCase04, runCase05, runCase06, runCase07, runCase08 } from "./background-controller-approval-test-cases.js";
-import { runCase09, runCase10, runCase11 } from "./background-controller-approval-race-test-cases.js";
+import { runCase09, runCase10, runCase11, runCase12 } from "./background-controller-approval-race-test-cases.js";
 
 describe("FirefoxCliBackgroundController", () => {
   it("ignores responses that arrive after request timeout", runCase01);
@@ -14,4 +14,5 @@ describe("FirefoxCliBackgroundController", () => {
   it("exposes pending approval state before the approval tab finishes opening", runCase09);
   it("ignores deny events while native approval is in flight", runCase10);
   it("keeps legacy open-approval requests compatible with the dedicated page", runCase11);
+  it("settles pending approval requests when native approval throws", runCase12);
 });

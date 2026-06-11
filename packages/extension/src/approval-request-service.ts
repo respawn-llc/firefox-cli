@@ -115,7 +115,22 @@ export class ApprovalRequestService {
       return { active: false };
     }
     pending.status = "approving";
-    const approved = await approvePairing();
+    let approved: boolean;
+    try {
+      approved = await approvePairing();
+    } catch (error) {
+      if (this.#pending === pending) {
+        this.#pending = undefined;
+        pending.resolve(
+          createErrorResponseForRequest(pending.request, {
+            code: "NATIVE_HOST_UNAVAILABLE",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return { active: false, close: true };
+      }
+      return { active: false };
+    }
     if (approved) {
       this.#pending = undefined;
       this.#rateLimitIndex = 0;

@@ -8,8 +8,8 @@
   --text-muted: #9facb8;
   --danger: #ff6678;
   --border: rgba(21, 255, 138, 0.18);
-  --base-font: "Comfortaa", "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --heading-font: "Montserrat Alternates", "Comfortaa", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --base-font: "Comfortaa", "Montserrat", system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", helvetica, arial, sans-serif;
+  --heading-font: "Montserrat Alternates", "Comfortaa", system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", helvetica, arial, sans-serif;
 }
 
 * {

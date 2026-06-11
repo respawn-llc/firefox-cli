@@ -273,9 +273,13 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     this.networkIdleWaits.push(options);
   }
 
-  async showNotification(options: { readonly id?: string; readonly title: string; readonly message?: string }) {
+  async showNotification(options: {
+    readonly id?: string;
+    readonly title: string;
+    readonly message?: string;
+  }): Promise<{ readonly ok: true; readonly id: string }> {
     this.notifications.push(options);
-    return { ok: true as const, id: options.id ?? `notification-${String(this.notifications.length)}` };
+    return { ok: true, id: options.id ?? `notification-${String(this.notifications.length)}` };
   }
 
   async getExtensionInstance(): Promise<{ readonly extensionUrl: string; readonly focusedWindowId?: number }> {
