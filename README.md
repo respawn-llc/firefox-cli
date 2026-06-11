@@ -55,15 +55,6 @@ Install the skill from the public GitHub path:
 $skill-installer install https://github.com/respawn-llc/firefox-cli/tree/main/skills/firefox-cli
 ```
 
-### Manual
-
-Copy the packaged skill directory into the shared agent skills directory:
-
-```sh
-mkdir -p ~/.agents/skills
-cp -R skills/firefox-cli ~/.agents/skills/
-```
-
 ## Security Warning
 
 Approving the `firefox-cli` extension grants the paired `firefox-cli` user **full control over the Firefox browser** session, including using & manipulating the signed-in sites, **authentication, cookies, sensitive data** & monitoring all activity. Do not approve the pairing unless you accept responsibility for every actor that can run `firefox-cli` on the machine.
@@ -76,7 +67,6 @@ Not everything that Chrome/CDP / `agent-browser` tools support is supported by F
 - Page snapshots and element references target the main frame; cross-origin iframes are diagnostic only.
 - Screenshots capture the visible tab and may activate the target tab or window.
 - Browser-internal and privileged Firefox pages can block extension scripting.
-- Unsupported Chrome-only capabilities return structured unsupported-capability errors.
 
 See `docs/setup.md` for platform paths and troubleshooting, and `docs/commands.md` for command syntax.
 
