@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-const require = createRequire(import.meta.url);
+const fallbackRequire = createRequire(import.meta.url);
 
 export function getPlatformKey(input = process) {
   if (!isSupportedPlatform(input.platform)) {
@@ -20,12 +20,12 @@ export function getBinaryName(input = process) {
 }
 
 export async function resolvePackagedBinary(packageRoot, input = process) {
-  void packageRoot;
+  const packageRequire = packageRoot === undefined ? fallbackRequire : createRequire(join(packageRoot, "package.json"));
   const platformKey = getPlatformKey(input);
   const packageName = `@respawn-app/firefox-cli-native-${platformKey}`;
   let packageJsonPath;
   try {
-    packageJsonPath = require.resolve(`${packageName}/package.json`);
+    packageJsonPath = packageRequire.resolve(`${packageName}/package.json`);
   } catch (error) {
     throw new Error(`Missing firefox-cli native package for ${platformKey}. Reinstall firefox-cli with optional dependencies enabled.`, { cause: error });
   }
