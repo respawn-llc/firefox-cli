@@ -9,34 +9,15 @@
       "update_url": "https://opensource.respawn.pro/firefox-cli/updates.json",
       "strict_min_version": "150.0",
       "data_collection_permissions": {
-        "required": [
-          "browsingActivity",
-          "websiteActivity",
-          "websiteContent"
-        ],
+        "required": ["browsingActivity", "websiteActivity", "websiteContent"],
         "optional": []
       }
     }
   },
-  "permissions": [
-    "nativeMessaging",
-    "scripting",
-    "tabs",
-    "storage",
-    "downloads",
-    "cookies",
-    "notifications",
-    "clipboardRead",
-    "clipboardWrite",
-    "webRequest"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "permissions": ["nativeMessaging", "scripting", "tabs", "storage", "downloads", "cookies", "notifications", "clipboardRead", "clipboardWrite", "webRequest"],
+  "host_permissions": ["<all_urls>"],
   "background": {
-    "scripts": [
-      "background.js"
-    ]
+    "scripts": ["background.js"]
   },
   "action": {
     "default_title": "FF-CLI Bridge",
