@@ -48,4 +48,4 @@ Npm publishing:
 
 The published CLI package depends on platform-specific native packages through `optionalDependencies`; npm installs only the package that matches the user's `os` and `cpu`.
 
-Configure npm trusted publishing for `firefox-cli` and each `@firefox-cli/native-*` package with this GitHub repository, workflow `release.yml`, and the `npm` environment. The workflow grants `id-token: write` only to the npm publish job.
+Configure npm trusted publishing for `firefox-cli` and each `@respawn-app/firefox-cli-native-*` package with this GitHub repository, workflow `release.yml`, and the `npm` environment. The workflow grants `id-token: write` only to the npm publish job.

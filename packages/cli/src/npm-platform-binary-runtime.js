@@ -22,7 +22,7 @@ export function getBinaryName(input = process) {
 export async function resolvePackagedBinary(packageRoot, input = process) {
   void packageRoot;
   const platformKey = getPlatformKey(input);
-  const packageName = `@firefox-cli/native-${platformKey}`;
+  const packageName = `@respawn-app/firefox-cli-native-${platformKey}`;
   let packageJsonPath;
   try {
     packageJsonPath = require.resolve(`${packageName}/package.json`);

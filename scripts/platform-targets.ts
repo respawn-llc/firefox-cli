@@ -20,7 +20,7 @@ export const supportedBinaryTargets: readonly SupportedBinaryTarget[] = targetIn
   ...target,
   platformKey: getPlatformKey(target),
   binaryName: getBinaryName(target),
-  npmPackageName: `@firefox-cli/native-${getPlatformKey(target)}`,
+  npmPackageName: `@respawn-app/firefox-cli-native-${getPlatformKey(target)}`,
 }));
 
 export function resolveCurrentBinaryTarget(input: PlatformInput = process): SupportedBinaryTarget {
