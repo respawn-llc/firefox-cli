@@ -52,7 +52,7 @@ async function runCliOrThrow(args: readonly string[], dependencies: CliDependenc
 
   if (args[0] === "unpair") {
     await dependencies.clearPairState?.();
-    return ok("Pair state cleared. Approve firefox-cli again from the extension popup.\n");
+    return ok("Pair state cleared. Run `firefox-cli connect` to request approval again.\n");
   }
 
   const routeBinding = findCliRouteBindingForArgv(args);

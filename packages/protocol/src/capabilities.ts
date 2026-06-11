@@ -30,12 +30,6 @@ export const gatedCapabilities: readonly GatedCapabilitySummary[] = [
     cliCommands: ["exit"],
   },
   {
-    command: "connect",
-    status: "unsupported",
-    reason: "connect is unsupported because Firefox does not provide Chrome CDP attach semantics.",
-    cliCommands: ["connect"],
-  },
-  {
     command: "inspect",
     status: "unsupported",
     reason: "inspect is unsupported because Firefox does not expose agent-browser CDP inspection.",

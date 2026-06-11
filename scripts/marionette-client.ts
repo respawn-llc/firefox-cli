@@ -114,7 +114,8 @@ export class MarionetteClient {
     this.#commandTimeoutMs = options.commandTimeoutMs ?? timeoutPolicies.marionetteCommand.timeoutMs;
     this.#maxFrameBytes = options.maxFrameBytes ?? timeoutPolicies.marionetteFrame.maxBytes;
     this.#socket.on("data", (chunk) => {
-      this.#buffer = Buffer.concat([this.#buffer, chunk]);
+      const data = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      this.#buffer = Buffer.concat([this.#buffer, data]);
       try {
         this.#parse();
       } catch (error) {

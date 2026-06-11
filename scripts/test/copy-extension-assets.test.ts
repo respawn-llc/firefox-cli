@@ -63,5 +63,7 @@ async function createExtensionAssetFixture(): Promise<{
   );
   await writeFile(join(sourceDir, "popup.html"), "<!doctype html>\n");
   await writeFile(join(sourceDir, "popup.css"), "body {}\n");
+  await writeFile(join(sourceDir, "approval-request.html"), "<!doctype html>\n");
+  await writeFile(join(sourceDir, "approval-request.css"), "body {}\n");
   return { sourceDir, outputDir };
 }

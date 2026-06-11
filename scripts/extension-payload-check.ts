@@ -3,20 +3,32 @@ import rootPackage from "../package.json" with { type: "json" };
 import { listRegularFilesUnder, readRegularFileUnder } from "./safe-extension-files.js";
 
 export async function verifyExtensionBundlePayload(payload: ReadonlyMap<string, Buffer>): Promise<void> {
-  const requiredFiles = ["manifest.json", "background.js", "content.js", "popup.js", "popup.html", "popup.css"] as const;
+  const requiredFiles = [
+    "manifest.json",
+    "background.js",
+    "content.js",
+    "popup.js",
+    "popup.html",
+    "popup.css",
+    "approval-request.js",
+    "approval-request.html",
+    "approval-request.css",
+  ] as const;
   for (const artifact of requiredFiles) {
     if (!payload.has(artifact)) {
       throw new Error(`Expected extension artifact: ${artifact}`);
     }
   }
 
-  const unexpectedJs = [...payload.keys()].filter((file) => file.endsWith(".js")).filter((file) => !["background.js", "content.js", "popup.js"].includes(file));
+  const unexpectedJs = [...payload.keys()]
+    .filter((file) => file.endsWith(".js"))
+    .filter((file) => !["background.js", "content.js", "popup.js", "approval-request.js"].includes(file));
   if (unexpectedJs.length > 0) {
     throw new Error(`Unexpected extension JavaScript artifacts: ${unexpectedJs.join(", ")}`);
   }
 
   await Promise.all(
-    ["background.js", "content.js", "popup.js"].map(async (artifact) => {
+    ["background.js", "content.js", "popup.js", "approval-request.js"].map(async (artifact) => {
       const source = payload.get(artifact)?.toString("utf8") ?? "";
       if (
         source.includes('from"./') ||

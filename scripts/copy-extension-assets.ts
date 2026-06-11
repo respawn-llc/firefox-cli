@@ -15,6 +15,8 @@ export async function copyExtensionAssets(options: { readonly sourceDir: string;
   await writeFile(resolve(options.outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   await cp(resolve(options.sourceDir, "popup.html"), resolve(options.outputDir, "popup.html"));
   await cp(resolve(options.sourceDir, "popup.css"), resolve(options.outputDir, "popup.css"));
+  await cp(resolve(options.sourceDir, "approval-request.html"), resolve(options.outputDir, "approval-request.html"));
+  await cp(resolve(options.sourceDir, "approval-request.css"), resolve(options.outputDir, "approval-request.css"));
 }
 
 if (import.meta.main) {

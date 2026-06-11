@@ -10,6 +10,15 @@
               "strict_min_version": "150.0"
             }
           }
+        },
+        {
+          "applications": {
+            "gecko": {
+              "strict_min_version": "150.0"
+            }
+          },
+          "version": "0.2.0",
+          "update_link": "https://github.com/respawn-llc/firefox-cli/releases/download/v0.2.0/firefox-cli-0.2.0.xpi"
         }
       ]
     }

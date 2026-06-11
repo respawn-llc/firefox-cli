@@ -68,14 +68,70 @@ describe("runCli", () => {
       sendRequest: async (request) =>
         createErrorResponse(request.id, {
           code: "NOT_APPROVED",
-          message: "Approve firefox-cli in the extension popup before running CLI commands.",
+          message: "Run `firefox-cli connect` before running Firefox control commands.",
         }),
     });
 
     expect(output).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: "Not approved: Approve firefox-cli in the extension popup before running CLI commands.\n",
+      stderr: "Not approved: Run `firefox-cli connect` before running Firefox control commands.\n",
+    });
+  });
+
+  it("builds approval page requests", async () => {
+    const output = await runCli(["connect", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "pair.requestApproval",
+          params: {},
+        });
+        return createOkResponse(request, {
+          ok: true,
+          url: "moz-extension://test/approval-request.html",
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: `${JSON.stringify({ ok: true, url: "moz-extension://test/approval-request.html" }, null, 2)}\n`,
+      stderr: "",
+    });
+  });
+
+  it("prints accepted approval requests with user-decision wording", async () => {
+    const output = await runCli(["connect"], {
+      ...baseDependencies(),
+      sendRequest: async (request) =>
+        createOkResponse(request, {
+          ok: true,
+          url: "moz-extension://test/approval-request.html",
+        }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: "User approved the request\n",
+      stderr: "",
+    });
+  });
+
+  it("prints rejected approval requests without an error-code prefix", async () => {
+    const output = await runCli(["connect"], {
+      ...baseDependencies(),
+      sendRequest: async (request) =>
+        createErrorResponse(request.id, {
+          code: "ACTION_REJECTED",
+          message: "User explicitly denied your request.",
+        }),
+    });
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "User explicitly denied your request.\n",
     });
   });
 

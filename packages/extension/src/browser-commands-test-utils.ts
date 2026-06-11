@@ -50,6 +50,8 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     readonly timeoutMs: number;
     readonly idleMs: number;
   }[] = [];
+  readonly notifications: { readonly id?: string; readonly title: string; readonly message?: string }[] = [];
+  readonly extensionPages: string[] = [];
   clipboardText = "";
   networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
   listWindowCalls = 0;
@@ -269,6 +271,28 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
 
   async waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void> {
     this.networkIdleWaits.push(options);
+  }
+
+  async showNotification(options: {
+    readonly id?: string;
+    readonly title: string;
+    readonly message?: string;
+  }): Promise<{ readonly ok: true; readonly id: string }> {
+    this.notifications.push(options);
+    return { ok: true, id: options.id ?? `notification-${String(this.notifications.length)}` };
+  }
+
+  async getExtensionInstance(): Promise<{ readonly extensionUrl: string; readonly focusedWindowId?: number }> {
+    const focused = this.#windows.find((window) => window.focused);
+    return {
+      extensionUrl: "moz-extension://test/",
+      ...(focused === undefined ? {} : { focusedWindowId: focused.id }),
+    };
+  }
+
+  async openExtensionPage(path: string): Promise<string> {
+    this.extensionPages.push(path);
+    return `moz-extension://test/${path}`;
   }
 
   async resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot> {

@@ -379,7 +379,7 @@ describe("runCli setup and doctor", () => {
 
     expect(output).toEqual({
       exitCode: 0,
-      stdout: "Pair state cleared. Approve firefox-cli again from the extension popup.\n",
+      stdout: "Pair state cleared. Run `firefox-cli connect` to request approval again.\n",
       stderr: "",
     });
     expect(unpairCalls).toEqual(["cleared"]);

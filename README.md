@@ -29,7 +29,7 @@ Register the native messaging host:
 firefox-cli setup native-host
 ```
 
-Open the `firefox-cli` extension popup in Firefox and approve the native host. The approval pairs the extension with the local native host and enables CLI requests from the machine.
+Run `firefox-cli connect` and respond to the approval request in Firefox. The approval pairs the extension with the local native host and enables CLI requests from the machine.
 
 Verify the installation:
 

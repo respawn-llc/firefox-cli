@@ -15,3 +15,19 @@ export const pairResetParamsSchema = z.object({}).strict();
 export const pairResetResultSchema = z.object({
   ok: z.literal(true),
 });
+
+export const pairOpenApprovalParamsSchema = z.object({}).strict();
+export const pairOpenApprovalResultSchema = z
+  .object({
+    ok: z.literal(true),
+    url: z.string().min(1),
+  })
+  .strict();
+
+export const pairRequestApprovalParamsSchema = z.object({}).strict();
+export const pairRequestApprovalResultSchema = z
+  .object({
+    ok: z.literal(true),
+    url: z.string().min(1),
+  })
+  .strict();

@@ -40,9 +40,9 @@ export class PairingStateService {
   }
 
   async approve(pairToken: string): Promise<void> {
+    await this.#storageAdapter.setPairToken(pairToken);
     this.#pairToken = pairToken;
     this.#approved = true;
-    await this.#storageAdapter.setPairToken(pairToken);
   }
 
   markRejected(): void {

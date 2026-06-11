@@ -9,6 +9,7 @@ import {
   FakeNativePort,
   flushPromises,
   latestHelloRequest,
+  latestPairApproveRequest,
 } from "./background-controller-test-support.js";
 
 export function runCase01() {
@@ -171,12 +172,75 @@ export async function runCase05() {
     ok: false,
     error: {
       code: "NOT_APPROVED",
-      message: "Approve firefox-cli in the extension popup before running CLI commands.",
+      message: "Run `firefox-cli connect` before running Firefox control commands.",
     },
   });
 }
 
 export async function runCase06() {
+  const port = new FakeNativePort();
+  const notifications: unknown[] = [];
+  const pages: string[] = [];
+  const controller = new FirefoxCliBackgroundController({
+    browserAdapter: createTestBrowserAdapter([], {
+      showNotification: async (options) => {
+        notifications.push(options);
+        return { ok: true, id: options.id ?? "notification-1" };
+      },
+      openExtensionPage: async (path) => {
+        pages.push(path);
+        return `moz-extension://test/${path}`;
+      },
+    }),
+    connectNative: () => port,
+    productVersion: "0.0.0",
+  });
+  controller.start();
+  await completeNativeHello(port);
+
+  const request = createRequest("pair.requestApproval", {}, "approval-request-1");
+  port.emitMessage(request);
+  await flushPromises();
+
+  expect(notifications).toEqual([
+    { id: "firefox-cli-approval", title: "firefox-cli approval requested", message: "A CLI client is asking for Firefox control approval right now." },
+  ]);
+  expect(pages).toEqual(["approval-request.html?request=approval-request-1"]);
+  await expect(controller.handleRuntimeMessage({ type: "firefox-cli:get-approval-request", requestId: "approval-request-1" })).resolves.toEqual({
+    active: true,
+    url: "moz-extension://test/approval-request.html?request=approval-request-1",
+  });
+
+  const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve-request", requestId: "approval-request-1" });
+  await flushPromises();
+  const approve = latestPairApproveRequest(port);
+  port.emitMessage(
+    createOkResponse(approve, {
+      hostId: "host-1",
+      extensionId: "ff-cli-bridge@respawn.pro",
+      token: "paired-token",
+      generation: 1,
+      approvedAt: "2026-01-02T03:04:05.000Z",
+    }),
+  );
+  await expect(approval).resolves.toEqual({
+    active: false,
+    close: true,
+  });
+  await flushPromises();
+
+  expect(port.messages[2]).toEqual({
+    protocolVersion: request.protocolVersion,
+    id: "approval-request-1",
+    ok: true,
+    result: {
+      ok: true,
+      url: "moz-extension://test/approval-request.html?request=approval-request-1",
+    },
+  });
+}
+
+export async function runCase07() {
   const port = new FakeNativePort();
   const browserCalls: string[] = [];
   const controller = new FirefoxCliBackgroundController({
@@ -231,13 +295,13 @@ export async function runCase06() {
     ok: false,
     error: {
       code: "NOT_APPROVED",
-      message: "Approve firefox-cli in the extension popup before running CLI commands.",
+      message: "Run `firefox-cli connect` before running Firefox control commands.",
     },
   });
   expect(browserCalls).toEqual([]);
 }
 
-export async function runCase07() {
+export async function runCase08() {
   const port = new FakeNativePort();
   const browserCalls: string[] = [];
   const controller = new FirefoxCliBackgroundController({

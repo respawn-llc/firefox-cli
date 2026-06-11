@@ -53,6 +53,21 @@ export const highlightResultSchema = z
   .strict();
 export type HighlightResult = z.infer<typeof highlightResultSchema>;
 
+export const notifyParamsSchema = z
+  .object({
+    id: z.string().min(1).max(256).optional(),
+    title: z.string().min(1).max(256),
+    message: z.string().max(1024).optional(),
+  })
+  .strict();
+export const notifyResultSchema = z
+  .object({
+    ok: z.literal(true),
+    id: z.string().min(1),
+  })
+  .strict();
+export type NotifyResult = z.infer<typeof notifyResultSchema>;
+
 export const pdfParamsSchema = z
   .object({
     target: targetSelectorSchema.optional(),

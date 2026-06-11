@@ -4,7 +4,7 @@
 
 - CLI: parses commands, prints terminal output, stores local configuration, and sends requests to the native host IPC endpoint.
 - Native host: owns Firefox native messaging, local IPC, pair state, auth tokens, native-host manifest setup, and file writes for binary outputs such as screenshots.
-- Extension: owns Firefox APIs, popup approval, tab/window targeting, content-script injection, command routing, and browser permission errors.
+- Extension: owns Firefox APIs, first-use approval, tab/window targeting, content-script injection, command routing, and browser permission errors.
 - Protocol: defines command IDs, request/response schemas, capability metadata, stable errors, and runtime validation.
 
 ## Transport
@@ -15,9 +15,9 @@ Native-host stdout is reserved for Firefox native messaging frames. Human-readab
 
 ## Pairing
 
-The first popup approval creates a pair token. The extension stores the token in extension storage; the native host stores a hash and extension identity in user-local state. CLI requests are forwarded only when the connected extension has presented a valid token.
+The first approval request creates a pair token. The extension stores the token in extension storage; the native host stores a hash and extension identity in user-local state. CLI requests are forwarded only when the connected extension has presented a valid token.
 
-`firefox-cli unpair` clears native-host pair state. The extension popup can approve again and receive a new token.
+`firefox-cli unpair` clears native-host pair state. Run `firefox-cli connect` to request approval again.
 
 ## Targeting
 

@@ -3,7 +3,7 @@ import { baseDependencies } from "./cli-test-support.js";
 import { runCli } from "./index.js";
 
 describe("CLI help", () => {
-  it("renders workflow-oriented root help without setup approval warnings", async () => {
+  it("renders workflow-oriented root help without popup approval warnings", async () => {
     const output = await runCli(["-h"], baseDependencies());
 
     expect(output.exitCode).toBe(0);
@@ -13,9 +13,8 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("Act on elements:");
     expect(output.stdout).toContain("firefox-cli snapshot -i");
     expect(output.stdout).toContain("firefox-cli <command> -h");
-    expect(output.stdout).not.toContain("approve");
-    expect(output.stdout).not.toContain("approval");
     expect(output.stdout).not.toContain("extension popup");
+    expect(output.stdout).toContain("firefox-cli connect");
   });
 
   it("renders grouped contextual help for command families", async () => {
@@ -36,6 +35,17 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("Read the target page as a compact text/JSON structure");
     expect(output.stdout).toContain("`-i` includes stable element refs");
     expect(output.stdout).toContain("firefox-cli snapshot -i");
+  });
+
+  it("renders wait examples accepted by the wait parser", async () => {
+    const output = await runCli(["wait", "--help"], baseDependencies());
+
+    expect(output.exitCode).toBe(0);
+    expect(output.stdout).toContain("Wait for a duration, element, text, URL, function predicate, load state, or download.");
+    expect(output.stdout).toContain("firefox-cli wait '#ready'");
+    expect(output.stdout).not.toContain("title");
+    expect(output.stdout).not.toContain("dialog");
+    expect(output.stdout).not.toContain("firefox-cli wait --selector");
   });
 
   it("renders command help without sending a browser request", async () => {

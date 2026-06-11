@@ -17,6 +17,7 @@ interface HelpGroup {
 
 const routeHelpSpecs = {
   capabilities: helpSpec("List supported command families and browser capability metadata."),
+  connect: helpSpec("Request Firefox control approval through a dedicated approval page."),
   "tab.list": helpSpec("List tabs with indexes, ids, active state, titles, and URLs.", [
     "Use listed indexes with `--tab <index>` and ids with `--tab id:<id>`.",
   ]),
@@ -42,7 +43,7 @@ const routeHelpSpecs = {
     "Pass a selector or `@ref` for element-scoped values.",
   ]),
   is: helpSpec("Check element/page state such as visible, enabled, checked, or selected."),
-  wait: helpSpec("Wait for URL, title, element, text, network-idle, download, or dialog conditions.", [
+  wait: helpSpec("Wait for a duration, element, text, URL, function predicate, load state, or download.", [
     "Use waits between navigation/actions and reads instead of fixed sleeps.",
   ]),
   eval: helpSpec("Evaluate JavaScript in the target page and return a serialized result.", [
@@ -65,6 +66,9 @@ const routeHelpSpecs = {
   console: helpSpec("List or clear captured console messages."),
   errors: helpSpec("List or clear captured page errors."),
   highlight: helpSpec("Temporarily highlight an element for visual inspection."),
+  notify: helpSpec("Show a native Firefox notification with a title and optional message.", [
+    "Use `--id <id>` to update or replace an existing notification with the same id.",
+  ]),
   pdf: helpSpec("Report Firefox PDF export support for a target path."),
   "set.viewport": helpSpec("Resize the target window viewport."),
   diff: helpSpec("Compare URL, title, or snapshot content against an expected value."),
@@ -93,7 +97,7 @@ const helpGroups: readonly HelpGroup[] = [
   {
     title: "Setup and diagnostics",
     summary: "Install, repair, inspect, and reset the Firefox/native-host connection.",
-    routes: ["capabilities"],
+    routes: ["capabilities", "connect"],
   },
   {
     title: "Tabs, windows, and navigation",
@@ -155,7 +159,7 @@ const helpGroups: readonly HelpGroup[] = [
   {
     title: "Browser data and files",
     summary: "Use browser-adjacent data and file operations.",
-    routes: ["screenshot", "download", "clipboard", "cookies", "storage", "pdf", "set.viewport"],
+    routes: ["screenshot", "download", "clipboard", "cookies", "storage", "notify", "pdf", "set.viewport"],
   },
   {
     title: "Automation",
@@ -196,14 +200,16 @@ const builtinHelpSpecs = new Map<string, HelpSpec>([
 
 const commandExamples: Partial<Record<RouteBindingId, readonly string[]>> = {
   "tab.list": ["firefox-cli tab --json"],
+  connect: ["firefox-cli connect"],
   "tab.new": ["firefox-cli tab new https://example.com"],
   "tab.select": ["firefox-cli tab select 1", "firefox-cli tab select id:42"],
   open: ["firefox-cli open https://example.com", "firefox-cli open --new-tab https://example.com"],
   snapshot: ["firefox-cli snapshot -i", "firefox-cli snapshot -s main -d 3 --json"],
   get: ["firefox-cli get title", "firefox-cli get text '#content' --json"],
-  wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait --selector '#ready'"],
+  wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait '#ready'"],
   click: ["firefox-cli click 'button[type=submit]'", "firefox-cli click @e12"],
   fill: ["firefox-cli fill '#email' user@example.com"],
+  notify: ["firefox-cli notify 'Action needed' 'Open Firefox to approve control'"],
   batch: ['firefox-cli batch \'[["open","https://example.com"],["snapshot","-i"]]\' --json'],
 };
 
@@ -252,7 +258,7 @@ export function renderHelp(): string {
     '  Inspect content:   firefox-cli get title --json; firefox-cli find text "Sign in"',
     '  Act on elements:   firefox-cli click "button[type=submit]"; firefox-cli fill "#email" user@example.com',
     "  Manage targets:    firefox-cli tab; firefox-cli tab select 1; firefox-cli window",
-    '  Synchronize:       firefox-cli wait --url "*dashboard*"; firefox-cli wait --network-idle',
+    '  Synchronize:       firefox-cli wait --url "*dashboard*"; firefox-cli wait --load networkidle',
     '  Run a workflow:    firefox-cli batch \'[["open","https://example.com"],["snapshot","-i"]]\'',
     "",
     "Usage:",

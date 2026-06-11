@@ -1,0 +1,109 @@
+:root {
+  color-scheme: dark;
+  --flow-primary: #00d46a;
+  --flow-primary-light: #15ff8a;
+  --surface: #111418;
+  --surface-elevated: #1e2227;
+  --text: #f4fff8;
+  --text-muted: #9facb8;
+  --danger: #ff6678;
+  --border: rgba(21, 255, 138, 0.18);
+  --base-font: "Comfortaa", "Montserrat", system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", helvetica, arial, sans-serif;
+  --heading-font: "Montserrat Alternates", "Comfortaa", system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", helvetica, arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: 13px / 1.45 var(--base-font);
+  margin: 0;
+  min-height: 100vh;
+}
+
+.approval-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+}
+
+.approval-dialog {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  width: min(320px, 100%);
+}
+
+h1,
+.request-state,
+.error {
+  margin: 0;
+}
+
+h1 {
+  font: 700 18px / 1.25 var(--heading-font);
+}
+
+.request-state {
+  color: var(--text-muted);
+}
+
+.error {
+  background: rgba(255, 102, 120, 0.11);
+  border: 1px solid rgba(255, 102, 120, 0.28);
+  border-radius: 12px;
+  color: #ffd8de;
+  padding: 9px 10px;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 4px;
+}
+
+button {
+  border-radius: 999px;
+  cursor: pointer;
+  font: 700 13px / 1 var(--base-font);
+  padding: 11px 14px;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--flow-primary-light);
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.primary-action {
+  background: var(--flow-primary);
+  border: 0;
+  color: #041008;
+}
+
+.primary-action:hover {
+  filter: brightness(1.05);
+}
+
+.deny-action {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--text);
+}
+
+.deny-action:hover {
+  color: #ffd8de;
+}

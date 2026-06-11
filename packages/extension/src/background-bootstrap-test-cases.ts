@@ -6,6 +6,12 @@ import type { NativePortLike } from "./background-controller.js";
 import { NetworkObservationService } from "./network-observation-service.js";
 import { NetworkRequestTracker } from "./network-tracker.js";
 
+interface NotificationOptions {
+  readonly type: "basic";
+  readonly title: string;
+  readonly message: string;
+}
+
 export async function runCase01() {
   const port = new FakeNativePort();
   const browser = createFakeBrowserApi(port);
@@ -114,6 +120,31 @@ export async function runCase04() {
   expect(browser.scripting.calls).toEqual([]);
 }
 
+export async function runCase05() {
+  const port = new FakeNativePort();
+  const browser = createFakeBrowserApi(port);
+  const networkTracker = new NetworkRequestTracker();
+  const networkObservation = new NetworkObservationService({ browser, tracker: networkTracker });
+  const adapter = createBackgroundBrowserAdapter({ browser, networkObservation });
+
+  await expect(adapter.showNotification({ id: "approval", title: "Action needed", message: "Open Firefox." })).resolves.toEqual({
+    ok: true,
+    id: "approval",
+  });
+  await expect(adapter.openExtensionPage("popup.html")).resolves.toBe("moz-extension://fake/popup.html");
+  expect(browser.notifications.calls).toEqual([
+    {
+      id: "approval",
+      options: {
+        type: "basic",
+        title: "Action needed",
+        message: "Open Firefox.",
+      },
+    },
+  ]);
+  expect(browser.tabs.created).toEqual([{ active: true, url: "moz-extension://fake/popup.html" }]);
+}
+
 class FakeNativePort implements NativePortLike {
   readonly onMessage = createEvent<unknown>();
   readonly onDisconnect = createEvent<{ readonly message?: string } | undefined>();
@@ -131,11 +162,30 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
   const onRemoved = createEvent<number>();
   let sendMessageCalls = 0;
   const scriptingCalls: unknown[] = [];
+  const notificationCalls: {
+    readonly id: string | undefined;
+    readonly options: NotificationOptions;
+  }[] = [];
+
+  function createNotification(options: NotificationOptions): Promise<string>;
+  function createNotification(id: string, options: NotificationOptions): Promise<string>;
+  async function createNotification(idOrOptions: string | NotificationOptions, options?: NotificationOptions): Promise<string> {
+    if (typeof idOrOptions !== "string") {
+      notificationCalls.push({ id: undefined, options: idOrOptions });
+      return "generated-notification";
+    }
+    if (options === undefined) {
+      throw new Error("Missing notification options.");
+    }
+    notificationCalls.push({ id: idOrOptions, options });
+    return idOrOptions;
+  }
 
   return {
     runtime: {
       onMessage: runtimeOnMessage,
       connectNative: () => port,
+      getURL: (path) => `moz-extension://fake/${path}`,
       sendMessage: async <T = unknown>(): Promise<T> => {
         throw new Error("runtime.sendMessage is not implemented in this fake.");
       },
@@ -150,14 +200,19 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
     tabs: {
       failNextSendMessage: false,
       sendMessageFailure: undefined,
-      create: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
+      create: async function create(this: { readonly created: unknown[] }, options: unknown) {
+        this.created.push(options);
+        return { id: 1, index: 0, active: true, windowId: 1 };
+      },
       update: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
+      getCurrent: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
       get: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
       remove: async () => undefined,
       goBack: async () => undefined,
       goForward: async () => undefined,
       reload: async () => undefined,
       response: undefined,
+      created: [],
       sendMessage: async function sendMessage(this: {
         failNextSendMessage: boolean;
         response: unknown;
@@ -202,6 +257,10 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
       set: async (cookie: BrowserCookie) => cookie,
       remove: async () => undefined,
     },
+    notifications: {
+      calls: notificationCalls,
+      create: createNotification,
+    },
     webRequest: {
       onBeforeRequest,
       onCompleted,
@@ -232,6 +291,7 @@ type FakeBackgroundBrowserApi = Omit<BackgroundBrowserApi, "runtime" | "tabs" | 
     failNextSendMessage: boolean;
     response: unknown;
     sendMessageFailure: Error | undefined;
+    readonly created: unknown[];
     sendMessage(this: {
       failNextSendMessage: boolean;
       response: unknown;
@@ -241,6 +301,12 @@ type FakeBackgroundBrowserApi = Omit<BackgroundBrowserApi, "runtime" | "tabs" | 
   };
   readonly scripting: BackgroundBrowserApi["scripting"] & {
     readonly calls: readonly unknown[];
+  };
+  readonly notifications: BackgroundBrowserApi["notifications"] & {
+    readonly calls: readonly {
+      readonly id: string | undefined;
+      readonly options: NotificationOptions;
+    }[];
   };
   readonly webRequest: {
     readonly onBeforeRequest: FakeWebRequestEvent;

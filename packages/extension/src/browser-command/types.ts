@@ -1,4 +1,4 @@
-import type { DownloadResult, NetworkResult, CookieResult, RequestEnvelope, ResolvedTarget, TabSummary } from "@firefox-cli/protocol";
+import type { CookieResult, DownloadResult, NetworkResult, NotifyResult, RequestEnvelope, ResolvedTarget, TabSummary } from "@firefox-cli/protocol";
 import type { EvalExecutorPayload, EvalExecutorResult } from "../eval-executor.js";
 
 export interface BrowserWindowSnapshot {
@@ -49,6 +49,9 @@ export interface BackgroundBrowserAdapter {
   listNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<NonNullable<NetworkResult["requests"]>>;
   clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void>;
   waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void>;
+  showNotification(options: { readonly id?: string; readonly title: string; readonly message?: string }): Promise<NotifyResult>;
+  getExtensionInstance(): Promise<{ readonly extensionUrl: string; readonly focusedWindowId?: number }>;
+  openExtensionPage(path: string): Promise<string>;
   resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot>;
 }
 

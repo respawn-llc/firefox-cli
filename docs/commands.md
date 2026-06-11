@@ -26,6 +26,7 @@ Private windows are listed and readable. Mutating commands against private windo
 | `firefox-cli setup` | Print extension setup guidance and the native-host setup command. |
 | `firefox-cli setup native-host [--dry-run] [--json]` | Write or print the native messaging manifest. |
 | `firefox-cli doctor [--fix] [--json]` | Diagnose native-host manifest and extension connection state. |
+| `firefox-cli connect [--json]` | Request Firefox control approval and wait for the user's decision. |
 | `firefox-cli unpair` | Clear CLI/native-host pair state. |
 | `firefox-cli capabilities [--json]` | List supported and gated protocol capabilities. |
 
@@ -158,6 +159,7 @@ Example:
 | `firefox-cli network list|clear [--url glob] [--json]` | List or clear observed web requests. |
 | `firefox-cli console|errors list|clear [--json]` | List or clear page console/error capture buffers. |
 | `firefox-cli highlight <selector\|@ref> [--json]` | Outline an element. |
+| `firefox-cli notify [--id id] <title> [message...] [--json]` | Show a native Firefox notification. |
 | `firefox-cli set viewport <width> <height> [--json]` | Request a target browser window resize and report Firefox's observed window dimensions. Tiling/window-manager rules can prevent the requested size from taking effect. |
 | `firefox-cli diff url|title|snapshot <expected> [--json]` | Compare URL, title, or snapshot text with an expected value. |
 | `firefox-cli pdf <path> [--json]` | Returns `UNSUPPORTED_CAPABILITY`; Firefox saves PDFs through a browser dialog rather than a requested CLI path. |
@@ -166,4 +168,4 @@ Network route/mock/block and HAR export are unsupported.
 
 ## Unsupported Families
 
-The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `connect`, `inspect`, top-level `close`, `quit`, and `exit`.
+The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `inspect`, top-level `close`, `quit`, and `exit`.

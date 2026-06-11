@@ -5,7 +5,7 @@
 - the CLI/native host executable from the npm package;
 - the Firefox extension that connects Firefox to the native host.
 
-The CLI cannot inspect Firefox until the extension is loaded, the native messaging manifest is installed, and the extension popup has approved the pair.
+The CLI cannot inspect Firefox until the extension is loaded, the native messaging manifest is installed, and the user approves the Firefox control request.
 
 ## Install The CLI
 
@@ -60,9 +60,9 @@ firefox-cli doctor --fix
 
 `doctor --fix` repairs missing or stale native-host manifests.
 
-## Approve Pairing
+## Connect Firefox
 
-Open the `firefox-cli` extension popup in Firefox and approve the native host. The extension stores the pair token in Firefox extension storage; the native host stores pair state under the user-local `firefox-cli` state directory.
+Run `firefox-cli connect` and respond to the approval request in Firefox, or open the `firefox-cli` extension popup in Firefox and approve the native host. The extension stores the pair token in Firefox extension storage; the native host stores pair state under the user-local `firefox-cli` state directory.
 
 Verify the connection:
 
@@ -86,7 +86,7 @@ firefox-cli tab
 : Load or enable the extension and keep Firefox running.
 
 `Extension connection: not-approved`
-: Open the extension popup and approve the native host.
+: Run `firefox-cli connect` and respond to the approval request in Firefox.
 
 `Version mismatch`
 : Upgrade or rebuild the CLI, native host, and extension from the same package version.

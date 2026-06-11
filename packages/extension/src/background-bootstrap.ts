@@ -11,6 +11,8 @@ type RuntimeMessageListener = (message: RuntimeMessage) => Promise<unknown>;
 
 export type BackgroundBrowserApi = typeof browser;
 
+const PAIR_TOKEN_STORAGE_KEY = "firefoxCliPairToken";
+
 export interface BackgroundLifecycle {
   readonly controller: FirefoxCliBackgroundController;
   dispose(): void;
@@ -45,6 +47,7 @@ export function startBackground(options: {
     }),
     connectNative: (name) => options.browser.runtime.connectNative(name),
     productVersion: options.manifest.version,
+    storageAdapter: createBackgroundStorageAdapter(options.browser),
     ...createControllerOptions(options.controllerOptions),
   });
 
@@ -65,6 +68,19 @@ export function startBackground(options: {
       networkObservation.dispose();
       options.browser.tabs.onRemoved?.removeListener(onTabRemoved);
       controller.stop();
+    },
+  };
+}
+
+function createBackgroundStorageAdapter(browser: BackgroundBrowserApi): BackgroundStorageAdapter {
+  return {
+    getPairToken: async () => {
+      const values = await browser.storage.local.get(PAIR_TOKEN_STORAGE_KEY);
+      const value = values[PAIR_TOKEN_STORAGE_KEY];
+      return typeof value === "string" && value.length > 0 ? value : null;
+    },
+    setPairToken: async (token) => {
+      await browser.storage.local.set({ [PAIR_TOKEN_STORAGE_KEY]: token });
     },
   };
 }

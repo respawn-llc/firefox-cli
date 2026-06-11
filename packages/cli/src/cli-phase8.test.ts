@@ -114,6 +114,10 @@ describe("runCli Phase 8 commands", () => {
         expected: { command: "highlight", params: { selector: "#save", durationMs: 1000 } },
       },
       {
+        argv: ["notify", "--id", "approval", "Action needed", "Open Firefox to approve control.", "--json"],
+        expected: { command: "notify", params: { id: "approval", title: "Action needed", message: "Open Firefox to approve control." } },
+      },
+      {
         argv: ["pdf", "page.pdf", "--json"],
         expected: { command: "pdf", params: { path: join(cwd, "page.pdf") } },
       },

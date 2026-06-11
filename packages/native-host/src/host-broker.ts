@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { writeFile } from "node:fs/promises";
 import {
   MAX_SCREENSHOT_BYTES,
+  commandAllowedBeforeApproval,
   createLocalComponentIdentity,
   createProtocolSession,
   createRequestProtocolMismatchError,
@@ -150,9 +151,11 @@ export class NativeHostBroker {
       return { ok: false, response: cliSession.createErrorResponseForRequest(request, extensionSession.error) };
     }
 
-    const approval = await this.#verifyExtensionApproval(connection);
-    if (!approval.ok) {
-      return { ok: false, response: cliSession.createErrorResponseForRequest(request, approval.error) };
+    if (!commandAllowedBeforeApproval(request.command)) {
+      const approval = await this.#verifyExtensionApproval(connection);
+      if (!approval.ok) {
+        return { ok: false, response: cliSession.createErrorResponseForRequest(request, approval.error) };
+      }
     }
 
     if (!getRequestProtocolCompatibility(request, extensionSession.value.protocolVersion).compatible) {
@@ -176,7 +179,7 @@ export class NativeHostBroker {
         ok: false,
         error: {
           code: "NOT_APPROVED",
-          message: "Approve firefox-cli in the extension popup before running CLI commands.",
+          message: "Run `firefox-cli connect` before running Firefox control commands.",
         },
       };
     }

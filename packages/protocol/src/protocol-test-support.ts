@@ -61,6 +61,7 @@ export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliR
   console: [{ id: "console", path: ["console"], batch: true }],
   errors: [{ id: "errors", path: ["errors"], batch: true }],
   highlight: [{ id: "highlight", path: ["highlight"], batch: true }],
+  notify: [{ id: "notify", path: ["notify"], batch: true }],
   pdf: [{ id: "pdf", path: ["pdf"], batch: true }],
   "set.viewport": [{ id: "set.viewport", path: ["set", "viewport"], batch: true }],
   diff: [{ id: "diff", path: ["diff"], batch: true }],
@@ -80,4 +81,6 @@ export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliR
   scroll: [{ id: "scroll", path: ["scroll"], batch: true }],
   scrollintoview: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true }],
   swipe: [{ id: "swipe", path: ["swipe"], batch: true }],
+  "pair.requestApproval": [{ id: "connect", path: ["connect"], batch: false }],
+  "pair.openApproval": [],
 } as const;

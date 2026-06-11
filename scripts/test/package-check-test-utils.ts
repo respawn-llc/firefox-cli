@@ -90,8 +90,11 @@ export async function createPackageRoot(
     await writeFile(join(packageRoot, "extension/development/background.js"), "console.log('bg');\n");
     await writeFile(join(packageRoot, "extension/development/content.js"), "console.log('cs');\n");
     await writeFile(join(packageRoot, "extension/development/popup.js"), "console.log('popup');\n");
+    await writeFile(join(packageRoot, "extension/development/approval-request.js"), "console.log('approval');\n");
     await writeFile(join(packageRoot, "extension/development/popup.html"), "<!doctype html>\n");
     await writeFile(join(packageRoot, "extension/development/popup.css"), "body {}\n");
+    await writeFile(join(packageRoot, "extension/development/approval-request.html"), "<!doctype html>\n");
+    await writeFile(join(packageRoot, "extension/development/approval-request.css"), "body {}\n");
   }
 
   if (options.includeBinary !== false) {

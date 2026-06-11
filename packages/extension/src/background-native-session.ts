@@ -121,3 +121,7 @@ export class NativeSessionService {
     return getMessageProtocolVersion(message);
   }
 }
+
+export function isHelloResponse(command: CommandId, response: ResponseEnvelope): response is ResponseEnvelope<"hello"> {
+  return command === "hello" && (!response.ok || ("accepted" in response.result && "peer" in response.result));
+}

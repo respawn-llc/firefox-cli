@@ -1,5 +1,5 @@
 import { getExtensionPermissionRequirements } from "@firefox-cli/protocol";
-import type { BackgroundBrowserAdapter } from "./background-controller.js";
+import type { BackgroundBrowserAdapter } from "./browser-commands.js";
 import { createBrowserCommandDeadline } from "./browser-command/deadline.js";
 import { createContentScriptInjectionState, deliverContentScriptRequest, type ContentScriptInjectionState } from "./content-script-delivery.js";
 import { executeEvalInPage } from "./eval-executor.js";
@@ -168,6 +168,33 @@ export function createBackgroundBrowserAdapter(options: {
           await deadline.sleep(100, timeoutMessage);
         }
       });
+    },
+    showNotification: async (notificationOptions) => {
+      const payload = {
+        type: "basic",
+        title: notificationOptions.title,
+        message: notificationOptions.message ?? "",
+      } as const;
+      return {
+        ok: true,
+        id:
+          notificationOptions.id === undefined
+            ? await options.browser.notifications.create(payload)
+            : await options.browser.notifications.create(notificationOptions.id, payload),
+      };
+    },
+    getExtensionInstance: async () => {
+      const windows = await options.browser.windows.getAll({ populate: false });
+      const focused = windows.find((window) => window.focused === true);
+      return {
+        extensionUrl: options.browser.runtime.getURL(""),
+        ...(focused?.id === undefined ? {} : { focusedWindowId: focused.id }),
+      };
+    },
+    openExtensionPage: async (path) => {
+      const url = options.browser.runtime.getURL(path);
+      await options.browser.tabs.create({ active: true, url });
+      return url;
     },
     resizeWindow: async (windowId, size) => {
       await options.browser.windows.update(windowId, size);

@@ -39,6 +39,7 @@ describe("protocol command metadata", () => {
       "cookies",
       "downloads",
       "nativeMessaging",
+      "notifications",
       "scripting",
       "storage",
       "tabs",
@@ -58,6 +59,12 @@ describe("protocol command metadata", () => {
     });
     expect(commandRequiresExtensionHostAccess("click")).toBe(true);
     expect(commandRequiresExtensionHostAccess("download")).toBe(false);
+    expect(commandRequiresExtensionHostAccess("notify")).toBe(false);
+    expect(requirements.commands.find((requirement) => requirement.command === "notify")).toMatchObject({
+      securityReasons: ["notifications"],
+      manifestPermissions: ["notifications"],
+      networkObservation: false,
+    });
     expect(requirements.commands.find((requirement) => requirement.command === "network")).toMatchObject({
       securityReasons: ["network-observation"],
       manifestPermissions: ["webRequest"],

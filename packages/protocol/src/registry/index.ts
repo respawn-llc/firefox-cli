@@ -79,6 +79,10 @@ export const commandSchemas = assembleCommandRegistry(
 
 export type CommandId = keyof typeof commandSchemas;
 
+export function commandAllowedBeforeApproval(command: CommandId): boolean {
+  return command === "pair.requestApproval" || command === "pair.openApproval";
+}
+
 type CommandsWithContentPolicy<P> = {
   readonly [C in CommandId]: (typeof commandSchemas)[C]["content"] extends P ? C : never;
 }[CommandId];

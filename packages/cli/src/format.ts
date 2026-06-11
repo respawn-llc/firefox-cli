@@ -198,6 +198,14 @@ const formatJsonOrObject: CliResponseFormatter = (response, json) => {
   return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${JSON.stringify(response.result)}\n`);
 };
 
+export const formatApprovalRequest: CliResponseFormatter<"pair.requestApproval"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok("User approved the request\n");
+};
+
 export const cliResponseFormatters = {
   capabilities: formatCapabilities,
   "tab-list": formatTabList,

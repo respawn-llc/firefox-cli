@@ -68,7 +68,7 @@ describe("protocol command metadata", () => {
     }
 
     const nonBatchableCommands = commandIds().filter((command) => !isBatchableCommandId(command));
-    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset"]);
+    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset", "pair.requestApproval", "pair.openApproval"]);
   });
 
   it("marks only required tab/window selectors for protocol batch default targets", () => {
@@ -169,6 +169,7 @@ describe("protocol command metadata", () => {
       "clipboard",
       "cookies",
       "network",
+      "notify",
       "click",
       "dblclick",
       "focus",
@@ -225,6 +226,14 @@ describe("request protocol compatibility", () => {
       },
     });
     expect(getRequestProtocolRequirement(createRequest("wait", { kind: "load-state", state: "complete" }))).toBeUndefined();
+    expect(getCommandCompatibilityMetadata("notify")).toEqual({
+      requirements: [
+        {
+          minProtocolVersion: 4,
+          reason: "Native notifications were added in protocol v4.",
+        },
+      ],
+    });
   });
 
   it("requires protocol v2 for scoped network semantics", () => {
@@ -257,6 +266,64 @@ describe("request protocol compatibility", () => {
         },
       });
       expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 2 }, { protocolVersion: 2 })).toMatchObject({
+        ok: true,
+      });
+    }
+  });
+
+  it("requires protocol v4 for CLI approval requests", () => {
+    const request = createRequest("pair.requestApproval", {}, "approval-v4");
+
+    expect(getRequestProtocolCompatibility(request, 3)).toMatchObject({
+      compatible: false,
+      requiredProtocolVersion: 4,
+    });
+    expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 3 }, { protocolVersion: 3 })).toMatchObject({
+      ok: false,
+      error: {
+        code: "VERSION_MISMATCH",
+        details: {
+          requiredProtocolVersion: 4,
+          negotiatedProtocolVersion: 3,
+        },
+      },
+    });
+    expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 4 }, { protocolVersion: 4 })).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("requires protocol v4 for native notifications, including batch steps", () => {
+    const notify = createRequest("notify", { title: "Action needed" }, "notify-v4");
+    const batch = createRequest(
+      "batch",
+      {
+        steps: [
+          { command: "snapshot", params: {} },
+          { command: "notify", params: { title: "Action needed" } },
+        ],
+      },
+      "notify-batch-v4",
+    );
+
+    for (const request of [notify, batch]) {
+      expect(getRequestProtocolCompatibility(request, 3)).toMatchObject({
+        compatible: false,
+        requiredProtocolVersion: 4,
+        reason: "Native notifications were added in protocol v4.",
+      });
+      expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 3 }, { protocolVersion: 3 })).toMatchObject({
+        ok: false,
+        error: {
+          code: "VERSION_MISMATCH",
+          details: {
+            requiredProtocolVersion: 4,
+            negotiatedProtocolVersion: 3,
+            reason: "Native notifications were added in protocol v4.",
+          },
+        },
+      });
+      expect(parseBoundaryRequest("host-to-extension", { ...request, protocolVersion: 4 }, { protocolVersion: 4 })).toMatchObject({
         ok: true,
       });
     }

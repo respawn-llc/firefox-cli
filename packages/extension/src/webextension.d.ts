@@ -35,11 +35,12 @@ declare const browser: {
       };
       postMessage(message: unknown): void;
     };
+    getURL(path: string): string;
     sendMessage<T = unknown>(message: unknown): Promise<T>;
     reload(): void;
   };
   readonly windows: {
-    getAll(options: { readonly populate: true }): Promise<readonly BrowserWindow[]>;
+    getAll(options: { readonly populate: boolean }): Promise<readonly BrowserWindow[]>;
     create(options: { readonly url?: string }): Promise<BrowserWindow>;
     update(windowId: number, options: { readonly focused?: boolean; readonly width?: number; readonly height?: number }): Promise<BrowserWindow>;
     remove(windowId: number): Promise<void>;
@@ -47,6 +48,7 @@ declare const browser: {
   readonly tabs: {
     create(options: { readonly active?: boolean; readonly url?: string; readonly windowId?: number }): Promise<BrowserTab>;
     update(tabId: number, options: { readonly active?: boolean; readonly url?: string }): Promise<BrowserTab>;
+    getCurrent(): Promise<BrowserTab | undefined>;
     get(tabId: number): Promise<BrowserTab>;
     remove(tabId: number): Promise<void>;
     goBack(tabId: number): Promise<void>;
@@ -106,6 +108,17 @@ declare const browser: {
       readonly path?: string;
     }): Promise<BrowserCookie>;
     remove(options: { readonly url: string; readonly name: string }): Promise<unknown>;
+  };
+  readonly notifications: {
+    create(options: { readonly type: "basic"; readonly title: string; readonly message: string }): Promise<string>;
+    create(
+      notificationId: string,
+      options: {
+        readonly type: "basic";
+        readonly title: string;
+        readonly message: string;
+      },
+    ): Promise<string>;
   };
   readonly webRequest?: {
     readonly onBeforeRequest?: BrowserWebRequestEvent;
