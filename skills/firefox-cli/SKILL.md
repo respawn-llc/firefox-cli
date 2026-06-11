@@ -1,6 +1,6 @@
 ---
 name: firefox-cli
-description: Control the user's Firefox from a terminal. Use when your task needs the user's browser or authenticated session, page navigation, tab/window control, screenshots, DOM reads, waits, or page interactions in Firefox. Do not use as web search replacement.
+description: Control the user's Firefox from a terminal. Use when your task needs the user's browser or authenticated session, page navigation, tab/window control, screenshots, DOM reads, waits, or page interactions in Firefox. Do not use it as a web search replacement.
 ---
 
 `firefox-cli` gives agents terminal access to the user's real authenticated Firefox session through the installed Firefox extension.
@@ -64,6 +64,6 @@ firefox-cli doctor -h
 ## Usage Rules
 
 - Element refs from `snapshot -i` are useful handles for follow-up actions, but page navigation or reload can make them stale.
-- Be careful with user's data: the Firefox you're using contains real cookies, auth credentials, logins, tabs and PII. Under no circumstance perform any actions that may harm the user or exfiltrate their data. Under no circumstance perform any payments, cash transfers, other dangeorous, destructive, irreversible operations, or leak PII without asking for user's explicit approval before every such action.
-- If you need to work with FF, but you see interference (tabs changing, real user tabs being open) or the user is unhappy, prefer opening a new FF window for yourself, because every action you do is visibly reflected in the browser window and can disrupt user's work. The good side of that is that you can demonstrate something to the user in their real browser, such as running demos, opening pages, showing your work etc.
-- If the cli denies requests with approval and asks you to `firefox-cli connect`, invoke that **once** to show the user a permission prompt. The command will exit once it's granted. Do not attempt to circumvent denials in any way.
+- Be careful with the user's data: the Firefox instance you're using contains real cookies, auth credentials, logins, tabs, and PII. Under no circumstances should you perform actions that may harm the user or exfiltrate their data. Under no circumstances should you perform payments, cash transfers, other dangerous, destructive, or irreversible operations, or leak PII without asking for the user's explicit approval before each such action.
+- If you need to work with Firefox, but you see interference, such as tabs changing or real user tabs being open, or the user is unhappy, prefer opening a new Firefox window for yourself. Every action you take is visibly reflected in the browser window and can disrupt the user's work. The upside is that you can demonstrate something to the user in their real browser, such as running demos, opening pages, or showing your work.
+- If the CLI denies requests with approval and asks you to run `firefox-cli connect`, invoke that **once** to show the user a permission prompt. The command will exit once approval is granted. Do not attempt to circumvent denials in any way.
