@@ -38,6 +38,16 @@ firefox-cli doctor
 
 Install the agent skill so coding agents know when `firefox-cli` is available and how to use it.
 
+### skills.sh
+
+[![skills.sh](https://skills.sh/b/respawn-llc/firefox-cli)](https://skills.sh/respawn-llc/firefox-cli)
+
+Install with the `skills` CLI:
+
+```sh
+npx skills@latest add respawn-llc/firefox-cli
+```
+
 ### Claude Code
 
 Add the Respawn marketplace, then install the plugin:
