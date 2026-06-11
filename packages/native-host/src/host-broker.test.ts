@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, createProtocolSession, createOkResponse, createRequest, kernelCapabilities, parseBoundaryResponse } from "@firefox-cli/protocol";
+import {
+  PROTOCOL_VERSION,
+  createProtocolSession,
+  createOkResponse,
+  createRequest,
+  kernelCapabilities,
+  parseBoundaryResponse,
+  type RequestEnvelope,
+} from "@firefox-cli/protocol";
 import { FIREFOX_CLI_EXTENSION_ID } from "./host-launch.js";
 import { createHostIdentity } from "./pair-state.js";
 import { NativeHostBroker } from "./host-broker.js";
@@ -153,6 +161,28 @@ describe("NativeHostBroker", () => {
         message: "Approve firefox-cli in the extension popup before running CLI commands.",
       },
     });
+  });
+
+  it("allows opening the approval UI before extension approval", async () => {
+    const request = createRequest("pair.openApproval", {}, "approval-1");
+    let forwardedRequest: RequestEnvelope | undefined;
+    const broker = new NativeHostBroker({
+      hostIdentity: createHostIdentity({
+        extensionId: FIREFOX_CLI_EXTENSION_ID,
+        generateId: () => "host-1",
+      }),
+    });
+    broker.connectExtension({
+      approved: false,
+      token: undefined,
+      send: async (forwarded) => {
+        forwardedRequest = forwarded;
+        return createOkResponse(forwarded, { ok: true, url: "moz-extension://test/popup.html" });
+      },
+    });
+
+    await expect(broker.handleCliRequest(request)).resolves.toEqual(createOkResponse(request, { ok: true, url: "moz-extension://test/popup.html" }));
+    expect(forwardedRequest).toMatchObject({ command: "pair.openApproval" });
   });
 
   it("rejects CLI requests when the extension pair token is invalid", async () => {

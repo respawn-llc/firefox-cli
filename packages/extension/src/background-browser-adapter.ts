@@ -183,6 +183,11 @@ export function createBackgroundBrowserAdapter(options: {
             : await options.browser.notifications.create(notificationOptions.id, payload),
       };
     },
+    openExtensionPage: async (path) => {
+      const url = options.browser.runtime.getURL(path);
+      await options.browser.tabs.create({ active: true, url });
+      return url;
+    },
     resizeWindow: async (windowId, size) => {
       await options.browser.windows.update(windowId, size);
       const windows = await options.browser.windows.getAll({ populate: true });

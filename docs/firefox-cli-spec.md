@@ -22,7 +22,7 @@ The happy path:
 1. User installs the npm package and gets one executable: `firefox-cli`.
 2. User manually installs or temporarily loads the Firefox extension from the URL printed by `firefox-cli setup`.
 3. User runs `firefox-cli setup native-host` or `firefox-cli doctor --fix` to register the native messaging host.
-4. User opens the extension popup and approves the first connection after seeing native-host identity details.
+4. User runs `firefox-cli approve` or opens the extension popup and approves the first connection after seeing native-host identity details.
 5. Commands control the active Firefox tab/window unless a command or flag selects another target.
 
 Example workflow:
@@ -96,7 +96,7 @@ Unpaired handshake:
 
 1. Extension connects to the native host.
 2. Native host sends identity metadata: host name, executable path, package version, protocol min/max, native manifest path, extension ID, and a generated pairing nonce.
-3. Extension popup shows the metadata and asks the user to approve first use.
+3. The extension approval UI shows the metadata and asks the user to approve first use.
 4. Until approval, the native host rejects or queues CLI commands with `NOT_APPROVED`.
 5. On approval, extension and native host persist the minimum pair state needed to reconnect.
 
@@ -138,7 +138,7 @@ Keep the extension UI smaller than a control panel. The popup should show:
 - Approval/reset action for the first connection.
 - Copy diagnostics action.
 
-Do not mirror CLI commands in the popup. Setup text should tell users to click the Firefox extension popup to approve; do not depend on auto-opening the popup.
+Do not mirror CLI commands in the popup. Setup text can tell users to run `firefox-cli approve` or click the Firefox extension popup to approve.
 
 ## Permissions
 
@@ -481,7 +481,7 @@ Errors should be concise and actionable:
 - If extension is not installed: print the matching extension download URL.
 - If native host is not registered: print `firefox-cli setup native-host`.
 - If Firefox is not running or extension is disconnected: tell the user to open Firefox and check the extension popup.
-- If first-use approval is pending: tell the user to open the extension popup and approve.
+- If first-use approval is pending: tell the user to run `firefox-cli approve` or open the extension popup and approve.
 - If a page is restricted: name the restriction and suggest trying a normal web page/tab.
 - If a ref is stale: tell the user to run `firefox-cli snapshot -i` again.
 - If a command is unsupported: name the Firefox limitation or missing implementation gate.

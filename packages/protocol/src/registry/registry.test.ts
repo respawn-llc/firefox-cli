@@ -76,6 +76,7 @@ const expectedCommandIds = [
   "swipe",
   "pair.approve",
   "pair.reset",
+  "pair.openApproval",
 ] as const satisfies readonly CommandId[];
 
 type Assert<T extends true> = T;

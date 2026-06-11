@@ -50,6 +50,7 @@ export interface BackgroundBrowserAdapter {
   clearNetworkRequests(options: { readonly tabId: number; readonly urlGlob?: string }): Promise<void>;
   waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void>;
   showNotification(options: { readonly id?: string; readonly title: string; readonly message?: string }): Promise<NotifyResult>;
+  openExtensionPage(path: string): Promise<string>;
   resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot>;
 }
 

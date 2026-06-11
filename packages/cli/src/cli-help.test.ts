@@ -3,7 +3,7 @@ import { baseDependencies } from "./cli-test-support.js";
 import { runCli } from "./index.js";
 
 describe("CLI help", () => {
-  it("renders workflow-oriented root help without setup approval warnings", async () => {
+  it("renders workflow-oriented root help without popup approval warnings", async () => {
     const output = await runCli(["-h"], baseDependencies());
 
     expect(output.exitCode).toBe(0);
@@ -13,9 +13,8 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("Act on elements:");
     expect(output.stdout).toContain("firefox-cli snapshot -i");
     expect(output.stdout).toContain("firefox-cli <command> -h");
-    expect(output.stdout).not.toContain("approve");
-    expect(output.stdout).not.toContain("approval");
     expect(output.stdout).not.toContain("extension popup");
+    expect(output.stdout).toContain("firefox-cli approve");
   });
 
   it("renders grouped contextual help for command families", async () => {

@@ -112,6 +112,7 @@ export function createTestBrowserAdapter(
       ok: true,
       id: options.id ?? "notification-1",
     }),
+    openExtensionPage: async (path) => `moz-extension://test/${path}`,
     resizeWindow: async () => {
       throw new Error("not implemented");
     },

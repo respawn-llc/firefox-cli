@@ -178,6 +178,33 @@ export async function runCase05() {
 
 export async function runCase06() {
   const port = new FakeNativePort();
+  const controller = new FirefoxCliBackgroundController({
+    browserAdapter: createTestBrowserAdapter([], {
+      openExtensionPage: async (path) => `moz-extension://test/${path}`,
+    }),
+    connectNative: () => port,
+    productVersion: "0.0.0",
+  });
+  controller.start();
+  await completeNativeHello(port);
+
+  const request = createRequest("pair.openApproval", {}, "approval-page-1");
+  port.emitMessage(request);
+  await flushPromises();
+
+  expect(port.messages[1]).toEqual({
+    protocolVersion: request.protocolVersion,
+    id: "approval-page-1",
+    ok: true,
+    result: {
+      ok: true,
+      url: "moz-extension://test/popup.html",
+    },
+  });
+}
+
+export async function runCase07() {
+  const port = new FakeNativePort();
   const browserCalls: string[] = [];
   const controller = new FirefoxCliBackgroundController({
     browserAdapter: createTestBrowserAdapter(
@@ -237,7 +264,7 @@ export async function runCase06() {
   expect(browserCalls).toEqual([]);
 }
 
-export async function runCase07() {
+export async function runCase08() {
   const port = new FakeNativePort();
   const browserCalls: string[] = [];
   const controller = new FirefoxCliBackgroundController({

@@ -79,6 +79,28 @@ describe("runCli", () => {
     });
   });
 
+  it("builds approval page requests", async () => {
+    const output = await runCli(["approve", "--json"], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "pair.openApproval",
+          params: {},
+        });
+        return createOkResponse(request, {
+          ok: true,
+          url: "moz-extension://test/popup.html",
+        });
+      },
+    });
+
+    expect(output).toEqual({
+      exitCode: 0,
+      stdout: `${JSON.stringify({ ok: true, url: "moz-extension://test/popup.html" }, null, 2)}\n`,
+      stderr: "",
+    });
+  });
+
   it("validates injected transport response payloads before formatting", async () => {
     const output = await runCli(["capabilities"], {
       ...baseDependencies(),

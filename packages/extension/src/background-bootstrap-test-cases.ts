@@ -131,6 +131,7 @@ export async function runCase05() {
     ok: true,
     id: "approval",
   });
+  await expect(adapter.openExtensionPage("popup.html")).resolves.toBe("moz-extension://fake/popup.html");
   expect(browser.notifications.calls).toEqual([
     {
       id: "approval",
@@ -141,6 +142,7 @@ export async function runCase05() {
       },
     },
   ]);
+  expect(browser.tabs.created).toEqual([{ active: true, url: "moz-extension://fake/popup.html" }]);
 }
 
 class FakeNativePort implements NativePortLike {
@@ -183,6 +185,7 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
     runtime: {
       onMessage: runtimeOnMessage,
       connectNative: () => port,
+      getURL: (path) => `moz-extension://fake/${path}`,
       sendMessage: async <T = unknown>(): Promise<T> => {
         throw new Error("runtime.sendMessage is not implemented in this fake.");
       },
@@ -197,7 +200,10 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
     tabs: {
       failNextSendMessage: false,
       sendMessageFailure: undefined,
-      create: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
+      create: async function create(this: { readonly created: unknown[] }, options: unknown) {
+        this.created.push(options);
+        return { id: 1, index: 0, active: true, windowId: 1 };
+      },
       update: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
       get: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
       remove: async () => undefined,
@@ -205,6 +211,7 @@ function createFakeBrowserApi(port: NativePortLike): FakeBackgroundBrowserApi {
       goForward: async () => undefined,
       reload: async () => undefined,
       response: undefined,
+      created: [],
       sendMessage: async function sendMessage(this: {
         failNextSendMessage: boolean;
         response: unknown;
@@ -283,6 +290,7 @@ type FakeBackgroundBrowserApi = Omit<BackgroundBrowserApi, "runtime" | "tabs" | 
     failNextSendMessage: boolean;
     response: unknown;
     sendMessageFailure: Error | undefined;
+    readonly created: unknown[];
     sendMessage(this: {
       failNextSendMessage: boolean;
       response: unknown;

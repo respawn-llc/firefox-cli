@@ -1,4 +1,11 @@
-import { pairApproveParamsSchema, pairApproveResultSchema, pairResetParamsSchema, pairResetResultSchema } from "../pairing.js";
+import {
+  pairApproveParamsSchema,
+  pairApproveResultSchema,
+  pairOpenApprovalParamsSchema,
+  pairOpenApprovalResultSchema,
+  pairResetParamsSchema,
+  pairResetResultSchema,
+} from "../pairing.js";
 import { defineCommandEntries } from "./define.js";
 
 export const pairingCommandEntries = defineCommandEntries({
@@ -25,5 +32,17 @@ export const pairingCommandEntries = defineCommandEntries({
     timeout: "none",
     batch: { allowed: false },
     cliRoutes: [],
+  },
+  "pair.openApproval": {
+    params: pairOpenApprovalParamsSchema,
+    result: pairOpenApprovalResultSchema,
+    status: "mvp",
+    owner: "extension",
+    target: "none",
+    content: "never",
+    action: false,
+    timeout: "none",
+    batch: { allowed: false },
+    cliRoutes: [{ id: "approve", path: ["approve"], batch: false }],
   },
 });

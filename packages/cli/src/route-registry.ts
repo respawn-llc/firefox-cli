@@ -33,6 +33,7 @@ import {
 } from "./commands/content.js";
 import { buildEvalRequest } from "./commands/eval.js";
 import { buildCapabilitiesRequest, buildNavigationRequest, buildOpenRequest } from "./commands/navigation.js";
+import { buildOpenApprovalRequest } from "./commands/pairing.js";
 import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
@@ -97,6 +98,7 @@ const routeFormatterSpecs = {
   "set.viewport": routeFormatter("set.viewport", "json-object", cliResponseFormatters["json-object"]),
   diff: routeFormatter("diff", "json-object", cliResponseFormatters["json-object"]),
   batch: routeFormatter("batch", "batch", cliResponseFormatters.batch),
+  approve: routeFormatter("pair.openApproval", "json-object", cliResponseFormatters["json-object"]),
   click: routeFormatter("click", "action", cliResponseFormatters.action),
   dblclick: routeFormatter("dblclick", "action", cliResponseFormatters.action),
   focus: routeFormatter("focus", "action", cliResponseFormatters.action),
@@ -191,6 +193,7 @@ export const cliRouteBindings = {
   "set.viewport": bindCliRoute("set.viewport", "firefox-cli set viewport <width> <height> [--json]", buildSetViewportRequest),
   diff: bindCliRoute("diff", "firefox-cli diff url|title|snapshot <expected> [--json]", buildDiffRequest),
   batch: bindCliRoute("batch", "firefox-cli batch <json> | --stdin [--bail] [--json]", buildBatchRequest),
+  approve: bindCliRoute("approve", "firefox-cli approve [--json]", buildOpenApprovalRequest),
   click: bindCliRoute("click", "firefox-cli click <selector|@ref> [--json]", buildElementActionRequest),
   dblclick: bindCliRoute("dblclick", "firefox-cli dblclick <selector|@ref> [--json]", buildElementActionRequest),
   focus: bindCliRoute("focus", "firefox-cli focus <selector|@ref> [--json]", buildElementActionRequest),

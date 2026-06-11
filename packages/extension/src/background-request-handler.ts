@@ -1,4 +1,5 @@
 import {
+  commandAllowedBeforeApproval,
   createLocalComponentIdentity,
   kernelCapabilities,
   localProtocolVersionRange,
@@ -35,7 +36,7 @@ export function handleRequest(options: {
     });
   }
 
-  if (!approved) {
+  if (!approved && !commandAllowedBeforeApproval(request.command)) {
     return protocolSession.createErrorResponse(request.id, {
       code: "NOT_APPROVED",
       message: "Approve firefox-cli in the extension popup before running CLI commands.",

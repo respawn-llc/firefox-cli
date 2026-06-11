@@ -70,6 +70,9 @@ export function createUnconfiguredBrowserAdapter(): BackgroundBrowserAdapter {
     showNotification: async () => {
       throw new Error("Browser adapter is not configured.");
     },
+    openExtensionPage: async () => {
+      throw new Error("Browser adapter is not configured.");
+    },
     resizeWindow: async () => {
       throw new Error("Browser adapter is not configured.");
     },

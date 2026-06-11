@@ -62,7 +62,7 @@ firefox-cli doctor --fix
 
 ## Approve Pairing
 
-Open the `firefox-cli` extension popup in Firefox and approve the native host. The extension stores the pair token in Firefox extension storage; the native host stores pair state under the user-local `firefox-cli` state directory.
+Run `firefox-cli approve` or open the `firefox-cli` extension popup in Firefox and approve the native host. The extension stores the pair token in Firefox extension storage; the native host stores pair state under the user-local `firefox-cli` state directory.
 
 Verify the connection:
 

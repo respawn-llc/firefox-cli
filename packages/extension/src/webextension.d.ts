@@ -35,6 +35,7 @@ declare const browser: {
       };
       postMessage(message: unknown): void;
     };
+    getURL(path: string): string;
     sendMessage<T = unknown>(message: unknown): Promise<T>;
     reload(): void;
   };

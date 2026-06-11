@@ -68,7 +68,7 @@ describe("protocol command metadata", () => {
     }
 
     const nonBatchableCommands = commandIds().filter((command) => !isBatchableCommandId(command));
-    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset"]);
+    expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset", "pair.openApproval"]);
   });
 
   it("marks only required tab/window selectors for protocol batch default targets", () => {

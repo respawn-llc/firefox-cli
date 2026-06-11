@@ -17,6 +17,7 @@ interface HelpGroup {
 
 const routeHelpSpecs = {
   capabilities: helpSpec("List supported command families and browser capability metadata."),
+  approve: helpSpec("Open the existing extension approval UI in a Firefox tab."),
   "tab.list": helpSpec("List tabs with indexes, ids, active state, titles, and URLs.", [
     "Use listed indexes with `--tab <index>` and ids with `--tab id:<id>`.",
   ]),
@@ -96,7 +97,7 @@ const helpGroups: readonly HelpGroup[] = [
   {
     title: "Setup and diagnostics",
     summary: "Install, repair, inspect, and reset the Firefox/native-host connection.",
-    routes: ["capabilities"],
+    routes: ["capabilities", "approve"],
   },
   {
     title: "Tabs, windows, and navigation",
@@ -199,6 +200,7 @@ const builtinHelpSpecs = new Map<string, HelpSpec>([
 
 const commandExamples: Partial<Record<RouteBindingId, readonly string[]>> = {
   "tab.list": ["firefox-cli tab --json"],
+  approve: ["firefox-cli approve"],
   "tab.new": ["firefox-cli tab new https://example.com"],
   "tab.select": ["firefox-cli tab select 1", "firefox-cli tab select id:42"],
   open: ["firefox-cli open https://example.com", "firefox-cli open --new-tab https://example.com"],

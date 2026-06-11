@@ -189,6 +189,11 @@ describe("browser command handling", () => {
       result: { id: "approval" },
     });
     expect(adapter.notifications).toEqual([{ id: "approval", title: "Action needed", message: "Open Firefox to approve control." }]);
+    await expect(handleBrowserRequest(createRequest("pair.openApproval", {}, "approval-page-1"), adapter)).resolves.toMatchObject({
+      ok: true,
+      result: { url: "moz-extension://test/popup.html" },
+    });
+    expect(adapter.extensionPages).toEqual(["popup.html"]);
 
     await expect(handleBrowserRequest(createRequest("set.viewport", { width: 1200, height: 800 }, "viewport-1"), adapter)).resolves.toMatchObject({
       ok: true,

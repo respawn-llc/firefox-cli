@@ -11,7 +11,7 @@ import { BrowserCommandError } from "../browser-command/errors.js";
 import { toOrderedWindows, toWindowSummary } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
-type Phase8BrowserCommand = "download" | "clipboard" | "cookies" | "network" | "notify" | "pdf" | "set.viewport";
+type Phase8BrowserCommand = "download" | "clipboard" | "cookies" | "network" | "notify" | "pair.openApproval" | "pdf" | "set.viewport";
 
 export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
   download: async (request, adapter) => {
@@ -109,6 +109,12 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
       ...(request.params.message === undefined ? {} : { message: request.params.message }),
     });
     return createOkResponse(request, result);
+  },
+  "pair.openApproval": async (request, adapter) => {
+    return createOkResponse(request, {
+      ok: true,
+      url: await adapter.openExtensionPage("popup.html"),
+    });
   },
   pdf: async (request) => {
     return createErrorResponseForRequest(request, {

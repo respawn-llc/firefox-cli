@@ -83,6 +83,7 @@ function createFakeBrowserApi(port: NativePortLike, initialStorage: Record<strin
     runtime: {
       onMessage: runtimeOnMessage,
       connectNative: () => port,
+      getURL: (path) => `moz-extension://fake/${path}`,
       sendMessage: async <T = unknown>(): Promise<T> => {
         throw new Error("runtime.sendMessage is not implemented in this fake.");
       },
