@@ -65,7 +65,7 @@ export async function verifySignedExtensionSignature(input: SignedExtensionSigna
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Signed extension PKCS7 verification failed: ${message}`);
+      throw new Error(`Signed extension PKCS7 verification failed: ${message}`, { cause: error });
     }
 
     if (result.exitCode !== 0) {

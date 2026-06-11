@@ -19,6 +19,7 @@ interface PendingApprovalRequest {
 
 export interface ApprovalRequestViewState {
   readonly active: boolean;
+  readonly close?: boolean;
   readonly url?: string;
 }
 
@@ -105,7 +106,7 @@ export class ApprovalRequestService {
     return this.#pending === undefined ? { active: false } : { active: true, url: this.#pending.url };
   }
 
-  async approve(requestId: string | undefined, sourceTabId: number | undefined, approvePairing: () => Promise<boolean>): Promise<ApprovalRequestViewState> {
+  async approve(requestId: string | undefined, approvePairing: () => Promise<boolean>): Promise<ApprovalRequestViewState> {
     if (!this.#requestMatchesPending(requestId)) {
       return { active: false };
     }
@@ -120,14 +121,14 @@ export class ApprovalRequestService {
       this.#rateLimitIndex = 0;
       this.#nextAllowedAtMs = 0;
       pending.resolve(createOkResponse(pending.request, { ok: true, url: pending.url }));
-      await this.#closeSourceTab(sourceTabId);
+      return { active: false, close: true };
     } else if (this.#pending === pending) {
       pending.status = "pending";
     }
     return this.getViewState(requestId);
   }
 
-  async deny(requestId: string | undefined, sourceTabId: number | undefined): Promise<ApprovalRequestViewState> {
+  deny(requestId: string | undefined): ApprovalRequestViewState {
     if (!this.#requestMatchesPending(requestId)) {
       return { active: false };
     }
@@ -140,7 +141,7 @@ export class ApprovalRequestService {
           message: USER_DENIED_APPROVAL_MESSAGE,
         }),
       );
-      await this.#closeSourceTab(sourceTabId);
+      return { active: false, close: true };
     }
     return this.getViewState(requestId);
   }
@@ -205,17 +206,6 @@ export class ApprovalRequestService {
     if (pending?.requestId === requestId) {
       this.#pending = undefined;
       pending.resolve(createErrorResponseForRequest(pending.request, error));
-    }
-  }
-
-  async #closeSourceTab(sourceTabId: number | undefined): Promise<void> {
-    if (sourceTabId === undefined) {
-      return;
-    }
-    try {
-      await this.#adapter.closeTab(sourceTabId);
-    } catch {
-      // The CLI outcome is already settled. Tab cleanup should not mask approval results.
     }
   }
 

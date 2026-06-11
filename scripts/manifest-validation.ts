@@ -56,7 +56,7 @@ export function parseJsonWithSchema<T>(content: string, label: string, location:
   try {
     raw = JSON.parse(content);
   } catch (error) {
-    throw new Error(`Invalid ${label} JSON at ${location}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid ${label} JSON at ${location}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 
   const parsed = schema.safeParse(raw);

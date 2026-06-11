@@ -234,13 +234,9 @@ export function runCase05() {
 
 export async function runCase06() {
   const port = new FakeNativePort();
-  const closedTabs: number[] = [];
   const controller = new FirefoxCliBackgroundController({
     browserAdapter: createTestBrowserAdapter([], {
       openExtensionPage: async (path) => `moz-extension://test/${path}`,
-      closeTab: async (tabId) => {
-        closedTabs.push(tabId);
-      },
     }),
     connectNative: () => port,
     productVersion: "0.0.0",
@@ -252,10 +248,9 @@ export async function runCase06() {
   port.emitMessage(request);
   await flushPromises();
 
-  await expect(
-    controller.handleRuntimeMessage({ type: "firefox-cli:deny-approval-request", requestId: "approval-deny-1" }, { sourceTabId: 456 }),
-  ).resolves.toEqual({
+  await expect(controller.handleRuntimeMessage({ type: "firefox-cli:deny-approval-request", requestId: "approval-deny-1" })).resolves.toEqual({
     active: false,
+    close: true,
   });
   await flushPromises();
 
@@ -268,7 +263,6 @@ export async function runCase06() {
       message: USER_DENIED_APPROVAL_MESSAGE,
     },
   });
-  expect(closedTabs).toEqual([456]);
 }
 
 export async function runCase07() {

@@ -2,6 +2,7 @@ import { requestHostAccess } from "./approval-permissions.js";
 
 interface ApprovalRequestState {
   readonly active: boolean;
+  readonly close?: boolean;
 }
 
 interface ExtensionStatus {
@@ -34,19 +35,18 @@ async function loadRequest(): Promise<void> {
 async function approve(): Promise<void> {
   setBusy(true);
   const reloadAfterApproval = await requestHostAccess();
-  renderState(
-    manualApproval
-      ? statusToState(await sendMessage<ExtensionStatus>("firefox-cli:approve"))
-      : await sendMessage<ApprovalRequestState>("firefox-cli:approve-request"),
-  );
-  if (reloadAfterApproval) {
-    browser.runtime.reload();
-  }
+  const state = manualApproval
+    ? statusToState(await sendMessage<ExtensionStatus>("firefox-cli:approve"))
+    : await sendMessage<ApprovalRequestState>("firefox-cli:approve-request");
+  renderState(state);
+  await finishTerminalRequest(state, reloadAfterApproval);
 }
 
 async function deny(): Promise<void> {
   setBusy(true);
-  renderState(manualApproval ? { active: false } : await sendMessage<ApprovalRequestState>("firefox-cli:deny-approval-request"));
+  const state = manualApproval ? { active: false } : await sendMessage<ApprovalRequestState>("firefox-cli:deny-approval-request");
+  renderState(state);
+  await finishTerminalRequest(state, false);
 }
 
 async function sendMessage<T>(type: string): Promise<T> {
@@ -66,6 +66,24 @@ function renderState(state: ApprovalRequestState): void {
     if (denyButton) {
       denyButton.disabled = true;
     }
+  }
+}
+
+async function finishTerminalRequest(state: ApprovalRequestState, reloadAfterApproval: boolean): Promise<void> {
+  if (state.close !== true) {
+    if (reloadAfterApproval) {
+      browser.runtime.reload();
+    }
+    return;
+  }
+  const tab = await browser.tabs.getCurrent();
+  if (reloadAfterApproval) {
+    browser.runtime.reload();
+  }
+  if (tab?.id !== undefined) {
+    await browser.tabs.remove(tab.id);
+  } else {
+    window.close();
   }
 }
 

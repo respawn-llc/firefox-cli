@@ -66,7 +66,7 @@ function getRequestProtocolRequirementForSubject(
       ? undefined
       : {
           minProtocolVersion: childRequirement.minProtocolVersion,
-          reason: "Batch contains scoped network command semantics.",
+          reason: childRequirement.reason,
         };
   }
 

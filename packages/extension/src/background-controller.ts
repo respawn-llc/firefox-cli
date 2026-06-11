@@ -160,10 +160,7 @@ export class FirefoxCliBackgroundController {
     };
   }
 
-  async handleRuntimeMessage(
-    message: { readonly type?: string; readonly requestId?: string },
-    context: { readonly sourceTabId?: number } = {},
-  ): Promise<unknown> {
+  async handleRuntimeMessage(message: { readonly type?: string; readonly requestId?: string }): Promise<unknown> {
     if (message.type === "firefox-cli:get-status") {
       return this.getStatus();
     }
@@ -173,11 +170,11 @@ export class FirefoxCliBackgroundController {
     }
 
     if (message.type === "firefox-cli:deny-approval-request") {
-      return this.#approvalRequests.deny(message.requestId, context.sourceTabId);
+      return this.#approvalRequests.deny(message.requestId);
     }
 
     if (message.type === "firefox-cli:approve-request") {
-      return this.#approvalRequests.approve(message.requestId, context.sourceTabId, async () => this.#approveWithNativeHost());
+      return this.#approvalRequests.approve(message.requestId, async () => this.#approveWithNativeHost());
     }
 
     if (message.type === "firefox-cli:approve") {
@@ -232,14 +229,19 @@ export class FirefoxCliBackgroundController {
     this.#pairing.beginMutation();
     const request = createRequest("pair.approve", {});
     const response = await this.#sendNativeRequest(request);
-    if (response.ok) {
-      await this.#pairing.approve(response.result.token);
-      this.#lastError = undefined;
-      return true;
+    if (!response.ok) {
+      this.#pairing.markRejected();
+      this.#lastError = response.error.message;
+      return false;
     }
-    this.#pairing.markRejected();
-    this.#lastError = response.error.message;
-    return false;
+    if (!("token" in response.result)) {
+      this.#pairing.markRejected();
+      this.#lastError = "Native host returned an invalid approval response.";
+      return false;
+    }
+    await this.#pairing.approve(response.result.token);
+    this.#lastError = undefined;
+    return true;
   }
 
   #postHello(): void {
@@ -267,8 +269,6 @@ export class FirefoxCliBackgroundController {
       });
   }
 
-  async #sendNativeRequest(request: RequestEnvelope<"pair.approve">): Promise<ResponseEnvelope<"pair.approve">>;
-  async #sendNativeRequest(request: RequestEnvelope): Promise<ResponseEnvelope>;
   async #sendNativeRequest(request: RequestEnvelope): Promise<ResponseEnvelope> {
     if (this.#connection.stopped) {
       return createErrorResponseForRequest(request, {

@@ -98,6 +98,7 @@ function createFakeBrowserApi(port: NativePortLike, initialStorage: Record<strin
     tabs: {
       create: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
       update: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
+      getCurrent: async () => ({ id: 1, index: 0, active: true, windowId: 1 }),
       get: async (id: number) => ({ id, index: 0, active: true, windowId: 1 }),
       remove: async () => undefined,
       goBack: async () => undefined,

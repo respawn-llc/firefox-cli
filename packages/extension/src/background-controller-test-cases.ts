@@ -181,7 +181,6 @@ export async function runCase06() {
   const port = new FakeNativePort();
   const notifications: unknown[] = [];
   const pages: string[] = [];
-  const closedTabs: number[] = [];
   const controller = new FirefoxCliBackgroundController({
     browserAdapter: createTestBrowserAdapter([], {
       showNotification: async (options) => {
@@ -191,9 +190,6 @@ export async function runCase06() {
       openExtensionPage: async (path) => {
         pages.push(path);
         return `moz-extension://test/${path}`;
-      },
-      closeTab: async (tabId) => {
-        closedTabs.push(tabId);
       },
     }),
     connectNative: () => port,
@@ -215,7 +211,8 @@ export async function runCase06() {
     url: "moz-extension://test/approval-request.html?request=approval-request-1",
   });
 
-  const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve-request", requestId: "approval-request-1" }, { sourceTabId: 123 });
+  const approval = controller.handleRuntimeMessage({ type: "firefox-cli:approve-request", requestId: "approval-request-1" });
+  await flushPromises();
   const approve = latestPairApproveRequest(port);
   port.emitMessage(
     createOkResponse(approve, {
@@ -226,7 +223,10 @@ export async function runCase06() {
       approvedAt: "2026-01-02T03:04:05.000Z",
     }),
   );
-  await approval;
+  await expect(approval).resolves.toEqual({
+    active: false,
+    close: true,
+  });
   await flushPromises();
 
   expect(port.messages[2]).toEqual({
@@ -238,7 +238,6 @@ export async function runCase06() {
       url: "moz-extension://test/approval-request.html?request=approval-request-1",
     },
   });
-  expect(closedTabs).toEqual([123]);
 }
 
 export async function runCase07() {

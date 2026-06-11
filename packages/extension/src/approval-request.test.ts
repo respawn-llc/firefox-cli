@@ -24,11 +24,22 @@ describe("approval request page", () => {
   });
 
   it("requests Firefox host access before approving the pending CLI request", async () => {
-    const sendMessage = vi.fn().mockResolvedValueOnce({ active: true }).mockResolvedValueOnce({ active: false });
+    const sendMessage = vi.fn().mockResolvedValueOnce({ active: true }).mockResolvedValueOnce({ active: false, close: true });
     const contains = vi.fn(async () => false);
     const request = vi.fn(async () => true);
+    const events: string[] = [];
 
-    const { document } = await renderApprovalRequestPage({ sendMessage, contains, request });
+    const { document } = await renderApprovalRequestPage({
+      sendMessage,
+      contains,
+      request,
+      reload: () => {
+        events.push("reload");
+      },
+      removeTab: async () => {
+        events.push("close");
+      },
+    });
     document.querySelector<HTMLButtonElement>("#approve")?.click();
 
     await vi.waitFor(() => {
@@ -37,32 +48,67 @@ describe("approval request page", () => {
 
     expect(contains).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
     expect(request).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
+    await vi.waitFor(() => {
+      expect(events).toEqual(["reload", "close"]);
+    });
   });
 
   it("denies the pending CLI request without asking for Firefox host access", async () => {
-    const sendMessage = vi.fn().mockResolvedValueOnce({ active: true }).mockResolvedValueOnce({ active: false });
+    const sendMessage = vi.fn().mockResolvedValueOnce({ active: true }).mockResolvedValueOnce({ active: false, close: true });
     const request = vi.fn(async () => true);
+    const removeTab = vi.fn(async () => undefined);
 
-    const { document } = await renderApprovalRequestPage({ sendMessage, request });
+    const { document } = await renderApprovalRequestPage({ sendMessage, request, removeTab });
     document.querySelector<HTMLButtonElement>("#deny")?.click();
 
     await vi.waitFor(() => {
       expect(sendMessage).toHaveBeenLastCalledWith({ type: "firefox-cli:deny-approval-request", requestId: "approval-1" });
     });
     expect(request).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(removeTab).toHaveBeenCalledWith(99);
+    });
+  });
+
+  it("reloads after manual approval grants Firefox host access without closing the tab", async () => {
+    const sendMessage = vi.fn().mockResolvedValueOnce({ approved: true });
+    const contains = vi.fn(async () => false);
+    const request = vi.fn(async () => true);
+    const reload = vi.fn();
+    const removeTab = vi.fn(async () => undefined);
+
+    const { document } = await renderApprovalRequestPage({
+      search: "?manual=1",
+      sendMessage,
+      contains,
+      request,
+      reload,
+      removeTab,
+    });
+    document.querySelector<HTMLButtonElement>("#approve")?.click();
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenLastCalledWith({ type: "firefox-cli:approve" });
+    });
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(removeTab).not.toHaveBeenCalled();
   });
 });
 
 async function renderApprovalRequestPage(
   options: {
+    readonly search?: string;
     readonly sendMessage?: (message: unknown) => Promise<unknown>;
     readonly contains?: (permissions: { readonly origins: readonly string[] }) => Promise<boolean>;
     readonly request?: (permissions: { readonly origins: readonly string[] }) => Promise<boolean>;
+    readonly reload?: () => void;
+    readonly removeTab?: (tabId: number) => Promise<void>;
   } = {},
 ): Promise<{ readonly document: Document }> {
   vi.resetModules();
   const dom = new JSDOM(await readFile(new URL("./approval-request.html", import.meta.url), "utf8"), {
-    url: "moz-extension://test/approval-request.html?request=approval-1",
+    url: `moz-extension://test/approval-request.html${options.search ?? "?request=approval-1"}`,
   });
 
   vi.stubGlobal("window", dom.window);
@@ -70,7 +116,7 @@ async function renderApprovalRequestPage(
   vi.stubGlobal("browser", {
     runtime: {
       sendMessage: options.sendMessage ?? vi.fn(async () => ({ active: true })),
-      reload: vi.fn(),
+      reload: options.reload ?? vi.fn(),
     },
     permissions: {
       contains: options.contains ?? vi.fn(async () => true),
@@ -78,6 +124,8 @@ async function renderApprovalRequestPage(
     },
     tabs: {
       captureVisibleTab: vi.fn(),
+      getCurrent: vi.fn(async () => ({ id: 99, index: 0, active: true, windowId: 1 })),
+      remove: options.removeTab ?? vi.fn(async () => undefined),
     },
   });
 

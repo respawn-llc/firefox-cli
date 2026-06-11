@@ -291,6 +291,14 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     security: { level: "sensitive", reasons: ["notifications"] },
+    compatibility: {
+      requirements: [
+        {
+          minProtocolVersion: 4,
+          reason: "Native notifications were added in protocol v4.",
+        },
+      ],
+    },
     batch: { allowed: true },
     cliRoutes: [{ id: "notify", path: ["notify"], batch: true }],
   },
