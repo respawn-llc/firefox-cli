@@ -12,7 +12,6 @@ const binaryName = getBinaryName();
 await resetGeneratedPackage(packageRoot);
 
 await mkdir(resolve(packageRoot, "bin", platformKey), { recursive: true });
-
 await writePackageJson(packageRoot);
 await cp("README.md", resolve(packageRoot, "README.md"));
 await cp("LICENSE", resolve(packageRoot, "LICENSE"));
@@ -36,7 +35,7 @@ async function writePackageJson(path: string): Promise<void> {
     description: "Firefox automation CLI for AI agents",
     type: "module",
     bin: {
-      "firefox-cli": "./bin/firefox-cli.js",
+      "firefox-cli": "bin/firefox-cli.js",
     },
     files: ["bin", "lib", "README.md", "LICENSE"],
     license: "AGPL-3.0-only",

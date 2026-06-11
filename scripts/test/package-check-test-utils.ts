@@ -48,7 +48,7 @@ export async function createPackageRoot(
         version: rootPackage.version,
         type: "module",
         bin: {
-          "firefox-cli": "./bin/firefox-cli.js",
+          "firefox-cli": "bin/firefox-cli.js",
         },
       },
       null,

@@ -1,47 +1,86 @@
-import { chmod, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, open, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { getBinaryName, getPlatformKey } from "@firefox-cli/native-host";
 import { copyPackagedBinary } from "./packaged-binary.js";
+import {
+  resolveBinaryTargetByBunTarget,
+  resolveBinaryTargetByPlatformKey,
+  resolveCurrentBinaryTarget,
+  type SupportedBinaryTarget,
+} from "./platform-targets.js";
 import { runProcess } from "./process-runner.js";
 
-const platformKey = getPlatformKey();
-const binaryName = getBinaryName();
 const rootDir = process.cwd();
-const outputPath = resolve("dist/bin", platformKey, binaryName);
 const entrypointPath = resolve("packages/cli/src/entrypoint.ts");
 const packageRoot = resolve("dist/package");
 
-await mkdir(dirname(outputPath), { recursive: true });
+if (import.meta.main) {
+  const target = resolveRequestedTarget(process.argv.slice(2));
+  await buildBinary(target);
+}
 
-const buildWorkdir = await mkdtemp(join(tmpdir(), "firefox-cli-bun-build-"));
+export async function buildBinary(target: SupportedBinaryTarget): Promise<string> {
+  const outputPath = resolve("dist/bin", target.platformKey, target.binaryName);
+  await mkdir(dirname(outputPath), { recursive: true });
 
-try {
-  await runProcess("bun", ["build", entrypointPath, "--compile", "--outfile", outputPath], {
-    cwd: buildWorkdir,
-    stderr: "inherit",
-    stdout: "inherit",
+  const buildWorkdir = await mkdtemp(join(tmpdir(), "firefox-cli-bun-build-"));
+
+  try {
+    await runProcess("bun", ["build", entrypointPath, "--compile", `--target=${target.bunTarget}`, "--outfile", outputPath], {
+      cwd: buildWorkdir,
+      stderr: "inherit",
+      stdout: "inherit",
+    });
+  } finally {
+    await removeBuildWorkdir(buildWorkdir);
+  }
+
+  await cleanupRootBunBuildArtifacts(rootDir);
+
+  if (target.platform !== "win32") {
+    await chmod(outputPath, 0o755);
+  }
+
+  console.log(`Built ${outputPath}`);
+  const syncedPackageBinaryPath = await copyPackagedBinary({
+    sourcePath: outputPath,
+    packageRoot,
+    platformKey: target.platformKey,
+    binaryName: target.binaryName,
+    skipWhenPackageBinMissing: true,
   });
-} finally {
-  await removeBuildWorkdir(buildWorkdir);
+  if (syncedPackageBinaryPath !== undefined) {
+    console.log(`Updated packaged binary ${syncedPackageBinaryPath}`);
+  }
+  return outputPath;
 }
 
-await assertNoRootBunBuildArtifacts(rootDir);
-
-if (process.platform !== "win32") {
-  await chmod(outputPath, 0o755);
+function resolveRequestedTarget(args: readonly string[]): SupportedBinaryTarget {
+  const platformKey = readOption(args, "--platform-key");
+  if (platformKey !== undefined) {
+    return resolveBinaryTargetByPlatformKey(platformKey);
+  }
+  const bunTarget = readOption(args, "--target");
+  if (bunTarget !== undefined) {
+    return resolveBinaryTargetByBunTarget(bunTarget);
+  }
+  return resolveCurrentBinaryTarget();
 }
 
-console.log(`Built ${outputPath}`);
-const syncedPackageBinaryPath = await copyPackagedBinary({
-  sourcePath: outputPath,
-  packageRoot,
-  platformKey,
-  binaryName,
-  skipWhenPackageBinMissing: true,
-});
-if (syncedPackageBinaryPath !== undefined) {
-  console.log(`Updated packaged binary ${syncedPackageBinaryPath}`);
+function readOption(args: readonly string[], name: string): string | undefined {
+  const prefixed = args.find((arg) => arg.startsWith(`${name}=`));
+  if (prefixed !== undefined) {
+    return prefixed.slice(name.length + 1);
+  }
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Expected value after ${name}`);
+  }
+  return value;
 }
 
 async function removeBuildWorkdir(path: string): Promise<void> {
@@ -54,15 +93,43 @@ async function removeBuildWorkdir(path: string): Promise<void> {
   await rm(resolvedPath, { recursive: true, force: true });
 }
 
-async function assertNoRootBunBuildArtifacts(root: string): Promise<void> {
+export async function cleanupRootBunBuildArtifacts(root: string): Promise<void> {
   const artifacts = (await readdir(root)).filter(isRootBunBuildArtifact);
+  await Promise.all(
+    artifacts.map(async (artifact) => {
+      const artifactPath = resolve(root, artifact);
+      const info = await lstat(artifactPath);
+      if (info.isSymbolicLink()) {
+        throw new Error(`Refusing to clean symlinked Bun build artifact: ${artifactPath}`);
+      }
+      if (!info.isFile()) {
+        throw new Error(`Refusing to clean unsupported Bun build artifact file type: ${artifactPath}`);
+      }
+      await assertBunBuildArtifactSignature(artifactPath);
+      await rm(artifactPath, { recursive: false, force: false });
+    }),
+  );
   if (artifacts.length > 0) {
-    throw new Error(
-      `Bun compile left root build artifacts: ${artifacts.slice(0, 5).join(", ")}${artifacts.length > 5 ? `, and ${String(artifacts.length - 5)} more` : ""}`,
-    );
+    console.log(`Cleaned Bun root build artifacts: ${artifacts.join(", ")}`);
   }
 }
 
 function isRootBunBuildArtifact(name: string): boolean {
   return name.startsWith(".") && name.endsWith(".bun-build");
+}
+
+async function assertBunBuildArtifactSignature(path: string): Promise<void> {
+  const file = await open(path, "r");
+  const prefix = Buffer.alloc(4);
+  const { bytesRead } = await file.read(prefix, 0, prefix.length, 0).finally(async () => file.close());
+  const data = prefix.subarray(0, bytesRead);
+  if (!hasKnownExecutableSignature(data)) {
+    throw new Error(`Refusing to clean Bun build artifact without executable signature: ${path}`);
+  }
+}
+
+function hasKnownExecutableSignature(data: Buffer): boolean {
+  return [Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from([0x4d, 0x5a])].some((signature) =>
+    data.subarray(0, signature.length).equals(signature),
+  );
 }

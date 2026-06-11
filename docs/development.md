@@ -39,3 +39,13 @@ Release signing:
 - `bun run extension:sign` signs `dist/extension` with `web-ext sign`.
 - Set `WEB_EXT_JWT_ISSUER` to the Mozilla Add-ons JWT issuer and `WEB_EXT_JWT_SECRET` to the corresponding JWT secret.
 - `bun run release:check:signed` requires a signed `dist/extension-artifacts/firefox-cli-<version>.xpi` artifact and matching provenance.
+
+Npm publishing:
+
+- `bun run npm:publish:dry-run` cross-compiles all supported platform binaries, assembles `dist/npm`, verifies the npm package layout, and runs `npm publish --dry-run` for every package.
+- `bun run npm:publish:local` runs the same local cross-compiled package flow and publishes `firefox-cli` to npm.
+- `bun run npm:publish:ci` is the release workflow entrypoint. It requires the signed XPI artifact under `dist/extension-artifacts`, verifies the signed release package, and publishes through npm trusted publishing.
+
+The published CLI package depends on platform-specific native packages through `optionalDependencies`; npm installs only the package that matches the user's `os` and `cpu`.
+
+Configure npm trusted publishing for `firefox-cli` and each `@firefox-cli/native-*` package with this GitHub repository, workflow `release.yml`, and the `npm` environment. The workflow grants `id-token: write` only to the npm publish job.

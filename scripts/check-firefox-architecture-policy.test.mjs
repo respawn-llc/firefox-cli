@@ -27,3 +27,13 @@ test("native messaging manifest defaults stay aligned with the stable extension 
   assert.match(nativeManifest, /type: "stdio"/);
   assert.match(nativeManifest, /allowed_extensions: options\.allowedExtensions \?\? \[FIREFOX_CLI_EXTENSION_ID\]/);
 });
+
+test("release workflow uploads only concrete release artifact files", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+
+  assert.doesNotMatch(workflow, /artifacts:\s*"release-artifacts\/\*\*\/\*"/);
+  assert.match(
+    workflow,
+    /artifacts: "release-artifacts\/\*\*\/\*\.tar\.gz,release-artifacts\/\*\*\/\*\.zip,release-artifacts\/signed-extension\/\*\.xpi,release-artifacts\/signed-extension\/\*\.xpi\.provenance\.json"/,
+  );
+});
