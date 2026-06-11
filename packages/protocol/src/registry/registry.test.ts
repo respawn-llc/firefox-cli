@@ -54,6 +54,7 @@ const expectedCommandIds = [
   "console",
   "errors",
   "highlight",
+  "notify",
   "pdf",
   "set.viewport",
   "diff",

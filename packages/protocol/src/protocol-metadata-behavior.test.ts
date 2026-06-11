@@ -169,6 +169,7 @@ describe("protocol command metadata", () => {
       "clipboard",
       "cookies",
       "network",
+      "notify",
       "click",
       "dblclick",
       "focus",

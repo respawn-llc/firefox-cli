@@ -246,6 +246,26 @@ export function buildHighlightRequest(argv: readonly string[]): RequestEnvelope 
   });
 }
 
+export function buildNotifyRequest(argv: readonly string[]): RequestEnvelope {
+  const parsed = parsePayloadPositionalsAndOptions(
+    argv.slice(1).filter((arg) => arg !== "--json"),
+    {
+      payloadStartPositionals: 0,
+      minPositionals: 1,
+      variadicAfterMin: true,
+    },
+  );
+  const [title, ...messageParts] = parsed.positionals;
+  if (title === undefined) {
+    throw new CliUsageError("Missing notification title.");
+  }
+  return createValidatedRequest("notify", {
+    title,
+    ...(messageParts.length === 0 ? {} : { message: messageParts.join(" ") }),
+    ...optionalStringOption(parsed.optionArgs, ["--id"], "id"),
+  });
+}
+
 export function buildDiffRequest(argv: readonly string[]): RequestEnvelope {
   const parsed = parsePayloadPositionalsAndOptions(argv.slice(1), {
     payloadStartPositionals: 1,

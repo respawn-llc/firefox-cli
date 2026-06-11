@@ -88,6 +88,7 @@ export function phase8CliResultFor(request: RequestEnvelope): unknown {
     console: { action: "list", ok: true, entries: [] },
     errors: { action: "clear", ok: true },
     highlight: { ok: true, element },
+    notify: { ok: true, id: "approval" },
     pdf: { path: "/work/page.pdf" },
     "set.viewport": { window: { id: 7, index: 0, focused: true, tabCount: 1 } },
     diff: {

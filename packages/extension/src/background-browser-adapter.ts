@@ -169,6 +169,20 @@ export function createBackgroundBrowserAdapter(options: {
         }
       });
     },
+    showNotification: async (notificationOptions) => {
+      const payload = {
+        type: "basic",
+        title: notificationOptions.title,
+        message: notificationOptions.message ?? "",
+      } as const;
+      return {
+        ok: true,
+        id:
+          notificationOptions.id === undefined
+            ? await options.browser.notifications.create(payload)
+            : await options.browser.notifications.create(notificationOptions.id, payload),
+      };
+    },
     resizeWindow: async (windowId, size) => {
       await options.browser.windows.update(windowId, size);
       const windows = await options.browser.windows.getAll({ populate: true });

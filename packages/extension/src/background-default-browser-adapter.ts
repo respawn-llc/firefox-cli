@@ -67,6 +67,9 @@ export function createUnconfiguredBrowserAdapter(): BackgroundBrowserAdapter {
     listNetworkRequests: async () => [],
     clearNetworkRequests: async () => undefined,
     waitForNetworkIdle: async () => undefined,
+    showNotification: async () => {
+      throw new Error("Browser adapter is not configured.");
+    },
     resizeWindow: async () => {
       throw new Error("Browser adapter is not configured.");
     },

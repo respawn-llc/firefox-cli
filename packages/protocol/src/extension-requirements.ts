@@ -8,6 +8,7 @@ export type FirefoxManifestPermission =
   | "storage"
   | "downloads"
   | "cookies"
+  | "notifications"
   | "clipboardRead"
   | "clipboardWrite"
   | "webRequest";
@@ -69,6 +70,7 @@ const privilegeManifestPermissions = {
   downloads: ["downloads"],
   cookies: ["cookies"],
   "network-observation": ["webRequest"],
+  notifications: ["notifications"],
 } as const satisfies Record<CommandPrivilegeReason, readonly FirefoxManifestPermission[]>;
 
 const pageAccessReasons = new Set<CommandPrivilegeReason>([

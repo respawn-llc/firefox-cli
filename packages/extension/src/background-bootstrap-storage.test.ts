@@ -4,6 +4,11 @@ import { type BackgroundBrowserApi, startBackground } from "./background-bootstr
 import type { NativePortLike } from "./background-controller.js";
 
 const PAIR_TOKEN_STORAGE_KEY = "firefoxCliPairToken";
+interface NotificationOptions {
+  readonly type: "basic";
+  readonly title: string;
+  readonly message: string;
+}
 
 describe("background bootstrap storage", () => {
   it("persists popup approval tokens in extension storage", async () => {
@@ -125,7 +130,16 @@ function createFakeBrowserApi(port: NativePortLike, initialStorage: Record<strin
       set: async (cookie) => cookie,
       remove: async () => undefined,
     },
+    notifications: {
+      create: createNotification,
+    },
   };
+}
+
+async function createNotification(options: NotificationOptions): Promise<string>;
+async function createNotification(id: string, options: NotificationOptions): Promise<string>;
+async function createNotification(idOrOptions: string | NotificationOptions): Promise<string> {
+  return typeof idOrOptions === "string" ? idOrOptions : "notification-1";
 }
 
 async function completeNativeHello(port: FakeNativePort): Promise<void> {

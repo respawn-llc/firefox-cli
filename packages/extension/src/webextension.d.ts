@@ -107,6 +107,17 @@ declare const browser: {
     }): Promise<BrowserCookie>;
     remove(options: { readonly url: string; readonly name: string }): Promise<unknown>;
   };
+  readonly notifications: {
+    create(options: { readonly type: "basic"; readonly title: string; readonly message: string }): Promise<string>;
+    create(
+      notificationId: string,
+      options: {
+        readonly type: "basic";
+        readonly title: string;
+        readonly message: string;
+      },
+    ): Promise<string>;
+  };
   readonly webRequest?: {
     readonly onBeforeRequest?: BrowserWebRequestEvent;
     readonly onCompleted?: BrowserWebRequestEvent;

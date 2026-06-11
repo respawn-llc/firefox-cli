@@ -50,6 +50,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     readonly timeoutMs: number;
     readonly idleMs: number;
   }[] = [];
+  readonly notifications: { readonly id?: string; readonly title: string; readonly message?: string }[] = [];
   clipboardText = "";
   networkRequests: { readonly id: string; readonly tabId: number; readonly url: string }[] = [];
   listWindowCalls = 0;
@@ -269,6 +270,11 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
 
   async waitForNetworkIdle(options: { readonly tabId: number; readonly timeoutMs: number; readonly idleMs: number }): Promise<void> {
     this.networkIdleWaits.push(options);
+  }
+
+  async showNotification(options: { readonly id?: string; readonly title: string; readonly message?: string }) {
+    this.notifications.push(options);
+    return { ok: true as const, id: options.id ?? `notification-${String(this.notifications.length)}` };
   }
 
   async resizeWindow(windowId: number, size: { readonly width: number; readonly height: number }): Promise<BrowserWindowSnapshot> {

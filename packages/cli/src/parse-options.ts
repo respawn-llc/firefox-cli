@@ -54,11 +54,12 @@ export function optionalUrl(url: string | undefined): { readonly url?: string } 
 export function optionalStringOption(args: readonly string[], names: readonly string[], outputKey: "selector"): { readonly selector?: string };
 export function optionalStringOption(args: readonly string[], names: readonly string[], outputKey: "generationId"): { readonly generationId?: string };
 export function optionalStringOption(args: readonly string[], names: readonly string[], outputKey: "urlGlob"): { readonly urlGlob?: string };
+export function optionalStringOption(args: readonly string[], names: readonly string[], outputKey: "id"): { readonly id?: string };
 export function optionalStringOption(
   args: readonly string[],
   names: readonly string[],
-  outputKey: "selector" | "generationId" | "urlGlob",
-): { readonly selector?: string; readonly generationId?: string; readonly urlGlob?: string } {
+  outputKey: "selector" | "generationId" | "urlGlob" | "id",
+): { readonly selector?: string; readonly generationId?: string; readonly urlGlob?: string; readonly id?: string } {
   const value = getOptionValue(args, names);
   if (value === undefined) {
     return {};

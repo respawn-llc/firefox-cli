@@ -158,6 +158,7 @@ Example:
 | `firefox-cli network list|clear [--url glob] [--json]` | List or clear observed web requests. |
 | `firefox-cli console|errors list|clear [--json]` | List or clear page console/error capture buffers. |
 | `firefox-cli highlight <selector\|@ref> [--json]` | Outline an element. |
+| `firefox-cli notify [--id id] <title> [message...] [--json]` | Show a native Firefox notification. |
 | `firefox-cli set viewport <width> <height> [--json]` | Request a target browser window resize and report Firefox's observed window dimensions. Tiling/window-manager rules can prevent the requested size from taking effect. |
 | `firefox-cli diff url|title|snapshot <expected> [--json]` | Compare URL, title, or snapshot text with an expected value. |
 | `firefox-cli pdf <path> [--json]` | Returns `UNSUPPORTED_CAPABILITY`; Firefox saves PDFs through a browser dialog rather than a requested CLI path. |

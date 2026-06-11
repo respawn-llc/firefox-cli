@@ -14,7 +14,7 @@
       }
     }
   },
-  "permissions": ["nativeMessaging", "scripting", "tabs", "storage", "downloads", "cookies", "clipboardRead", "clipboardWrite", "webRequest"],
+  "permissions": ["nativeMessaging", "scripting", "tabs", "storage", "downloads", "cookies", "notifications", "clipboardRead", "clipboardWrite", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"]

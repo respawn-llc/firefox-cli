@@ -37,6 +37,7 @@ export const browserSmokeRequests = new Map<CommandId, unknown>([
   ["console", { action: "list" }],
   ["errors", { action: "list" }],
   ["highlight", { selector: "button" }],
+  ["notify", { title: "Action needed" }],
   ["pdf", { path: "/tmp/page.pdf" }],
   ["set.viewport", { width: 1200, height: 800 }],
   ["diff", { kind: "title", expected: "Expected title" }],

@@ -71,6 +71,10 @@ export const routeParserSpecs = {
   console: parser("console"),
   errors: parser("errors"),
   highlight: parser("highlight", { valueOptions: ["--generation", "--duration"] }),
+  notify: parser("notify", {
+    valueOptions: ["--id"],
+    payload: { payloadStartPositionals: 0, minPositionals: 1, variadicAfterMin: true },
+  }),
   pdf: parser("pdf"),
   "set.viewport": parser("set"),
   diff: parser("diff", {

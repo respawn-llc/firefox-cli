@@ -65,6 +65,9 @@ const routeHelpSpecs = {
   console: helpSpec("List or clear captured console messages."),
   errors: helpSpec("List or clear captured page errors."),
   highlight: helpSpec("Temporarily highlight an element for visual inspection."),
+  notify: helpSpec("Show a native Firefox notification with a title and optional message.", [
+    "Use `--id <id>` to update or replace an existing notification with the same id.",
+  ]),
   pdf: helpSpec("Report Firefox PDF export support for a target path."),
   "set.viewport": helpSpec("Resize the target window viewport."),
   diff: helpSpec("Compare URL, title, or snapshot content against an expected value."),
@@ -155,7 +158,7 @@ const helpGroups: readonly HelpGroup[] = [
   {
     title: "Browser data and files",
     summary: "Use browser-adjacent data and file operations.",
-    routes: ["screenshot", "download", "clipboard", "cookies", "storage", "pdf", "set.viewport"],
+    routes: ["screenshot", "download", "clipboard", "cookies", "storage", "notify", "pdf", "set.viewport"],
   },
   {
     title: "Automation",
@@ -204,6 +207,7 @@ const commandExamples: Partial<Record<RouteBindingId, readonly string[]>> = {
   wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait --selector '#ready'"],
   click: ["firefox-cli click 'button[type=submit]'", "firefox-cli click @e12"],
   fill: ["firefox-cli fill '#email' user@example.com"],
+  notify: ["firefox-cli notify 'Action needed' 'Open Firefox to approve control'"],
   batch: ['firefox-cli batch \'[["open","https://example.com"],["snapshot","-i"]]\' --json'],
 };
 

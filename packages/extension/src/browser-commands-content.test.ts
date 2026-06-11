@@ -179,6 +179,16 @@ describe("browser command handling", () => {
     });
     expect(adapter.networkClearRequests).toEqual([{ tabId: 101 }]);
     expect(adapter.networkRequests).toEqual([]);
+    await expect(
+      handleBrowserRequest(
+        createRequest("notify", { id: "approval", title: "Action needed", message: "Open Firefox to approve control." }, "notify-1"),
+        adapter,
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: { id: "approval" },
+    });
+    expect(adapter.notifications).toEqual([{ id: "approval", title: "Action needed", message: "Open Firefox to approve control." }]);
 
     await expect(handleBrowserRequest(createRequest("set.viewport", { width: 1200, height: 800 }, "viewport-1"), adapter)).resolves.toMatchObject({
       ok: true,

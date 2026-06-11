@@ -108,6 +108,10 @@ export function createTestBrowserAdapter(
     listNetworkRequests: async () => [],
     clearNetworkRequests: async () => undefined,
     waitForNetworkIdle: async () => undefined,
+    showNotification: async (options) => ({
+      ok: true,
+      id: options.id ?? "notification-1",
+    }),
     resizeWindow: async () => {
       throw new Error("not implemented");
     },

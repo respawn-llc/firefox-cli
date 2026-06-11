@@ -19,7 +19,8 @@ export type CommandPrivilegeReason =
   | "clipboard"
   | "downloads"
   | "cookies"
-  | "network-observation";
+  | "network-observation"
+  | "notifications";
 export type CommandSecurityMetadata =
   | {
       readonly level: "normal";
