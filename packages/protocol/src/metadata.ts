@@ -73,7 +73,6 @@ export interface CommandBatchMetadata {
 }
 
 export interface CommandSchemaMetadata {
-  readonly targetSelectorSchema?: z.ZodType;
   readonly owner: CommandOwner;
   readonly target: CommandTargetPolicy;
   readonly content: CommandContentPolicy;

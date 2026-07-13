@@ -13,7 +13,6 @@ import {
   windowNewResultSchema,
   windowSelectResultSchema,
   windowTargetParamsSchema,
-  windowTargetSelectorSchema,
   windowsListParamsSchema,
   windowsListResultSchema,
 } from "../target.js";
@@ -33,7 +32,6 @@ export const browsingCommandEntries = defineCommandEntries({
     cliRoutes: [{ id: "tab.list", path: ["tab"], batch: true, selectorDimensions: "both" }],
   },
   "tab.new": {
-    targetSelectorSchema: windowTargetSelectorSchema,
     params: tabNewParamsSchema,
     result: tabNewResultSchema,
     status: "mvp",
@@ -94,7 +92,6 @@ export const browsingCommandEntries = defineCommandEntries({
     cliRoutes: [{ id: "window.new", path: ["window", "new"], batch: true, selectorDimensions: "neither" }],
   },
   "window.select": {
-    targetSelectorSchema: windowTargetSelectorSchema,
     params: windowTargetParamsSchema,
     result: windowSelectResultSchema,
     status: "mvp",
@@ -107,7 +104,6 @@ export const browsingCommandEntries = defineCommandEntries({
     cliRoutes: [{ id: "window.select", path: ["window", "select"], batch: true, selectorDimensions: "window" }],
   },
   "window.close": {
-    targetSelectorSchema: windowTargetSelectorSchema,
     params: windowTargetParamsSchema,
     result: windowCloseResultSchema,
     status: "mvp",

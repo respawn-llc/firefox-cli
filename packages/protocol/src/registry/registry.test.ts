@@ -133,11 +133,6 @@ describe("command registry assembly", () => {
           .strict(),
         result: z.object({ ok: z.literal(true) }).strict(),
         status: "mvp",
-        targetSelectorSchema: z
-          .object({
-            window: z.object({ kind: z.literal("active") }).strict(),
-          })
-          .strict(),
         owner: "extension",
         target: "optional",
         content: "never",

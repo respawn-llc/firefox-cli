@@ -1,5 +1,6 @@
+import { z } from "zod";
+
 import type { CliRouteSelectorDimensions, CommandSchemaEntry } from "../metadata.js";
-import { targetSelectorSchema } from "../target.js";
 
 export type CommandRegistryFragment = Readonly<Record<string, CommandSchemaEntry>>;
 
@@ -44,10 +45,13 @@ function assertCliRouteSelectorDimensions(registry: Readonly<Record<string, Comm
 }
 
 function selectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRouteSelectorDimensions {
-  const selectorSchema = schema.targetSelectorSchema ?? (schema.target === "none" ? undefined : targetSelectorSchema);
-  if (selectorSchema === undefined) {
+  if (!(schema.params instanceof z.ZodObject)) {
     return "neither";
   }
+  // Zod's public object shape getter is untyped in v4 despite the runtime schema boundary.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  const selectorSchema = schema.params.def.shape.target;
+  if (selectorSchema === undefined) return "neither";
   const acceptsWindow = selectorSchema.safeParse({ window: { kind: "active" } }).success;
   const acceptsTab = selectorSchema.safeParse({ tab: { kind: "active" } }).success;
   if (acceptsWindow && acceptsTab) {
