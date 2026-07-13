@@ -53,6 +53,16 @@ describe("CLI route target contracts", () => {
     });
   });
 
+  it("preserves unsupported doctor selector diagnostics in batch argv", async () => {
+    const output = await runCli(["batch", JSON.stringify([["doctor", "--window", "id:9"]])], baseDependencies());
+
+    expect(output).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "Invalid batch argv step 0: Unsupported doctor option: --window\n",
+    });
+  });
+
   it("serializes supported selectors before and after ordinary and payload positionals", async () => {
     const cases: readonly {
       readonly name: string;
