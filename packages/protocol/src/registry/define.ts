@@ -48,10 +48,8 @@ function selectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRou
   if (!(schema.params instanceof z.ZodObject)) {
     return "neither";
   }
-  // Zod's public object shape getter is untyped in v4 despite the runtime schema boundary.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const selectorSchema = schema.params.def.shape.target;
-  if (selectorSchema === undefined) return "neither";
+  const selectorSchema = schema.params.shape.target;
+  if (!isZodType(selectorSchema)) return "neither";
   const acceptsWindow = selectorSchema.safeParse({ window: { kind: "active" } }).success;
   const acceptsTab = selectorSchema.safeParse({ tab: { kind: "active" } }).success;
   if (acceptsWindow && acceptsTab) {
@@ -64,4 +62,8 @@ function selectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRou
     return "tab";
   }
   return "neither";
+}
+
+function isZodType(value: unknown): value is z.ZodType {
+  return value instanceof z.ZodType;
 }

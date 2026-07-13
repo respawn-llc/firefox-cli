@@ -86,7 +86,7 @@ export interface CommandSchemaMetadata {
 }
 
 export type CommandSchemaEntry = CommandSchemaMetadata & {
-  readonly params: z.ZodType;
+  readonly params: z.ZodObject<z.ZodRawShape>;
   readonly result: z.ZodType;
   readonly status: CapabilityStatus;
 };
