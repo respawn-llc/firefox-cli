@@ -107,6 +107,10 @@ async function buildRequestForBinding<C extends CommandId>(
 async function buildRequestForArgv(argv: readonly string[], dependencies: CliDependencies, context: CliRequestBuildContext): Promise<RequestEnvelope> {
   const binding = findCliRouteBindingForArgv(argv);
   if (binding === undefined) {
+    const command = argv[0];
+    if (command === "setup" || command === "doctor" || command === "unpair") {
+      rejectTargetSelectorOptions(argv.slice(1), command);
+    }
     throw new InvalidBatchArgvCommandError();
   }
 
