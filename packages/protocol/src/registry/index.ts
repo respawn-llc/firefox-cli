@@ -63,7 +63,7 @@ const batchCommandEntries = defineCommandEntries({
     action: false,
     timeout: "batch",
     batch: { allowed: false },
-    cliRoutes: [{ id: "batch", path: ["batch"], batch: false }],
+    cliRoutes: [{ id: "batch", path: ["batch"], batch: false, selectorDimensions: "both" }],
   },
 });
 

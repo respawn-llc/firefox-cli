@@ -13,6 +13,7 @@ import {
   windowNewResultSchema,
   windowSelectResultSchema,
   windowTargetParamsSchema,
+  windowTargetSelectorSchema,
   windowsListParamsSchema,
   windowsListResultSchema,
 } from "../target.js";
@@ -29,9 +30,10 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "tab.list", path: ["tab"], batch: true }],
+    cliRoutes: [{ id: "tab.list", path: ["tab"], batch: true, selectorDimensions: "both" }],
   },
   "tab.new": {
+    targetSelectorSchema: windowTargetSelectorSchema,
     params: tabNewParamsSchema,
     result: tabNewResultSchema,
     status: "mvp",
@@ -41,7 +43,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "tab.new", path: ["tab", "new"], batch: true }],
+    cliRoutes: [{ id: "tab.new", path: ["tab", "new"], batch: true, selectorDimensions: "window" }],
   },
   "tab.select": {
     params: tabTargetParamsSchema,
@@ -53,7 +55,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "tab.select", path: ["tab", "select"], batch: true }],
+    cliRoutes: [{ id: "tab.select", path: ["tab", "select"], batch: true, selectorDimensions: "both" }],
   },
   "tab.close": {
     params: tabTargetParamsSchema,
@@ -65,7 +67,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "tab.close", path: ["tab", "close"], batch: true }],
+    cliRoutes: [{ id: "tab.close", path: ["tab", "close"], batch: true, selectorDimensions: "both" }],
   },
   "windows.list": {
     params: windowsListParamsSchema,
@@ -77,7 +79,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true },
-    cliRoutes: [{ id: "window.list", path: ["window"], batch: true }],
+    cliRoutes: [{ id: "window.list", path: ["window"], batch: true, selectorDimensions: "neither" }],
   },
   "window.new": {
     params: windowNewParamsSchema,
@@ -89,9 +91,10 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true },
-    cliRoutes: [{ id: "window.new", path: ["window", "new"], batch: true }],
+    cliRoutes: [{ id: "window.new", path: ["window", "new"], batch: true, selectorDimensions: "neither" }],
   },
   "window.select": {
+    targetSelectorSchema: windowTargetSelectorSchema,
     params: windowTargetParamsSchema,
     result: windowSelectResultSchema,
     status: "mvp",
@@ -101,9 +104,10 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "window.select", path: ["window", "select"], batch: true }],
+    cliRoutes: [{ id: "window.select", path: ["window", "select"], batch: true, selectorDimensions: "window" }],
   },
   "window.close": {
+    targetSelectorSchema: windowTargetSelectorSchema,
     params: windowTargetParamsSchema,
     result: windowCloseResultSchema,
     status: "mvp",
@@ -113,7 +117,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, protocolDefaultTarget: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "window.close", path: ["window", "close"], batch: true }],
+    cliRoutes: [{ id: "window.close", path: ["window", "close"], batch: true, selectorDimensions: "window" }],
   },
   open: {
     params: openParamsSchema,
@@ -125,7 +129,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "open", path: ["open"], batch: true }],
+    cliRoutes: [{ id: "open", path: ["open"], batch: true, selectorDimensions: "both" }],
   },
   back: {
     params: navigationParamsSchema,
@@ -137,7 +141,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "back", path: ["back"], batch: true }],
+    cliRoutes: [{ id: "back", path: ["back"], batch: true, selectorDimensions: "both" }],
   },
   forward: {
     params: navigationParamsSchema,
@@ -149,7 +153,7 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "forward", path: ["forward"], batch: true }],
+    cliRoutes: [{ id: "forward", path: ["forward"], batch: true, selectorDimensions: "both" }],
   },
   reload: {
     params: navigationParamsSchema,
@@ -161,6 +165,6 @@ export const browsingCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "reload", path: ["reload"], batch: true }],
+    cliRoutes: [{ id: "reload", path: ["reload"], batch: true, selectorDimensions: "both" }],
   },
 });

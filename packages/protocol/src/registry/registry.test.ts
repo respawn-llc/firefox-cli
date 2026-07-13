@@ -118,6 +118,39 @@ describe("command registry assembly", () => {
     expect(() => assembleCommandRegistry(duplicate, duplicate)).toThrow("Duplicate command id: duplicate");
   });
 
+  it("rejects route dimensions that disagree with the target parameter schema", () => {
+    const windowOnly = defineCommandEntries({
+      mismatch: {
+        params: z
+          .object({
+            target: z
+              .object({
+                window: z.object({ kind: z.literal("active") }).strict(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+        result: z.object({ ok: z.literal(true) }).strict(),
+        status: "mvp",
+        targetSelectorSchema: z
+          .object({
+            window: z.object({ kind: z.literal("active") }).strict(),
+          })
+          .strict(),
+        owner: "extension",
+        target: "optional",
+        content: "never",
+        action: false,
+        timeout: "none",
+        batch: { allowed: false },
+        cliRoutes: [{ id: "mismatch", path: ["mismatch"], batch: false, selectorDimensions: "both" }],
+      },
+    });
+
+    expect(() => assembleCommandRegistry(windowOnly)).toThrow("CLI route selector dimensions disagree with command params");
+  });
+
   it("preserves command-specific public protocol types", () => {
     const assertions: ProtocolTypeAssertions = [true, true, true, true, true, true, true];
 

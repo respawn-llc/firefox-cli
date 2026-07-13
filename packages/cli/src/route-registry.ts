@@ -143,12 +143,20 @@ function bindCliRoute<RouteId extends keyof RouteFormatterSpecById>(
   return {
     route: routeEntry.route,
     command: formatter.command,
-    help,
+    help: withTargetSelectorUsage(help, routeEntry.route.selectorDimensions),
     parser,
     formatterKind: formatter.kind,
     formatter: formatter.formatter,
     buildRequest,
   };
+}
+
+function withTargetSelectorUsage(help: string, selectorDimensions: CliRouteMetadata["selectorDimensions"]): string {
+  const selectorUsage = [
+    ...(selectorDimensions === "window" || selectorDimensions === "both" ? ["[--window <target>]"] : []),
+    ...(selectorDimensions === "tab" || selectorDimensions === "both" ? ["[--tab <target>]"] : []),
+  ];
+  return selectorUsage.length === 0 ? help : `${help} ${selectorUsage.join(" ")}`;
 }
 
 export const cliRouteBindings = {
@@ -184,7 +192,7 @@ export const cliRouteBindings = {
   clipboard: bindCliRoute("clipboard", "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]", buildClipboardRequest),
   cookies: bindCliRoute("cookies", "firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]", buildCookiesRequest),
   storage: bindCliRoute("storage", "firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]", buildStorageRequest),
-  network: bindCliRoute("network", "firefox-cli network list|clear [--window target] [--tab target] [--json]", buildNetworkRequest),
+  network: bindCliRoute("network", "firefox-cli network list|clear [--json]", buildNetworkRequest),
   console: bindCliRoute("console", "firefox-cli console list|clear [--json]", buildLogRequest),
   errors: bindCliRoute("errors", "firefox-cli errors list|clear [--json]", buildLogRequest),
   highlight: bindCliRoute("highlight", "firefox-cli highlight <selector|@ref> [--json]", buildHighlightRequest),

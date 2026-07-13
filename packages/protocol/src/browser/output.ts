@@ -70,7 +70,6 @@ export type NotifyResult = z.infer<typeof notifyResultSchema>;
 
 export const pdfParamsSchema = z
   .object({
-    target: targetSelectorSchema.optional(),
     path: z.string().min(1),
   })
   .strict();

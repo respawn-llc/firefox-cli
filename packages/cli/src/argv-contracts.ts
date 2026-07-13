@@ -1,7 +1,9 @@
+import { getCliRouteEntries, type CliRouteSelectorDimensions } from "@firefox-cli/protocol";
 import { CliUsageError, type CliRouteParserSpec } from "./types.js";
 
 const targetValueOptions = ["--window", "--tab"] as const;
 const jsonFlags = ["--json"] as const;
+const selectorDimensionsByRouteId = new Map(getCliRouteEntries().map(({ route }) => [route.id, route.selectorDimensions]));
 
 export const routeParserSpecs = {
   capabilities: parser("capabilities"),
@@ -118,6 +120,7 @@ export const routeParserSpecs = {
 
 export type CliRouteParserSpecById = typeof routeParserSpecs;
 export type CliRouteParserRouteId = keyof CliRouteParserSpecById;
+const routeParserSpecsById = new Map<string, CliRouteParserSpec>(Object.entries(routeParserSpecs));
 
 export interface ParsedCliRouteArgs {
   readonly positionals: readonly string[];
@@ -140,12 +143,16 @@ interface CliRouteArgContext {
   readonly state: CliRouteArgParserState;
 }
 
-export function parseCliRouteArgsForRoute(routeId: CliRouteParserRouteId, args: readonly string[]): ParsedCliRouteArgs {
-  return parseCliRouteArgs(routeParserSpecs[routeId], routeId, args);
+export function parseCliRouteArgsForRoute(routeId: string, args: readonly string[]): ParsedCliRouteArgs {
+  const parserSpec = routeParserSpecsById.get(routeId);
+  if (parserSpec === undefined) {
+    throw new Error(`CLI parser references unknown route: ${routeId}`);
+  }
+  return parseCliRouteArgs(withRouteSelectorOptions(parserSpec, routeId), routeId, args);
 }
 
 export function parseCliRouteArgv(parserSpec: CliRouteParserSpec, routeId: string, argv: readonly string[]): ParsedCliRouteArgs {
-  return parseCliRouteArgs(parserSpec, routeId, argv.slice(1));
+  return parseCliRouteArgs(withRouteSelectorOptions(parserSpec, routeId), routeId, argv.slice(1));
 }
 
 function parseCliRouteArgs(parserSpec: CliRouteParserSpec, routeId: string, args: readonly string[]): ParsedCliRouteArgs {
@@ -187,18 +194,35 @@ function parseCliRouteArgs(parserSpec: CliRouteParserSpec, routeId: string, args
       continue;
     }
 
-    if (arg.startsWith("-")) {
-      if (canTreatUnknownOptionAsPayload(parserSpec, state.positionals.length)) {
-        state.positionals.push(arg);
-        continue;
-      }
+    if (isTargetValueOption(arg)) {
       throw new CliUsageError(`Unsupported ${parserSpec.label} option: ${arg}`);
+    }
+
+    if (arg.startsWith("-")) {
+      handleUnknownOption(context, arg);
+      continue;
     }
 
     state.positionals.push(arg);
   }
 
   return { positionals: state.positionals, optionArgs: state.optionArgs, json: state.json };
+}
+
+function handleUnknownOption(context: CliRouteArgContext, arg: string): void {
+  const { parserSpec, state } = context;
+  if (isTargetValueOption(arg) || !canTreatUnknownOptionAsPayload(parserSpec, state.positionals.length)) {
+    throw new CliUsageError(`Unsupported ${parserSpec.label} option: ${arg}`);
+  }
+  state.positionals.push(arg);
+}
+
+export function rejectTargetSelectorOptions(args: readonly string[], label: string): void {
+  for (const arg of args) {
+    if (isTargetValueOption(arg)) {
+      throw new CliUsageError(`Unsupported ${label} option: ${arg}`);
+    }
+  }
 }
 
 function handleKnownFlag(context: CliRouteArgContext, arg: string, index: number): void {
@@ -261,11 +285,40 @@ function parser(
   return {
     label,
     flags: [...jsonFlags, ...(options.flags ?? [])],
-    valueOptions: [...targetValueOptions, ...(options.valueOptions ?? [])],
+    valueOptions: [...(options.valueOptions ?? [])],
     ...(options.optionalValueOptions === undefined ? {} : { optionalValueOptions: options.optionalValueOptions }),
     ...(options.payload === undefined ? {} : { payload: options.payload }),
     ...(options.allowDashDashPayload === undefined ? {} : { allowDashDashPayload: options.allowDashDashPayload }),
   };
+}
+
+function withRouteSelectorOptions(parserSpec: CliRouteParserSpec, routeId: string): CliRouteParserSpec {
+  const selectorDimensions = selectorDimensionsByRouteId.get(routeId);
+  if (selectorDimensions === undefined) {
+    throw new Error(`CLI parser references unknown protocol route: ${routeId}`);
+  }
+
+  return {
+    ...parserSpec,
+    valueOptions: [...selectorValueOptions(selectorDimensions), ...parserSpec.valueOptions],
+  };
+}
+
+function selectorValueOptions(selectorDimensions: CliRouteSelectorDimensions): readonly string[] {
+  if (selectorDimensions === "neither") {
+    return [];
+  }
+  if (selectorDimensions === "window") {
+    return [targetValueOptions[0]];
+  }
+  if (selectorDimensions === "tab") {
+    return [targetValueOptions[1]];
+  }
+  return targetValueOptions;
+}
+
+function isTargetValueOption(arg: string): arg is (typeof targetValueOptions)[number] {
+  return arg === targetValueOptions[0] || arg === targetValueOptions[1];
 }
 
 function shouldTreatKnownOptionAsPayload(context: {
@@ -299,7 +352,7 @@ function buildOptionInventory(specs: Readonly<Record<string, CliRouteParserSpec>
   readonly optionalValueOptions: ReadonlySet<string>;
 } {
   const flags = new Set<string>();
-  const valueOptions = new Set<string>();
+  const valueOptions = new Set<string>(targetValueOptions);
   const optionalValueOptions = new Set<string>();
   for (const spec of Object.values(specs)) {
     for (const flag of spec.flags) {

@@ -23,7 +23,7 @@ import {
   kernelCapabilities,
   parseBoundaryRequest,
 } from "./index.js";
-import { commandIds, sorted, expectedCliRoutesByCommand } from "./protocol-test-support.js";
+import { commandIds, expectedCliRouteSelectorDimensions, expectedCliRoutesByCommand, sorted } from "./protocol-test-support.js";
 
 describe("protocol command metadata", () => {
   it("uses unique CLI route ids and paths", () => {
@@ -35,14 +35,20 @@ describe("protocol command metadata", () => {
     const routePaths = routes.map((route) => route.path.join("\0"));
 
     for (const command of commandIds()) {
-      expect(getCommandCliRoutes(command)).toEqual(expectedCliRoutesByCommand[command] ?? []);
+      expect(getCommandCliRoutes(command).map(withoutSelectorDimensions)).toEqual(expectedCliRoutesByCommand[command] ?? []);
     }
-    expect(routes).toEqual(expectedRoutes);
-    expect(routeEntries).toEqual(expectedRouteEntries);
+    expect(routes.map(withoutSelectorDimensions)).toEqual(expectedRoutes);
+    expect(routeEntries.map((entry) => ({ ...entry, route: withoutSelectorDimensions(entry.route) }))).toEqual(expectedRouteEntries);
     expect(new Set(routeIds).size).toBe(routeIds.length);
     expect(new Set(routePaths).size).toBe(routePaths.length);
     expect(routes.every((route) => route.path.length > 0)).toBe(true);
     expect(routes.every((route) => route.path.every((segment) => segment.length > 0))).toBe(true);
+  });
+
+  it("declares the selector dimensions consumed by every CLI route", () => {
+    for (const route of getCliRoutes()) {
+      expect(route.selectorDimensions, route.id).toBe(expectedCliRouteSelectorDimensions(route.id));
+    }
   });
 
   it("includes all command statuses and gated capabilities in kernel capabilities", () => {
@@ -200,6 +206,19 @@ describe("protocol command metadata", () => {
     expect(isPrivilegeSensitiveRequest(createRequest("wait", { kind: "load-state", state: "networkidle" }))).toBe(true);
   });
 });
+
+function withoutSelectorDimensions(route: {
+  readonly id: string;
+  readonly path: readonly [string, ...string[]];
+  readonly batch: boolean;
+  readonly selectorDimensions: string;
+}): { readonly id: string; readonly path: readonly [string, ...string[]]; readonly batch: boolean } {
+  return {
+    id: route.id,
+    path: route.path,
+    batch: route.batch,
+  };
+}
 
 describe("request protocol compatibility", () => {
   it("derives command protocol requirements from registry metadata", () => {

@@ -1,4 +1,5 @@
-import type { CommandSchemaEntry } from "../metadata.js";
+import type { CliRouteSelectorDimensions, CommandSchemaEntry } from "../metadata.js";
+import { targetSelectorSchema } from "../target.js";
 
 export type CommandRegistryFragment = Readonly<Record<string, CommandSchemaEntry>>;
 
@@ -23,6 +24,40 @@ export function assembleCommandRegistry(...fragments: readonly CommandRegistryFr
       registry[command] = schema;
     }
   }
+  assertCliRouteSelectorDimensions(registry);
 
   return registry;
+}
+
+function assertCliRouteSelectorDimensions(registry: Readonly<Record<string, CommandSchemaEntry>>): void {
+  for (const [command, schema] of Object.entries(registry)) {
+    for (const route of schema.cliRoutes) {
+      const selectorDimensions: CliRouteSelectorDimensions = route.selectorDimensions;
+      const paramsSelectorDimensions = selectorDimensionsAcceptedByCommand(schema);
+      if (selectorDimensions !== paramsSelectorDimensions) {
+        throw new Error(
+          `CLI route selector dimensions disagree with command params: ${command} (${route.id}) declares ${selectorDimensions}, params accept ${paramsSelectorDimensions}.`,
+        );
+      }
+    }
+  }
+}
+
+function selectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRouteSelectorDimensions {
+  const selectorSchema = schema.targetSelectorSchema ?? (schema.target === "none" ? undefined : targetSelectorSchema);
+  if (selectorSchema === undefined) {
+    return "neither";
+  }
+  const acceptsWindow = selectorSchema.safeParse({ window: { kind: "active" } }).success;
+  const acceptsTab = selectorSchema.safeParse({ tab: { kind: "active" } }).success;
+  if (acceptsWindow && acceptsTab) {
+    return "both";
+  }
+  if (acceptsWindow) {
+    return "window";
+  }
+  if (acceptsTab) {
+    return "tab";
+  }
+  return "neither";
 }

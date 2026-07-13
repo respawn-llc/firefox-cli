@@ -200,4 +200,97 @@ describe("parseBoundaryRequest", () => {
 
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(requests.map((request) => ({ ok: true, value: request })));
   });
+
+  it("rejects tab selectors for window-only browsing commands at direct and batch boundaries", () => {
+    const invalidRequests: readonly unknown[] = [
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "tab-new-tab-target",
+        command: "tab.new",
+        params: { target: { tab: { kind: "id", id: 42 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "window-select-tab-target",
+        command: "window.select",
+        params: { target: { tab: { kind: "id", id: 42 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "window-close-tab-target",
+        command: "window.close",
+        params: { target: { tab: { kind: "id", id: 42 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "batch-window-only-tab-target",
+        command: "batch",
+        params: {
+          steps: [
+            { command: "tab.new", params: { target: { tab: { kind: "id", id: 42 } } } },
+            { command: "window.select", params: { target: { tab: { kind: "id", id: 42 } } } },
+            { command: "window.close", params: { target: { tab: { kind: "id", id: 42 } } } },
+          ],
+        },
+      },
+    ];
+
+    for (const request of invalidRequests) {
+      const parsed = parseBoundaryRequest("host-to-extension", request);
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) {
+        expect(parsed.error.code).toBe("INVALID_ENVELOPE");
+      }
+    }
+  });
+
+  it("rejects negative selector ids at direct and batch boundaries", () => {
+    const requests: readonly unknown[] = [
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "negative-window",
+        command: "open",
+        params: { url: "https://example.com/", newTab: false, target: { window: { kind: "id", id: -1 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "negative-tab-batch",
+        command: "batch",
+        params: {
+          steps: [{ command: "snapshot", params: { target: { tab: { kind: "id", id: -1 } } } }],
+        },
+      },
+    ];
+
+    for (const request of requests) {
+      expect(parseBoundaryRequest("host-to-extension", request)).toMatchObject({
+        ok: false,
+        error: { code: "INVALID_ENVELOPE" },
+      });
+    }
+  });
+
+  it("accepts window selectors for window-only browsing commands and full selectors for page commands", () => {
+    const validRequests = [
+      createRequest("tab.new", { target: { window: { kind: "id", id: 7 } } }, "tab-new-window-target"),
+      createRequest("window.select", { target: { window: { kind: "id", id: 7 } } }, "window-select-window-target"),
+      createRequest("window.close", { target: { window: { kind: "id", id: 7 } } }, "window-close-window-target"),
+      createRequest(
+        "open",
+        {
+          url: "https://example.com/",
+          newTab: false,
+          target: {
+            window: { kind: "id", id: 7 },
+            tab: { kind: "id", id: 42 },
+          },
+        },
+        "open-full-target",
+      ),
+    ];
+
+    expect(validRequests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(
+      validRequests.map((request) => ({ ok: true, value: request })),
+    );
+  });
 });

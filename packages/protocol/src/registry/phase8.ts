@@ -58,7 +58,7 @@ export const phase8CommandEntries = defineCommandEntries({
       future: "docs/iframe-targeting-future.md",
     },
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
-    cliRoutes: [{ id: "eval", path: ["eval"], batch: true }],
+    cliRoutes: [{ id: "eval", path: ["eval"], batch: true, selectorDimensions: "both" }],
   },
   screenshot: {
     params: screenshotParamsSchema,
@@ -70,7 +70,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "command",
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
-    cliRoutes: [{ id: "screenshot", path: ["screenshot"], batch: true }],
+    cliRoutes: [{ id: "screenshot", path: ["screenshot"], batch: true, selectorDimensions: "both" }],
   },
   drag: {
     params: dragParamsSchema,
@@ -82,7 +82,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "drag", path: ["drag"], batch: true }],
+    cliRoutes: [{ id: "drag", path: ["drag"], batch: true, selectorDimensions: "both" }],
   },
   upload: {
     params: uploadParamsSchema,
@@ -94,7 +94,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "upload", path: ["upload"], batch: true }],
+    cliRoutes: [{ id: "upload", path: ["upload"], batch: true, selectorDimensions: "both" }],
   },
   mouse: {
     params: mouseParamsSchema,
@@ -106,7 +106,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "mouse", path: ["mouse"], batch: true }],
+    cliRoutes: [{ id: "mouse", path: ["mouse"], batch: true, selectorDimensions: "both" }],
   },
   keydown: {
     params: keyEventParamsSchema,
@@ -118,7 +118,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "keydown", path: ["keydown"], batch: true }],
+    cliRoutes: [{ id: "keydown", path: ["keydown"], batch: true, selectorDimensions: "both" }],
   },
   keyup: {
     params: keyEventParamsSchema,
@@ -130,7 +130,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "keyup", path: ["keyup"], batch: true }],
+    cliRoutes: [{ id: "keyup", path: ["keyup"], batch: true, selectorDimensions: "both" }],
   },
   find: {
     params: findParamsSchema,
@@ -142,7 +142,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "find", path: ["find"], batch: true }],
+    cliRoutes: [{ id: "find", path: ["find"], batch: true, selectorDimensions: "both" }],
   },
   frame: {
     params: frameParamsSchema,
@@ -159,7 +159,7 @@ export const phase8CommandEntries = defineCommandEntries({
       future: "docs/iframe-targeting-future.md",
     },
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "frame", path: ["frame"], batch: true }],
+    cliRoutes: [{ id: "frame", path: ["frame"], batch: true, selectorDimensions: "both" }],
   },
   download: {
     params: downloadParamsSchema,
@@ -172,7 +172,7 @@ export const phase8CommandEntries = defineCommandEntries({
     timeout: "none",
     security: { level: "sensitive", reasons: ["downloads"] },
     batch: { allowed: true },
-    cliRoutes: [{ id: "download", path: ["download"], batch: true }],
+    cliRoutes: [{ id: "download", path: ["download"], batch: true, selectorDimensions: "neither" }],
   },
   dialog: {
     params: dialogParamsSchema,
@@ -184,7 +184,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "dialog", path: ["dialog"], batch: true }],
+    cliRoutes: [{ id: "dialog", path: ["dialog"], batch: true, selectorDimensions: "both" }],
   },
   clipboard: {
     params: clipboardParamsSchema,
@@ -197,7 +197,7 @@ export const phase8CommandEntries = defineCommandEntries({
     timeout: "none",
     security: { level: "sensitive", reasons: ["clipboard"] },
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "clipboard", path: ["clipboard"], batch: true }],
+    cliRoutes: [{ id: "clipboard", path: ["clipboard"], batch: true, selectorDimensions: "both" }],
   },
   cookies: {
     params: cookieParamsSchema,
@@ -210,7 +210,7 @@ export const phase8CommandEntries = defineCommandEntries({
     timeout: "none",
     security: { level: "sensitive", reasons: ["cookies"] },
     batch: { allowed: true },
-    cliRoutes: [{ id: "cookies", path: ["cookies"], batch: true }],
+    cliRoutes: [{ id: "cookies", path: ["cookies"], batch: true, selectorDimensions: "neither" }],
   },
   storage: {
     params: storageParamsSchema,
@@ -222,7 +222,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "storage", path: ["storage"], batch: true }],
+    cliRoutes: [{ id: "storage", path: ["storage"], batch: true, selectorDimensions: "both" }],
   },
   network: {
     params: networkParamsSchema,
@@ -243,7 +243,7 @@ export const phase8CommandEntries = defineCommandEntries({
       ],
     },
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "network", path: ["network"], batch: true }],
+    cliRoutes: [{ id: "network", path: ["network"], batch: true, selectorDimensions: "both" }],
   },
   console: {
     params: consoleParamsSchema,
@@ -255,7 +255,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "console", path: ["console"], batch: true }],
+    cliRoutes: [{ id: "console", path: ["console"], batch: true, selectorDimensions: "both" }],
   },
   errors: {
     params: errorsParamsSchema,
@@ -267,7 +267,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "errors", path: ["errors"], batch: true }],
+    cliRoutes: [{ id: "errors", path: ["errors"], batch: true, selectorDimensions: "both" }],
   },
   highlight: {
     params: highlightParamsSchema,
@@ -279,7 +279,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "highlight", path: ["highlight"], batch: true }],
+    cliRoutes: [{ id: "highlight", path: ["highlight"], batch: true, selectorDimensions: "both" }],
   },
   notify: {
     params: notifyParamsSchema,
@@ -300,19 +300,19 @@ export const phase8CommandEntries = defineCommandEntries({
       ],
     },
     batch: { allowed: true },
-    cliRoutes: [{ id: "notify", path: ["notify"], batch: true }],
+    cliRoutes: [{ id: "notify", path: ["notify"], batch: true, selectorDimensions: "neither" }],
   },
   pdf: {
     params: pdfParamsSchema,
     result: pdfResultSchema,
     status: "unsupported",
     owner: "extension",
-    target: "optional",
+    target: "none",
     content: "never",
     action: false,
     timeout: "none",
     batch: { allowed: true },
-    cliRoutes: [{ id: "pdf", path: ["pdf"], batch: true }],
+    cliRoutes: [{ id: "pdf", path: ["pdf"], batch: true, selectorDimensions: "neither" }],
   },
   "set.viewport": {
     params: setViewportParamsSchema,
@@ -324,7 +324,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "set.viewport", path: ["set", "viewport"], batch: true }],
+    cliRoutes: [{ id: "set.viewport", path: ["set", "viewport"], batch: true, selectorDimensions: "both" }],
   },
   diff: {
     params: diffParamsSchema,
@@ -336,6 +336,6 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "diff", path: ["diff"], batch: true }],
+    cliRoutes: [{ id: "diff", path: ["diff"], batch: true, selectorDimensions: "both" }],
   },
 });

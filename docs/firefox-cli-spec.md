@@ -217,6 +217,9 @@ Target resolution is owned by the extension.
 - Private windows are reported but commands return `UNSUPPORTED_CAPABILITY` unless the extension has private browsing permission and the command is explicitly allowed there.
 - Container tab metadata should be included when Firefox exposes it, but no persistent container/session model is added.
 - Each command snapshots its resolved target before execution to avoid active-tab races.
+- Selector values are `active`, a non-negative listing index, or `id:<non-negative Firefox ID>`. A route supports neither selector, `--window` only, `--tab` only, or both as advertised by its CLI help; unsupported selector flags fail before dispatch.
+- Page-targeted routes support both dimensions. `tab new`, `window select`, and `window close` support `--window` only. Targetless routes support neither.
+- `window select` changes Firefox focus only. It does not establish a durable CLI target; use an explicit selector on each isolated follow-up command.
 
 `open <url>` navigates the resolved active tab to match `agent-browser`. Use `tab new [url]` or `open --new-tab <url>` to create a new tab.
 
@@ -278,7 +281,7 @@ Generated DOM events are not trusted user input. Sites that check `event.isTrust
 Start with visible-tab screenshots.
 
 - `screenshot [path]` captures the active visible tab of the target window.
-- If a non-active target is requested, the command may activate the target tab/window before capture and must report that side effect in diagnostics.
+- If the requested target is not active or focused, the command activates its tab and/or focuses its window before capture and reports those side effects in diagnostics. Invalid target resolution happens before activation.
 - If activation is impossible or would require unsupported user activation, return `UNSUPPORTED_CAPABILITY`.
 - Write image bytes through the native host to the requested path; JSON output should include path, format, dimensions when known, and diagnostics.
 - Support visible-tab PNG and JPEG captures with JPEG quality.
@@ -329,7 +332,7 @@ Global options:
 - `--json`: emit machine-readable JSON.
 - `--timeout <ms>`: override command timeout.
 - `--max-output <chars>`: cap text output.
-- `--window <id|index|active>` and `--tab <id|index|active>`: choose a target without hidden sessions.
+- `--window <target>` and `--tab <target>`: route-specific target selectors; use only flags advertised by that route's help.
 - `--debug`: include transport/protocol diagnostics.
 
 Setup and diagnostics:
@@ -460,7 +463,7 @@ Tabs and windows:
 - `window`: lists normal windows and their active tabs. Result includes Firefox window IDs, focus/active flags, bounds when available, and tab count.
 - `window new [url]`: creates a new window. Result is created window ID and active tab ID.
 - `window close <id|active>`: closes a window. Result is closed window ID.
-- `window select <id|index>`: focuses a window. Result is selected window ID and active tab.
+- `window select <id|index>`: focuses a window. Result includes refreshed focus metadata and its active tab; it does not set a durable default target.
 
 Screenshots:
 

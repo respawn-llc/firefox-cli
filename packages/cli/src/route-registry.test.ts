@@ -61,4 +61,14 @@ describe("CLI route registry", () => {
       expect(help).toContain(`  ${binding.help}`);
     }
   });
+
+  it("advertises only protocol-declared selector dimensions in route usage", () => {
+    for (const binding of Object.values(cliRouteBindings)) {
+      const expectsWindow = binding.route.selectorDimensions === "window" || binding.route.selectorDimensions === "both";
+      const expectsTab = binding.route.selectorDimensions === "tab" || binding.route.selectorDimensions === "both";
+
+      expect(binding.help.includes("--window <target>"), binding.route.id).toBe(expectsWindow);
+      expect(binding.help.includes("--tab <target>"), binding.route.id).toBe(expectsTab);
+    }
+  });
 });

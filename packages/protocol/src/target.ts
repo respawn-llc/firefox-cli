@@ -14,25 +14,26 @@ export const tabSummarySchema = z
   .strict();
 export type TabSummary = z.infer<typeof tabSummarySchema>;
 
+export const targetDimensionSelectorSchema = z.union([
+  z.object({ kind: z.literal("active") }).strict(),
+  z.object({ kind: z.literal("id"), id: z.number().int().nonnegative() }).strict(),
+  z.object({ kind: z.literal("index"), index: z.number().int().nonnegative() }).strict(),
+]);
+
 export const targetSelectorSchema = z
   .object({
-    window: z
-      .union([
-        z.object({ kind: z.literal("active") }).strict(),
-        z.object({ kind: z.literal("id"), id: z.number().int() }).strict(),
-        z.object({ kind: z.literal("index"), index: z.number().int().nonnegative() }).strict(),
-      ])
-      .optional(),
-    tab: z
-      .union([
-        z.object({ kind: z.literal("active") }).strict(),
-        z.object({ kind: z.literal("id"), id: z.number().int() }).strict(),
-        z.object({ kind: z.literal("index"), index: z.number().int().nonnegative() }).strict(),
-      ])
-      .optional(),
+    window: targetDimensionSelectorSchema.optional(),
+    tab: targetDimensionSelectorSchema.optional(),
   })
   .strict();
 export type TargetSelector = z.infer<typeof targetSelectorSchema>;
+
+export const windowTargetSelectorSchema = z
+  .object({
+    window: targetDimensionSelectorSchema,
+  })
+  .strict();
+export type WindowTargetSelector = z.infer<typeof windowTargetSelectorSchema>;
 
 export const resolvedTargetSchema = z
   .object({
@@ -77,7 +78,7 @@ export const tabsListResultSchema = z.object({
 export const tabNewParamsSchema = z
   .object({
     url: z.string().min(1).optional(),
-    target: targetSelectorSchema.optional(),
+    target: windowTargetSelectorSchema.optional(),
   })
   .strict();
 export const tabTargetParamsSchema = z
@@ -104,7 +105,7 @@ export const windowNewParamsSchema = z
   .strict();
 export const windowTargetParamsSchema = z
   .object({
-    target: targetSelectorSchema,
+    target: windowTargetSelectorSchema,
   })
   .strict();
 export const windowNewResultSchema = z.object({

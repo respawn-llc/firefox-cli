@@ -28,7 +28,7 @@ const routeHelpSpecs = {
     "Use listed indexes with `--window <index>` and ids with `--window id:<id>`.",
   ]),
   "window.new": helpSpec("Open a new Firefox window, optionally at a URL."),
-  "window.select": helpSpec("Focus a Firefox window by index or id."),
+  "window.select": helpSpec("Focus a Firefox window by index or id; it does not establish a durable CLI target."),
   "window.close": helpSpec("Close a Firefox window by index or id."),
   open: helpSpec("Navigate the active tab or create a new tab for a URL.", ["Use `--new-tab` when navigation must not replace the active page."]),
   back: helpSpec("Go back in the target tab history."),
@@ -277,7 +277,7 @@ export function renderHelp(): string {
     "Guidance:",
     "  Use `--json` when another program or agent consumes results.",
     "  Use `firefox-cli snapshot -i` before element actions to get stable `@ref` handles.",
-    "  Use `--tab` and `--window` with active, index values, or id:<id> to target a browser surface.",
+    "  Use only the `--tab` and `--window` options advertised by each command; values are active, index, or id:<id>.",
     "  Use `firefox-cli <command> -h` for contextual command help.",
     "",
   ].join("\n");
@@ -308,7 +308,7 @@ function renderGroupHelp(group: HelpGroup): string {
     "",
     "Guidance:",
     "  Add `--json` for machine-readable output.",
-    "  Use `--tab` and `--window` on browser-targeted commands when active target is not enough.",
+    "  Use only the selector options advertised by each command when the active target is not enough.",
     "",
   ].join("\n");
 }

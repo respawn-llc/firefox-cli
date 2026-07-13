@@ -1,4 +1,4 @@
-import { commandSchemas, type Boundary, type CliRouteMetadata, type CommandId, type ComponentIdentity } from "./index.js";
+import { commandSchemas, type Boundary, type CliRouteSelectorDimensions, type CommandId, type ComponentIdentity } from "./index.js";
 
 export const boundaries: readonly Boundary[] = ["cli-to-host", "host-to-extension", "extension-to-content-script"];
 export const inheritedCommandNames = ["toString", "constructor", "__proto__"] as const;
@@ -24,7 +24,13 @@ export function sorted(values: readonly string[]): string[] {
   return [...values].sort((left, right) => left.localeCompare(right));
 }
 
-export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliRouteMetadata[]>> = {
+interface ExpectedCliRouteMetadata {
+  readonly id: string;
+  readonly path: readonly [string, ...string[]];
+  readonly batch: boolean;
+}
+
+export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly ExpectedCliRouteMetadata[]>> = {
   capabilities: [{ id: "capabilities", path: ["capabilities"], batch: false }],
   "tabs.list": [{ id: "tab.list", path: ["tab"], batch: true }],
   "tab.new": [{ id: "tab.new", path: ["tab", "new"], batch: true }],
@@ -84,3 +90,21 @@ export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly CliR
   "pair.requestApproval": [{ id: "connect", path: ["connect"], batch: false }],
   "pair.openApproval": [],
 } as const;
+
+const selectorDimensionsByRouteId: Readonly<Record<string, CliRouteSelectorDimensions>> = {
+  capabilities: "neither",
+  "tab.new": "window",
+  "window.list": "neither",
+  "window.new": "neither",
+  "window.select": "window",
+  "window.close": "window",
+  download: "neither",
+  cookies: "neither",
+  notify: "neither",
+  pdf: "neither",
+  connect: "neither",
+};
+
+export function expectedCliRouteSelectorDimensions(routeId: string): CliRouteSelectorDimensions {
+  return selectorDimensionsByRouteId[routeId] ?? "both";
+}

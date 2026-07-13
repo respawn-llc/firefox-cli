@@ -4,7 +4,7 @@ All commands use the paired Firefox session. Add `--json` for structured output 
 
 ## Targets
 
-Commands that operate on a page accept:
+Commands advertise their supported selectors in `-h`. Selector values are:
 
 ```sh
 --tab active
@@ -16,6 +16,8 @@ Commands that operate on a page accept:
 ```
 
 Bare numeric targets are indexes printed by `firefox-cli tab` and `firefox-cli window`; `id:` targets use Firefox tab or window IDs.
+
+Page-targeted commands accept both `--window` and `--tab`. `tab new`, `window select`, and `window close` accept `--window` only. Targetless commands accept neither. Unsupported selector flags fail before a request is sent.
 
 Private windows are listed and readable. Mutating commands against private windows return `UNSUPPORTED_CAPABILITY`.
 
@@ -35,13 +37,13 @@ Private windows are listed and readable. Mutating commands against private windo
 | Command | Behavior |
 | --- | --- |
 | `firefox-cli tab [--json]` | List tabs. |
-| `firefox-cli tab new [url] [--json]` | Open a new tab. |
+| `firefox-cli tab new [url] [--window target] [--json]` | Open a new tab in the selected window. |
 | `firefox-cli tab select [target] [--json]` | Select a tab. |
 | `firefox-cli tab close [target] [--json]` | Close a tab. |
 | `firefox-cli window [--json]` | List windows. |
 | `firefox-cli window new [url] [--json]` | Open a new window. |
-| `firefox-cli window select [target] [--json]` | Select a window. |
-| `firefox-cli window close [target] [--json]` | Close a window. |
+| `firefox-cli window select [target] [--window target] [--json]` | Focus a window; this does not set a durable default target. |
+| `firefox-cli window close [target] [--window target] [--json]` | Close a selected window. |
 | `firefox-cli open [--new-tab] <url> [--json]` | Navigate the target tab or open a URL in a new tab. |
 | `firefox-cli back|forward|reload [--json]` | Run browser navigation in the target tab. |
 
@@ -131,7 +133,7 @@ firefox-cli screenshot [path] [--format png|jpeg] [--screenshot-quality 1-100] [
 firefox-cli batch <json> | --stdin [--bail] [--timeout ms] [--max-output bytes] [--json]
 ```
 
-`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output captures the visible tab as PNG or JPEG; `--full` returns `UNSUPPORTED_CAPABILITY`.
+`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output captures the visible tab as PNG or JPEG and may activate the selected tab/window; `--full` returns `UNSUPPORTED_CAPABILITY`.
 
 `batch` accepts an array of protocol command objects or CLI argv arrays. Steps run serially. With `--bail`, execution stops after the first failed step; without it, later steps continue and the batch result reports failures.
 
