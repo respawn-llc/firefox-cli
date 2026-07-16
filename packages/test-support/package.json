@@ -10,6 +10,6 @@
     "format": "biome format .",
     "lint": "eslint .",
     "test": "vitest run src/**/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json --pretty false --noEmit"
+    "typecheck": "bun run --cwd ../.. tsc -- -p packages/test-support/tsconfig.json --pretty false --noEmit"
   }
 }

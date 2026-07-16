@@ -29,3 +29,15 @@ test("root TypeScript config remains a project-reference entrypoint", async () =
     "./scripts",
   ]);
 });
+
+test("TypeScript 7 compiler and TypeScript 6 tooling API remain isolated", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.match(packageJson.devDependencies["@typescript/native"], /^npm:typescript@\^7\./);
+  assert.match(packageJson.devDependencies.typescript, /^\^6\./);
+  assert.equal(packageJson.scripts.tsc, "node ./node_modules/@typescript/native/bin/tsc");
+
+  for (const packageName of ["cli", "extension", "native-host", "protocol", "test-support"]) {
+    const packageManifest = JSON.parse(await readFile(new URL(`../packages/${packageName}/package.json`, import.meta.url), "utf8"));
+    assert.match(packageManifest.scripts.typecheck, /^bun run --cwd \.\.\/\.\. tsc -- /);
+  }
+});

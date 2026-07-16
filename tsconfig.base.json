@@ -13,13 +13,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "skipLibCheck": false,
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "paths": {
-      "@firefox-cli/cli": ["packages/cli/src/index.ts"],
-      "@firefox-cli/native-host": ["packages/native-host/src/index.ts"],
-      "@firefox-cli/protocol": ["packages/protocol/src/index.ts"],
-      "@firefox-cli/test-support": ["packages/test-support/src/index.ts"]
+      "@firefox-cli/cli": ["./packages/cli/src/index.ts"],
+      "@firefox-cli/native-host": ["./packages/native-host/src/index.ts"],
+      "@firefox-cli/protocol": ["./packages/protocol/src/index.ts"],
+      "@firefox-cli/test-support": ["./packages/test-support/src/index.ts"]
     },
     "types": ["node"],
     "allowJs": false,

@@ -11,6 +11,7 @@
         "@types/bun",
         "@types/jsdom",
         "@types/node",
+        "@typescript/native",
         "eslint",
         "eslint-config-prettier",
         "jsdom",
