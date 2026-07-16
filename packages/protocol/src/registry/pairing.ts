@@ -53,7 +53,7 @@ export const pairingCommandEntries = defineCommandEntries({
       ],
     },
     batch: { allowed: false },
-    cliRoutes: [{ id: "connect", path: ["connect"], batch: false }],
+    cliRoutes: [{ id: "connect", path: ["connect"], batch: false, selectorDimensions: "neither" }],
   },
   "pair.openApproval": {
     params: pairOpenApprovalParamsSchema,

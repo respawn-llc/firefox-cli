@@ -1,10 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createTempDir } from "@firefox-cli/test-support";
 import { createErrorResponse, createOkResponse } from "@firefox-cli/protocol";
+import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { runCli } from "./index.js";
 import { actionElement, baseDependencies, targetSummary } from "./cli-test-support.js";
+import { runCli } from "./index.js";
+import { findCliRouteBindingForArgv } from "./route-registry.js";
 
 describe("runCli tabs and targets", () => {
   it("lists Firefox tabs as JSON", async () => {
@@ -145,7 +146,8 @@ describe("runCli tabs and targets", () => {
 
     expect(output).toEqual({
       exitCode: 0,
-      stdout: "w7 t42 [0] Example https://example.com/\n",
+      stdout:
+        "w7 t42 [0] Example https://example.com/\nBrought this tab forward to the user. This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.\n",
       stderr: "",
     });
   });
@@ -210,6 +212,10 @@ describe("runCli tabs and targets", () => {
 
     for (const flag of flags) {
       for (const testCase of cases) {
+        const binding = findCliRouteBindingForArgv(testCase.argv);
+        if (binding === undefined || !supportsSelectorFlag(binding.route.selectorDimensions, flag)) {
+          continue;
+        }
         await expect(
           runCli([...testCase.argv, flag], {
             ...baseDependencies(),
@@ -338,3 +344,10 @@ describe("runCli tabs and targets", () => {
     });
   });
 });
+
+function supportsSelectorFlag(selectorDimensions: "neither" | "window" | "tab" | "both", flag: "--tab" | "--window"): boolean {
+  return (
+    (flag === "--tab" && (selectorDimensions === "tab" || selectorDimensions === "both")) ||
+    (flag === "--window" && (selectorDimensions === "window" || selectorDimensions === "both"))
+  );
+}

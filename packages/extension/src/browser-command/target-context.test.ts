@@ -20,13 +20,13 @@ describe("browser target context", () => {
     const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
     const context = createBrowserTargetContext(adapter);
 
-    await expect(context.resolveTarget(undefined)).resolves.toMatchObject({ tab: { id: 101 } });
+    await expect(context.resolveTarget({ tab: { kind: "active" } })).resolves.toMatchObject({ tab: { id: 101 } });
     await adapter.selectTab(102);
-    await expect(context.resolveTarget(undefined)).resolves.toMatchObject({ tab: { id: 101 } });
+    await expect(context.resolveTarget({ tab: { kind: "active" } })).resolves.toMatchObject({ tab: { id: 101 } });
 
     context.invalidate();
 
-    await expect(context.resolveTarget(undefined)).resolves.toMatchObject({ tab: { id: 102 } });
+    await expect(context.resolveTarget({ tab: { kind: "active" } })).resolves.toMatchObject({ tab: { id: 102 } });
     expect(adapter.listWindowCalls).toBe(2);
   });
 });

@@ -21,7 +21,7 @@ The first approval request creates a pair token. The extension stores the token 
 
 ## Targeting
 
-Commands resolve targets inside the extension. Default target selection uses the active tab/window. Explicit targets use the indexes printed by `tab`/`window` or Firefox IDs with `id:<number>`.
+Commands resolve targets inside the extension. Omitted selectors are accepted only when the required window or tab is unique. Explicit selectors use `active`, the indexes printed by `tab`/`window`, or Firefox IDs with `id:<number>`; a tab ID also identifies its owning window.
 
 Private windows are guarded at the extension command boundary. Read-only listings can report private tabs/windows; commands that would mutate private browsing state are rejected.
 

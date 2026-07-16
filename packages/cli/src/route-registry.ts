@@ -38,7 +38,7 @@ import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
-import { cliResponseFormatters, formatApprovalRequest } from "./format.js";
+import { cliResponseFormatters, formatApprovalRequest, formatTabSelect, formatWindowSelect } from "./format.js";
 import { getPositionals } from "./parse.js";
 import type { CliRequestBuilder, CliResponseFormatter, CliResponseFormatterKind, CliRouteBinding, CliRouteParserSpec } from "./types.js";
 
@@ -60,11 +60,11 @@ const routeFormatterSpecs = {
   capabilities: routeFormatter("capabilities", "capabilities", cliResponseFormatters.capabilities),
   "tab.list": routeFormatter("tabs.list", "tab-list", cliResponseFormatters["tab-list"]),
   "tab.new": routeFormatter("tab.new", "tab-target", cliResponseFormatters["tab-target"]),
-  "tab.select": routeFormatter("tab.select", "tab-target", cliResponseFormatters["tab-target"]),
+  "tab.select": routeFormatter("tab.select", "tab-target", formatTabSelect),
   "tab.close": routeFormatter("tab.close", "tab-close", cliResponseFormatters["tab-close"]),
   "window.list": routeFormatter("windows.list", "window-list", cliResponseFormatters["window-list"]),
   "window.new": routeFormatter("window.new", "window-target", cliResponseFormatters["window-target"]),
-  "window.select": routeFormatter("window.select", "window-target", cliResponseFormatters["window-target"]),
+  "window.select": routeFormatter("window.select", "window-target", formatWindowSelect),
   "window.close": routeFormatter("window.close", "window-close", cliResponseFormatters["window-close"]),
   open: routeFormatter("open", "tab-target", cliResponseFormatters["tab-target"]),
   back: routeFormatter("back", "tab-target", cliResponseFormatters["tab-target"]),
@@ -143,12 +143,20 @@ function bindCliRoute<RouteId extends keyof RouteFormatterSpecById>(
   return {
     route: routeEntry.route,
     command: formatter.command,
-    help,
+    help: withTargetSelectorUsage(help, routeEntry.route.selectorDimensions),
     parser,
     formatterKind: formatter.kind,
     formatter: formatter.formatter,
     buildRequest,
   };
+}
+
+function withTargetSelectorUsage(help: string, selectorDimensions: CliRouteMetadata["selectorDimensions"]): string {
+  const selectorUsage = [
+    ...(selectorDimensions === "window" || selectorDimensions === "both" ? ["[--window <target>]"] : []),
+    ...(selectorDimensions === "tab" || selectorDimensions === "both" ? ["[--tab <target>]"] : []),
+  ];
+  return selectorUsage.length === 0 ? help : `${help} ${selectorUsage.join(" ")}`;
 }
 
 export const cliRouteBindings = {
@@ -184,7 +192,7 @@ export const cliRouteBindings = {
   clipboard: bindCliRoute("clipboard", "firefox-cli clipboard read|write|copy|paste [text-or-selector] [--json]", buildClipboardRequest),
   cookies: bindCliRoute("cookies", "firefox-cli cookies list|get|set|remove <url> [name] [value] [--json]", buildCookiesRequest),
   storage: bindCliRoute("storage", "firefox-cli storage local|session get|set|remove|clear [key] [value] [--json]", buildStorageRequest),
-  network: bindCliRoute("network", "firefox-cli network list|clear [--window target] [--tab target] [--json]", buildNetworkRequest),
+  network: bindCliRoute("network", "firefox-cli network list|clear [--json]", buildNetworkRequest),
   console: bindCliRoute("console", "firefox-cli console list|clear [--json]", buildLogRequest),
   errors: bindCliRoute("errors", "firefox-cli errors list|clear [--json]", buildLogRequest),
   highlight: bindCliRoute("highlight", "firefox-cli highlight <selector|@ref> [--json]", buildHighlightRequest),

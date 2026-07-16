@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  PROTOCOL_VERSION,
   createOkResponse,
   createRequest,
   mergeDisjointHandlerMaps,
-  parseBoundaryRequest,
-  parseBoundaryResponse,
+  PROTOCOL_VERSION,
   parseBatchStepAs,
   parseBatchStepResultAs,
+  parseBoundaryRequest,
+  parseBoundaryResponse,
   safeParseStrictCommandParams,
 } from "./index.js";
 import { boundaries } from "./protocol-test-support.js";
 
 describe("parseBoundaryResponse", () => {
   it("parses command-correlated batch steps and results", () => {
-    expect(safeParseStrictCommandParams("tab.close", {}).success).toBe(false);
+    expect(safeParseStrictCommandParams("tab.close", {}).success).toBe(true);
 
     expect(
       parseBatchStepAs("tab.close", {
@@ -25,12 +25,7 @@ describe("parseBoundaryResponse", () => {
       ok: true,
       value: {
         command: "tab.close",
-        params: {
-          target: {
-            window: { kind: "active" },
-            tab: { kind: "active" },
-          },
-        },
+        params: {},
       },
     });
 

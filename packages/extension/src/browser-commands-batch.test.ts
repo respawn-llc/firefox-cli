@@ -41,6 +41,62 @@ describe("browser batch command handling", () => {
     ]);
   });
 
+  it("runs window-only steps without requiring an unambiguous tab", async () => {
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(103, 1, false, 10)])]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          steps: [
+            { command: "tab.new", params: { url: "https://qa.example/" } },
+            { command: "window.select", params: {} },
+          ],
+        },
+        "batch-window-only",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        steps: [
+          { index: 0, command: "tab.new", ok: true, result: { target: { windowId: 10, tabId: 102 } } },
+          { index: 1, command: "window.select", ok: true, result: { window: { id: 10 } } },
+        ],
+      },
+    });
+  });
+
+  it("rejects an omitted batch window before running tab-dependent steps", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+      windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "batch",
+        {
+          steps: [{ command: "snapshot", params: { interactiveOnly: true } }],
+        },
+        "batch-ambiguous-window",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_TARGET",
+        message: "Ambiguous window: Firefox has 2 windows. Pass `--window id:<id>` or explicitly choose `--window active`.",
+      },
+    });
+    expect(adapter.contentRequests).toEqual([]);
+  });
+
   it("preserves step target overrides", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
@@ -51,6 +107,7 @@ describe("browser batch command handling", () => {
       createRequest(
         "batch",
         {
+          target: { tab: { kind: "id", id: 101 } },
           steps: [
             { command: "snapshot", params: {} },
             {

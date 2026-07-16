@@ -1,14 +1,14 @@
 import {
-  createErrorResponseForRequest,
-  createOkResponse,
   type ClipboardResult,
   type CookieResult,
+  createErrorResponseForRequest,
+  createOkResponse,
   type RequestEnvelope,
   type SetViewportResult,
 } from "@firefox-cli/protocol";
 import { sendContentCommand } from "../browser-command/content-bridge.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
-import { toOrderedWindows, toWindowSummary } from "../browser-command/targets.js";
+import { assertMutableWindow, toOrderedWindows, toWindowSummary } from "../browser-command/targets.js";
 import type { BrowserHandlerMap } from "./types.js";
 
 type Phase8BrowserCommand = "download" | "clipboard" | "cookies" | "network" | "notify" | "pdf" | "set.viewport";
@@ -117,8 +117,9 @@ export const phase8BrowserHandlers: BrowserHandlerMap<Phase8BrowserCommand> = {
     });
   },
   "set.viewport": async (request, adapter, context) => {
-    const resolved = await context.targetContext.resolveTarget(request.params.target);
-    const window = await adapter.resizeWindow(resolved.window.id, {
+    const targetWindow = await context.targetContext.resolveTargetWindow(request.params.target);
+    assertMutableWindow(targetWindow);
+    const window = await adapter.resizeWindow(targetWindow.id, {
       width: request.params.width,
       height: request.params.height,
     });

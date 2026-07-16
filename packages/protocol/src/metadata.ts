@@ -4,6 +4,7 @@ import type { CapabilityStatus } from "./core.js";
 
 export type CommandOwner = "native-host" | "extension";
 export type CommandTargetPolicy = "none" | "optional" | "required" | "mixed";
+export type CliRouteSelectorDimensions = "neither" | "window" | "tab" | "both";
 export type CommandContentPolicy = "never" | "always" | "mixed" | "action";
 export type CommandTimeoutPolicy = "none" | "command" | "batch";
 export type CommandFrameScope = "not-applicable" | "main-frame-only" | "main-frame-with-iframe-diagnostics";
@@ -56,6 +57,7 @@ export interface CliRouteMetadata {
   readonly id: string;
   readonly path: readonly [string, ...string[]];
   readonly batch: boolean;
+  readonly selectorDimensions: CliRouteSelectorDimensions;
 }
 
 export interface CliRouteEntry<C extends string = string> {
@@ -65,7 +67,6 @@ export interface CliRouteEntry<C extends string = string> {
 
 export interface CommandBatchMetadata {
   readonly allowed: boolean;
-  readonly protocolDefaultTarget?: boolean;
   readonly extensionDefaultTarget?: boolean;
   readonly timeoutRebase?: boolean;
 }
@@ -84,7 +85,7 @@ export interface CommandSchemaMetadata {
 }
 
 export type CommandSchemaEntry = CommandSchemaMetadata & {
-  readonly params: z.ZodType;
+  readonly params: z.ZodObject<z.ZodRawShape>;
   readonly result: z.ZodType;
   readonly status: CapabilityStatus;
 };

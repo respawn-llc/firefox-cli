@@ -1,7 +1,7 @@
-import { createOkResponse } from "@firefox-cli/protocol";
+import { createErrorResponse, createOkResponse, type RequestEnvelope } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
-import { runCli } from "./index.js";
 import { actionElement, baseDependencies } from "./cli-test-support.js";
+import { runCli } from "./index.js";
 
 describe("runCli batch core", () => {
   it("runs batch command objects with bail, target, timeout, and result limits", async () => {
@@ -120,6 +120,40 @@ describe("runCli batch core", () => {
     expect(JSON.parse(output.stdout)).toMatchObject({
       ok: false,
       firstFailedIndex: 1,
+    });
+  });
+
+  it("preserves omitted selectors in window-only argv steps", async () => {
+    let sentRequest: RequestEnvelope | undefined;
+
+    await runCli(
+      [
+        "batch",
+        JSON.stringify([
+          ["tab", "new"],
+          ["window", "select"],
+          ["window", "close"],
+        ]),
+      ],
+      {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          sentRequest = request;
+          return createErrorResponse(request.id, {
+            code: "NATIVE_HOST_UNAVAILABLE",
+            message: "Expected test transport failure.",
+          });
+        },
+      },
+    );
+
+    expect(sentRequest?.command).toBe("batch");
+    expect(sentRequest?.params).toMatchObject({
+      steps: [
+        { command: "tab.new", params: {} },
+        { command: "window.select", params: {} },
+        { command: "window.close", params: {} },
+      ],
     });
   });
 

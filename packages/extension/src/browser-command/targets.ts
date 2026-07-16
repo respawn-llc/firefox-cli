@@ -34,6 +34,19 @@ export function resolveTarget(
   };
 }
 
+export function resolveTargetWindow(windows: readonly OrderedWindow[], selector: TargetSelector | undefined): OrderedWindow {
+  const tabById = findTargetedTabById(windows, selector);
+  if (tabById !== undefined) {
+    return tabById.window;
+  }
+
+  const window = resolveWindow(windows, selector?.window);
+  if (selector?.tab !== undefined) {
+    resolveTab(window, selector.tab);
+  }
+  return window;
+}
+
 function findTargetedTabById(
   windows: readonly OrderedWindow[],
   selector: TargetSelector | undefined,
@@ -51,6 +64,17 @@ function assertTargetPermission(window: OrderedWindow, tab: TabSummary, options:
 export function resolveWindow(windows: readonly OrderedWindow[], selector: TargetSelector["window"] | undefined): OrderedWindow {
   if (windows.length === 0) {
     throw new BrowserCommandError("NO_ACTIVE_TAB", "Firefox has no normal browser windows.");
+  }
+
+  if (selector === undefined && windows.length > 1) {
+    throw new BrowserCommandError(
+      "INVALID_TARGET",
+      `Ambiguous window: Firefox has ${String(windows.length)} windows. Pass \`--window id:<id>\` or explicitly choose \`--window active\`.`,
+      {
+        reason: "ambiguous-window",
+        windowIds: windows.map((window) => window.id),
+      },
+    );
   }
 
   if (selector === undefined || selector.kind === "active") {
@@ -84,6 +108,18 @@ export function assertMutableWindow(window: OrderedWindow): void {
 export function resolveTab(window: OrderedWindow, selector: TargetSelector["tab"] | undefined): TabSummary {
   if (window.tabs.length === 0) {
     throw new BrowserCommandError("NO_ACTIVE_TAB", "Firefox window has no tabs.");
+  }
+
+  if (selector === undefined && window.tabs.length > 1) {
+    throw new BrowserCommandError(
+      "INVALID_TARGET",
+      `Ambiguous tab: Firefox window ${String(window.id)} has ${String(window.tabs.length)} tabs. Pass \`--tab id:<id>\` or explicitly choose \`--tab active\`.`,
+      {
+        reason: "ambiguous-tab",
+        windowId: window.id,
+        tabIds: window.tabs.map((tab) => tab.id),
+      },
+    );
   }
 
   if (selector === undefined || selector.kind === "active") {

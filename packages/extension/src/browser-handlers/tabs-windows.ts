@@ -7,12 +7,9 @@ type TabsWindowsCommand = "tabs.list" | "windows.list" | "tab.new" | "tab.select
 
 export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
   "tabs.list": async (request, _adapter, context) => {
-    const resolved = await context.targetContext.resolveTarget(request.params.target, {
-      allowPrivate: true,
-    });
+    const window = await context.targetContext.resolveTargetWindow(request.params.target);
     return createOkResponse(request, {
-      target: resolved.target,
-      tabs: [...resolved.window.tabs],
+      tabs: [...window.tabs],
     });
   },
   "windows.list": async (request, _adapter, context) => {
@@ -68,7 +65,7 @@ export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
     });
   },
   "window.select": async (request, adapter, context) => {
-    const window = await context.targetContext.resolveWindow(request.params.target.window);
+    const window = await context.targetContext.resolveWindow(request.params.target?.window);
     assertMutableWindow(window);
     await adapter.focusWindow(window.id);
     context.targetContext.invalidate();
@@ -83,7 +80,7 @@ export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
     });
   },
   "window.close": async (request, adapter, context) => {
-    const window = await context.targetContext.resolveWindow(request.params.target.window);
+    const window = await context.targetContext.resolveWindow(request.params.target?.window);
     assertMutableWindow(window);
     await adapter.closeWindow(window.id);
     context.targetContext.invalidate();

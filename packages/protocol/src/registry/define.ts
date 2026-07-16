@@ -1,4 +1,6 @@
-import type { CommandSchemaEntry } from "../metadata.js";
+import { z } from "zod";
+
+import type { CliRouteSelectorDimensions, CommandSchemaEntry } from "../metadata.js";
 
 export type CommandRegistryFragment = Readonly<Record<string, CommandSchemaEntry>>;
 
@@ -23,6 +25,45 @@ export function assembleCommandRegistry(...fragments: readonly CommandRegistryFr
       registry[command] = schema;
     }
   }
+  assertCliRouteSelectorDimensions(registry);
 
   return registry;
+}
+
+function assertCliRouteSelectorDimensions(registry: Readonly<Record<string, CommandSchemaEntry>>): void {
+  for (const [command, schema] of Object.entries(registry)) {
+    for (const route of schema.cliRoutes) {
+      const selectorDimensions: CliRouteSelectorDimensions = route.selectorDimensions;
+      const paramsSelectorDimensions = targetSelectorDimensionsAcceptedByCommand(schema);
+      if (selectorDimensions !== paramsSelectorDimensions) {
+        throw new Error(
+          `CLI route selector dimensions disagree with command params: ${command} (${route.id}) declares ${selectorDimensions}, params accept ${paramsSelectorDimensions}.`,
+        );
+      }
+    }
+  }
+}
+
+export function targetSelectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRouteSelectorDimensions {
+  if (!(schema.params instanceof z.ZodObject)) {
+    return "neither";
+  }
+  const selectorSchema = schema.params.shape.target;
+  if (!isZodType(selectorSchema)) return "neither";
+  const acceptsWindow = selectorSchema.safeParse({ window: { kind: "active" } }).success;
+  const acceptsTab = selectorSchema.safeParse({ tab: { kind: "active" } }).success;
+  if (acceptsWindow && acceptsTab) {
+    return "both";
+  }
+  if (acceptsWindow) {
+    return "window";
+  }
+  if (acceptsTab) {
+    return "tab";
+  }
+  return "neither";
+}
+
+function isZodType(value: unknown): value is z.ZodType {
+  return value instanceof z.ZodType;
 }

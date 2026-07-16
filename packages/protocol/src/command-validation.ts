@@ -1,8 +1,7 @@
 import type { z } from "zod";
 
 import type { CommandParams, CommandResult } from "./envelopes.js";
-import { commandAcceptsProtocolBatchDefaultTarget, commandSchemas, type CommandId } from "./registry/index.js";
-import { targetSelectorSchema } from "./target.js";
+import { type CommandId, commandSchemas } from "./registry/index.js";
 
 export type CommandSafeParse<T> =
   | {
@@ -21,38 +20,10 @@ export function safeParseStrictCommandParams(command: CommandId, params: unknown
 
 export function safeParseBatchStepCommandParams<C extends CommandId>(command: C, params: unknown): CommandSafeParse<CommandParams<C>>;
 export function safeParseBatchStepCommandParams(command: CommandId, params: unknown): CommandSafeParse<unknown> {
-  const parsed = safeParseStrictCommandParams(command, params);
-  if (parsed.success || !commandAcceptsProtocolBatchDefaultTarget(command)) {
-    return parsed;
-  }
-
-  const fallbackParams = paramsWithDefaultTarget(params);
-  return fallbackParams === undefined ? parsed : safeParseStrictCommandParams(command, fallbackParams);
+  return safeParseStrictCommandParams(command, params);
 }
 
 export function safeParseCommandResult<C extends CommandId>(command: C, result: unknown): CommandSafeParse<CommandResult<C>>;
 export function safeParseCommandResult(command: CommandId, result: unknown): CommandSafeParse<unknown> {
   return commandSchemas[command].result.safeParse(result);
-}
-
-function paramsWithDefaultTarget(params: unknown): (Record<string, unknown> & { readonly target: unknown }) | undefined {
-  if (!isRecord(params)) {
-    return undefined;
-  }
-
-  if (params.target !== undefined) {
-    return undefined;
-  }
-
-  return {
-    ...params,
-    target: targetSelectorSchema.parse({
-      window: { kind: "active" },
-      tab: { kind: "active" },
-    }),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

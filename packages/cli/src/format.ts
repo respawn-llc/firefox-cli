@@ -36,12 +36,24 @@ const formatTabList: CliResponseFormatter<"tabs.list"> = (response, json) => {
   return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(response.result.tabs.map(renderTabSummary).join(""));
 };
 
-const formatTabTarget: CliResponseFormatter<"tab.new" | "tab.select" | "open" | "back" | "forward" | "reload"> = (response, json) => {
+const formatTabTarget: CliResponseFormatter<"tab.new" | "open" | "back" | "forward" | "reload"> = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
   return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`${renderTargetSummary(response.result.target)}\n`);
+};
+
+export const formatTabSelect: CliResponseFormatter<"tab.select"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        `${renderTargetSummary(response.result.target)}\nBrought this tab forward to the user. This does not absolve you from passing \`--window\`/\`--tab\` explicitly to every later target-dependent command.\n`,
+      );
 };
 
 const formatTabClose: CliResponseFormatter<"tab.close"> = (response, json) => {
@@ -71,12 +83,24 @@ const formatWindowList: CliResponseFormatter<"windows.list"> = (response, json) 
       );
 };
 
-const formatWindowTarget: CliResponseFormatter<"window.new" | "window.select"> = (response, json) => {
+const formatWindowTarget: CliResponseFormatter<"window.new"> = (response, json) => {
   if (!response.ok) {
     return error(formatProtocolError(response.error));
   }
 
   return json ? ok(`${JSON.stringify(response.result, null, 2)}\n`) : ok(`w${String(response.result.window.id)} [${String(response.result.window.index)}]\n`);
+};
+
+export const formatWindowSelect: CliResponseFormatter<"window.select"> = (response, json) => {
+  if (!response.ok) {
+    return error(formatProtocolError(response.error));
+  }
+
+  return json
+    ? ok(`${JSON.stringify(response.result, null, 2)}\n`)
+    : ok(
+        `w${String(response.result.window.id)} [${String(response.result.window.index)}]\nBrought this window forward to the user. This does not absolve you from passing \`--window\`/\`--tab\` explicitly to every later target-dependent command.\n`,
+      );
 };
 
 const formatWindowClose: CliResponseFormatter<"window.close"> = (response, json) => {

@@ -28,7 +28,7 @@ export const contentCommandEntries = defineCommandEntries({
       future: "docs/iframe-targeting-future.md",
     },
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "snapshot", path: ["snapshot"], batch: true }],
+    cliRoutes: [{ id: "snapshot", path: ["snapshot"], batch: true, selectorDimensions: "both" }],
   },
   "ref.resolve": {
     params: refResolveParamsSchema,
@@ -40,7 +40,7 @@ export const contentCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "ref", path: ["ref"], batch: true }],
+    cliRoutes: [{ id: "ref", path: ["ref"], batch: true, selectorDimensions: "both" }],
   },
   get: {
     params: getParamsSchema,
@@ -52,7 +52,7 @@ export const contentCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "get", path: ["get"], batch: true }],
+    cliRoutes: [{ id: "get", path: ["get"], batch: true, selectorDimensions: "both" }],
   },
   is: {
     params: isParamsSchema,
@@ -64,7 +64,7 @@ export const contentCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "is", path: ["is"], batch: true }],
+    cliRoutes: [{ id: "is", path: ["is"], batch: true, selectorDimensions: "both" }],
   },
   wait: {
     params: waitParamsSchema,
@@ -94,6 +94,6 @@ export const contentCommandEntries = defineCommandEntries({
       ],
     },
     batch: { allowed: true, extensionDefaultTarget: true, timeoutRebase: true },
-    cliRoutes: [{ id: "wait", path: ["wait"], batch: true }],
+    cliRoutes: [{ id: "wait", path: ["wait"], batch: true, selectorDimensions: "both" }],
   },
 });

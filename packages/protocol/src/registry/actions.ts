@@ -23,7 +23,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "click", path: ["click"], batch: true }],
+    cliRoutes: [{ id: "click", path: ["click"], batch: true, selectorDimensions: "both" }],
   },
   dblclick: {
     params: elementActionParamsSchema,
@@ -35,7 +35,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "dblclick", path: ["dblclick"], batch: true }],
+    cliRoutes: [{ id: "dblclick", path: ["dblclick"], batch: true, selectorDimensions: "both" }],
   },
   focus: {
     params: elementActionParamsSchema,
@@ -47,7 +47,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "focus", path: ["focus"], batch: true }],
+    cliRoutes: [{ id: "focus", path: ["focus"], batch: true, selectorDimensions: "both" }],
   },
   hover: {
     params: elementActionParamsSchema,
@@ -59,7 +59,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "hover", path: ["hover"], batch: true }],
+    cliRoutes: [{ id: "hover", path: ["hover"], batch: true, selectorDimensions: "both" }],
   },
   fill: {
     params: textActionParamsSchema,
@@ -71,7 +71,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "fill", path: ["fill"], batch: true }],
+    cliRoutes: [{ id: "fill", path: ["fill"], batch: true, selectorDimensions: "both" }],
   },
   type: {
     params: textActionParamsSchema,
@@ -83,7 +83,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "type", path: ["type"], batch: true }],
+    cliRoutes: [{ id: "type", path: ["type"], batch: true, selectorDimensions: "both" }],
   },
   press: {
     params: pressParamsSchema,
@@ -95,7 +95,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "press", path: ["press"], batch: true }],
+    cliRoutes: [{ id: "press", path: ["press"], batch: true, selectorDimensions: "both" }],
   },
   "keyboard.type": {
     params: keyboardTextActionParamsSchema,
@@ -107,7 +107,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "keyboard.type", path: ["keyboard", "type"], batch: true }],
+    cliRoutes: [{ id: "keyboard.type", path: ["keyboard", "type"], batch: true, selectorDimensions: "both" }],
   },
   "keyboard.inserttext": {
     params: keyboardTextActionParamsSchema,
@@ -119,7 +119,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true }],
+    cliRoutes: [{ id: "keyboard.inserttext", path: ["keyboard", "inserttext"], batch: true, selectorDimensions: "both" }],
   },
   check: {
     params: elementActionParamsSchema,
@@ -131,7 +131,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "check", path: ["check"], batch: true }],
+    cliRoutes: [{ id: "check", path: ["check"], batch: true, selectorDimensions: "both" }],
   },
   uncheck: {
     params: elementActionParamsSchema,
@@ -143,7 +143,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "uncheck", path: ["uncheck"], batch: true }],
+    cliRoutes: [{ id: "uncheck", path: ["uncheck"], batch: true, selectorDimensions: "both" }],
   },
   select: {
     params: selectParamsSchema,
@@ -155,7 +155,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "select", path: ["select"], batch: true }],
+    cliRoutes: [{ id: "select", path: ["select"], batch: true, selectorDimensions: "both" }],
   },
   scroll: {
     params: scrollParamsSchema,
@@ -167,7 +167,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "scroll", path: ["scroll"], batch: true }],
+    cliRoutes: [{ id: "scroll", path: ["scroll"], batch: true, selectorDimensions: "both" }],
   },
   scrollintoview: {
     params: elementActionParamsSchema,
@@ -179,7 +179,7 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true }],
+    cliRoutes: [{ id: "scrollintoview", path: ["scrollintoview"], batch: true, selectorDimensions: "both" }],
   },
   swipe: {
     params: scrollParamsSchema,
@@ -191,6 +191,6 @@ export const actionsCommandEntries = defineCommandEntries({
     action: true,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "swipe", path: ["swipe"], batch: true }],
+    cliRoutes: [{ id: "swipe", path: ["swipe"], batch: true, selectorDimensions: "both" }],
   },
 });

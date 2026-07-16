@@ -14,6 +14,7 @@ import {
   InvalidBatchArgvCommandError,
 } from "./types.js";
 import { createUploadBudget } from "./upload.js";
+import { rejectTargetSelectorOptions } from "./argv-contracts.js";
 
 const gatedCapabilitiesByCommand = new Map(gatedCapabilities.map((capability) => [capability.command, capability] as const));
 
@@ -43,14 +44,17 @@ async function runCliOrThrow(args: readonly string[], dependencies: CliDependenc
   }
 
   if (args[0] === "setup") {
+    rejectTargetSelectorOptions(args.slice(1), "setup");
     return setup(args.slice(1), dependencies, renderHelp);
   }
 
   if (args[0] === "doctor") {
+    rejectTargetSelectorOptions(args.slice(1), "doctor");
     return doctor(args.slice(1), dependencies);
   }
 
   if (args[0] === "unpair") {
+    rejectTargetSelectorOptions(args.slice(1), "unpair");
     await dependencies.clearPairState?.();
     return ok("Pair state cleared. Run `firefox-cli connect` to request approval again.\n");
   }
@@ -103,6 +107,10 @@ async function buildRequestForBinding<C extends CommandId>(
 async function buildRequestForArgv(argv: readonly string[], dependencies: CliDependencies, context: CliRequestBuildContext): Promise<RequestEnvelope> {
   const binding = findCliRouteBindingForArgv(argv);
   if (binding === undefined) {
+    const command = argv[0];
+    if (command === "setup" || command === "doctor" || command === "unpair") {
+      rejectTargetSelectorOptions(argv.slice(1), command);
+    }
     throw new InvalidBatchArgvCommandError();
   }
 

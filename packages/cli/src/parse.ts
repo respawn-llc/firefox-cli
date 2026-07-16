@@ -2,6 +2,7 @@ import type { TargetSelector } from "@firefox-cli/protocol";
 import { cliArgumentOptionInventory } from "./argv-contracts.js";
 import { readFlagValue } from "./parse-options.js";
 import { CliUsageError } from "./types.js";
+
 export {
   getOptionValue,
   isOneOf,
@@ -225,20 +226,20 @@ export function parseTargetValue(value: string | undefined): NonNullable<TargetS
   return prefix === "id" ? { kind: "id", id: parsed } : { kind: "index", index: parsed };
 }
 
-export function parseOptionalTabTarget(value: string | undefined, base: TargetSelector): TargetSelector {
+export function parseOptionalTabTarget(value: string | undefined): TargetSelector {
   if (value !== undefined) {
     return { tab: parseTargetValue(value) };
   }
 
-  return base.tab === undefined ? { tab: { kind: "active" } } : {};
+  return {};
 }
 
-export function parseOptionalWindowTarget(value: string | undefined, base: TargetSelector): TargetSelector {
+export function parseOptionalWindowTarget(value: string | undefined): TargetSelector {
   if (value !== undefined) {
     return { window: parseTargetValue(value) };
   }
 
-  return base.window === undefined ? { window: { kind: "active" } } : {};
+  return {};
 }
 
 export function mergeTarget(base: TargetSelector, override: TargetSelector): TargetSelector {

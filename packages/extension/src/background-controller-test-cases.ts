@@ -134,10 +134,6 @@ export async function runCase04() {
     id: "request-1",
     ok: true,
     result: {
-      target: {
-        windowId: 7,
-        tabId: 42,
-      },
       tabs: [
         {
           id: 42,

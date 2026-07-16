@@ -24,7 +24,7 @@ export const coreCommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: false },
-    cliRoutes: [{ id: "capabilities", path: ["capabilities"], batch: false }],
+    cliRoutes: [{ id: "capabilities", path: ["capabilities"], batch: false, selectorDimensions: "neither" }],
   },
   noop: {
     params: noOpParamsSchema,
