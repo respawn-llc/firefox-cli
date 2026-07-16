@@ -1,14 +1,16 @@
 import {
-  MAX_BATCH_RESULT_BYTES,
-  MAX_SCREENSHOT_BYTES,
+  type BatchResult,
+  type BatchStepResult,
+  type CommandId,
   commandAcceptsBatchTimeout,
   commandAcceptsExtensionBatchDefaultTarget,
   createRequest,
+  getCommandTargetSelectorDimensions,
   isCommandId,
+  MAX_BATCH_RESULT_BYTES,
+  MAX_SCREENSHOT_BYTES,
   parseBatchStepResultAs,
   parseCommandParamsAs,
-  type BatchResult,
-  type BatchStepResult,
   type RequestEnvelope,
   type ResponseEnvelope,
   type ScreenshotResult,
@@ -29,11 +31,7 @@ export async function executeBatch(
   const startedAt = Date.now();
   const timeoutMs = command.params.timeoutMs;
   const maxResultBytes = command.params.maxResultBytes ?? MAX_BATCH_RESULT_BYTES;
-  const defaultTarget = (await targetContext.resolveTarget(command.params.target)).target;
-  const defaultSelector: TargetSelector = {
-    window: { kind: "id", id: defaultTarget.windowId },
-    tab: { kind: "id", id: defaultTarget.tabId },
-  };
+  const defaultSelector = await resolveBatchDefaultSelector(command, targetContext);
   const steps: BatchStepResult[] = [];
   let totalScreenshotBytes = 0;
 
@@ -85,7 +83,7 @@ function assertBatchHasTimeRemaining(timeoutMs: number | undefined, remainingMs:
 function createBatchStepRequest(
   command: RequestEnvelope<"batch">,
   index: number,
-  defaultSelector: TargetSelector,
+  defaultSelector: TargetSelector | undefined,
   remainingMs: number | undefined,
 ): RequestEnvelope | undefined {
   const step = command.params.steps[index];
@@ -129,16 +127,99 @@ function checkedScreenshotByteTotal(currentBytes: number, stepResult: BatchStepR
   return nextBytes;
 }
 
-export function applyBatchStepDefaults(command: string, rawParams: unknown, defaultTarget: TargetSelector, remainingMs: number | undefined): unknown {
+export function applyBatchStepDefaults(
+  command: string,
+  rawParams: unknown,
+  defaultTarget: TargetSelector | undefined,
+  remainingMs: number | undefined,
+): unknown {
   if (!isRecord(rawParams)) {
     return rawParams;
   }
 
   return {
     ...rawParams,
-    ...(commandAcceptsExtensionBatchDefaultTarget(command) && rawParams.target === undefined ? { target: defaultTarget } : {}),
+    ...defaultTargetOverride(command, rawParams, defaultTarget),
     ...timeoutOverride(command, rawParams.timeoutMs, remainingMs),
   };
+}
+
+async function resolveBatchDefaultSelector(command: RequestEnvelope<"batch">, targetContext: BrowserTargetContext): Promise<TargetSelector | undefined> {
+  const resolution = command.params.steps.reduce<TargetResolution>(
+    (highest, step) => (isCommandId(step.command) ? highestTargetResolution(highest, requestTargetResolution(step.command, step.params)) : highest),
+    "none",
+  );
+  if (resolution === "none") {
+    return undefined;
+  }
+  if (resolution === "window") {
+    const window = await targetContext.resolveTargetWindow(command.params.target);
+    return { window: { kind: "id", id: window.id } };
+  }
+
+  const target = (await targetContext.resolveTarget(command.params.target)).target;
+  return {
+    window: { kind: "id", id: target.windowId },
+    tab: { kind: "id", id: target.tabId },
+  };
+}
+
+type TargetResolution = "none" | "window" | "tab";
+
+function requestTargetResolution(command: CommandId, params: unknown): TargetResolution {
+  const selectorDimensions = getCommandTargetSelectorDimensions(command);
+  if (selectorDimensions === "neither") {
+    return "none";
+  }
+  if (selectorDimensions === "window") {
+    return "window";
+  }
+  if (isWindowOnlyRequest(command, params)) {
+    return "window";
+  }
+  if (isTargetlessRequest(command, params)) {
+    return "none";
+  }
+  return "tab";
+}
+
+function isWindowOnlyRequest(command: CommandId, params: unknown): boolean {
+  return command === "open" && isRecord(params) && params.newTab === true;
+}
+
+function isTargetlessRequest(command: CommandId, params: unknown): boolean {
+  if (!isRecord(params)) {
+    return false;
+  }
+  const targetlessWait = command === "wait" && (params.kind === "ms" || params.kind === "download");
+  const targetlessClipboard = command === "clipboard" && (params.action === "read" || params.action === "write");
+  return targetlessWait || targetlessClipboard;
+}
+
+function highestTargetResolution(left: TargetResolution, right: TargetResolution): TargetResolution {
+  if (left === "tab" || right === "tab") {
+    return "tab";
+  }
+  return left === "window" || right === "window" ? "window" : "none";
+}
+
+function defaultTargetOverride(
+  command: string,
+  params: Record<string, unknown>,
+  defaultTarget: TargetSelector | undefined,
+): { readonly target?: TargetSelector } {
+  if (!commandAcceptsExtensionBatchDefaultTarget(command) || params.target !== undefined || defaultTarget === undefined || !isCommandId(command)) {
+    return {};
+  }
+
+  const resolution = requestTargetResolution(command, params);
+  if (resolution === "none") {
+    return {};
+  }
+  if (resolution === "window") {
+    return defaultTarget.window === undefined ? {} : { target: { window: defaultTarget.window } };
+  }
+  return { target: defaultTarget };
 }
 
 function timeoutOverride(command: string, existingTimeout: unknown, remainingMs: number | undefined): { readonly timeoutMs?: number } {

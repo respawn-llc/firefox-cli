@@ -1,4 +1,4 @@
-import { commandSchemas, type Boundary, type CliRouteSelectorDimensions, type CommandId, type ComponentIdentity } from "./index.js";
+import { type Boundary, type CliRouteSelectorDimensions, type CommandId, type ComponentIdentity, commandSchemas } from "./index.js";
 
 export const boundaries: readonly Boundary[] = ["cli-to-host", "host-to-extension", "extension-to-content-script"];
 export const inheritedCommandNames = ["toString", "constructor", "__proto__"] as const;
@@ -93,6 +93,7 @@ export const expectedCliRoutesByCommand: Partial<Record<CommandId, readonly Expe
 
 const selectorDimensionsByRouteId: Readonly<Record<string, CliRouteSelectorDimensions>> = {
   capabilities: "neither",
+  "tab.list": "window",
   "tab.new": "window",
   "window.list": "neither",
   "window.new": "neither",
@@ -102,6 +103,7 @@ const selectorDimensionsByRouteId: Readonly<Record<string, CliRouteSelectorDimen
   cookies: "neither",
   notify: "neither",
   pdf: "neither",
+  "set.viewport": "window",
   connect: "neither",
 };
 

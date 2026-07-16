@@ -3,17 +3,16 @@ import {
   actionKinds,
   commandAcceptsBatchTimeout,
   commandAcceptsExtensionBatchDefaultTarget,
-  commandAcceptsProtocolBatchDefaultTarget,
   commandSchemas,
-  createRequestProtocolMismatchError,
   createRequest,
+  createRequestProtocolMismatchError,
   gatedCapabilities,
   getCliRouteEntries,
-  getRequestProtocolCompatibility,
   getCliRoutes,
   getCommandCliRoutes,
   getCommandCompatibilityMetadata,
   getCommandSecurityMetadata,
+  getRequestProtocolCompatibility,
   getRequestProtocolRequirement,
   isActionCommand,
   isBatchableCommandId,
@@ -75,12 +74,6 @@ describe("protocol command metadata", () => {
 
     const nonBatchableCommands = commandIds().filter((command) => !isBatchableCommandId(command));
     expect(nonBatchableCommands).toEqual(["hello", "capabilities", "noop", "batch", "pair.approve", "pair.reset", "pair.requestApproval", "pair.openApproval"]);
-  });
-
-  it("marks only required tab/window selectors for protocol batch default targets", () => {
-    const protocolDefaultCommands = commandIds().filter(commandAcceptsProtocolBatchDefaultTarget);
-
-    expect(protocolDefaultCommands).toEqual(["tab.select", "tab.close", "window.select", "window.close"]);
   });
 
   it("marks extension batch default target commands", () => {

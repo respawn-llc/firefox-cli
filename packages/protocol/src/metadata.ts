@@ -67,7 +67,6 @@ export interface CliRouteEntry<C extends string = string> {
 
 export interface CommandBatchMetadata {
   readonly allowed: boolean;
-  readonly protocolDefaultTarget?: boolean;
   readonly extensionDefaultTarget?: boolean;
   readonly timeoutRebase?: boolean;
 }

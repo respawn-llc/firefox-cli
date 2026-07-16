@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, createRequest, parseBoundaryRequest } from "./index.js";
-import { boundaries, inheritedCommandNames, cliIdentity } from "./protocol-test-support.js";
+import { createRequest, PROTOCOL_VERSION, parseBoundaryRequest } from "./index.js";
+import { boundaries, cliIdentity, inheritedCommandNames } from "./protocol-test-support.js";
 
 describe("parseBoundaryRequest", () => {
   it.each(boundaries)("validates hello requests across %s", (boundary) => {
@@ -104,7 +104,7 @@ describe("parseBoundaryRequest", () => {
       protocolVersion: PROTOCOL_VERSION,
       id: "tab-close-1",
       command: "tab.close",
-      params: {},
+      params: { unexpected: true },
     });
 
     expect(parsed).toMatchObject({
@@ -113,6 +113,17 @@ describe("parseBoundaryRequest", () => {
         code: "INVALID_ENVELOPE",
       },
     });
+  });
+
+  it("preserves omitted select and close targets for extension ambiguity checks", () => {
+    const requests = [
+      createRequest("tab.select", {}, "tab-select-omitted"),
+      createRequest("tab.close", {}, "tab-close-omitted"),
+      createRequest("window.select", {}, "window-select-omitted"),
+      createRequest("window.close", {}, "window-close-omitted"),
+    ];
+
+    expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(requests.map((request) => ({ ok: true, value: request })));
   });
 
   it("validates tab list requests", () => {
@@ -205,6 +216,12 @@ describe("parseBoundaryRequest", () => {
     const invalidRequests: readonly unknown[] = [
       {
         protocolVersion: PROTOCOL_VERSION,
+        id: "tabs-list-tab-target",
+        command: "tabs.list",
+        params: { target: { tab: { kind: "id", id: 42 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
         id: "tab-new-tab-target",
         command: "tab.new",
         params: { target: { tab: { kind: "id", id: 42 } } },
@@ -223,13 +240,21 @@ describe("parseBoundaryRequest", () => {
       },
       {
         protocolVersion: PROTOCOL_VERSION,
+        id: "set-viewport-tab-target",
+        command: "set.viewport",
+        params: { width: 1200, height: 800, target: { tab: { kind: "id", id: 42 } } },
+      },
+      {
+        protocolVersion: PROTOCOL_VERSION,
         id: "batch-window-only-tab-target",
         command: "batch",
         params: {
           steps: [
+            { command: "tabs.list", params: { target: { tab: { kind: "id", id: 42 } } } },
             { command: "tab.new", params: { target: { tab: { kind: "id", id: 42 } } } },
             { command: "window.select", params: { target: { tab: { kind: "id", id: 42 } } } },
             { command: "window.close", params: { target: { tab: { kind: "id", id: 42 } } } },
+            { command: "set.viewport", params: { width: 1200, height: 800, target: { tab: { kind: "id", id: 42 } } } },
           ],
         },
       },
@@ -272,9 +297,11 @@ describe("parseBoundaryRequest", () => {
 
   it("accepts window selectors for window-only browsing commands and full selectors for page commands", () => {
     const validRequests = [
+      createRequest("tabs.list", { target: { window: { kind: "id", id: 7 } } }, "tabs-list-window-target"),
       createRequest("tab.new", { target: { window: { kind: "id", id: 7 } } }, "tab-new-window-target"),
       createRequest("window.select", { target: { window: { kind: "id", id: 7 } } }, "window-select-window-target"),
       createRequest("window.close", { target: { window: { kind: "id", id: 7 } } }, "window-close-window-target"),
+      createRequest("set.viewport", { width: 1200, height: 800, target: { window: { kind: "id", id: 7 } } }, "set-viewport-window-target"),
       createRequest(
         "open",
         {

@@ -59,6 +59,137 @@ describe("browser command handling", () => {
     expect(adapter.contentRequests.some((request) => request.tabId === 101)).toBe(false);
   });
 
+  it("rejects an omitted window selector when multiple windows exist", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+      windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),
+    ]);
+
+    const response = await handleBrowserRequest(createRequest("open", { url: "https://qa.example/", newTab: false }, "ambiguous-window"), adapter);
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_TARGET",
+        message: "Ambiguous window: Firefox has 2 windows. Pass `--window id:<id>` or explicitly choose `--window active`.",
+      },
+    });
+    expect(adapter.navigations).toEqual([]);
+  });
+
+  it("rejects an omitted tab selector when the selected window has multiple tabs", async () => {
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
+
+    const response = await handleBrowserRequest(
+      createRequest("open", { url: "https://qa.example/", newTab: false, target: { window: { kind: "id", id: 10 } } }, "ambiguous-tab"),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_TARGET",
+        message: "Ambiguous tab: Firefox window 10 has 2 tabs. Pass `--tab id:<id>` or explicitly choose `--tab active`.",
+      },
+    });
+    expect(adapter.navigations).toEqual([]);
+  });
+
+  it("accepts explicit active selectors when several windows and tabs exist", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)]),
+      windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "open",
+        {
+          url: "https://qa.example/",
+          newTab: false,
+          target: {
+            window: { kind: "active" },
+            tab: { kind: "active" },
+          },
+        },
+        "explicit-active",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        target: { windowId: 10, tabId: 101 },
+      },
+    });
+    expect(adapter.navigations).toEqual([{ tabId: 101, url: "https://qa.example/" }]);
+  });
+
+  it("lists tabs in an explicitly selected window without requiring a tab selector", async () => {
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
+
+    const response = await handleBrowserRequest(createRequest("tabs.list", { target: { window: { kind: "id", id: 10 } } }, "list-tabs-window"), adapter);
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        tabs: [{ id: 101 }, { id: 102 }],
+      },
+    });
+  });
+
+  it("opens a new tab in the window identified by an explicit tab id", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+      windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]),
+    ]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "open",
+        {
+          url: "https://qa.example/",
+          newTab: true,
+          target: { tab: { kind: "id", id: 201 } },
+        },
+        "new-tab-by-tab-id",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        target: { windowId: 20, tabId: 102 },
+      },
+    });
+  });
+
+  it("resizes an explicitly selected window without requiring a tab selector", async () => {
+    const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10), tabSummary(102, 1, false, 10)])]);
+
+    const response = await handleBrowserRequest(
+      createRequest(
+        "set.viewport",
+        {
+          width: 1200,
+          height: 800,
+          target: { window: { kind: "id", id: 10 } },
+        },
+        "resize-window",
+      ),
+      adapter,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        window: { id: 10, width: 1200, height: 800 },
+      },
+    });
+  });
+
   it.each([
     ["missing window", { window: { kind: "id" as const, id: 999 } }],
     ["tab outside selected window", { window: { kind: "id" as const, id: 20 }, tab: { kind: "id" as const, id: 101 } }],

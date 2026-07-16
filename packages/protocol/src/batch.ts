@@ -1,8 +1,7 @@
 import { z } from "zod";
-
+import { addUploadTotalIssue, uploadParamsSchema } from "./browser.js";
 import { MAX_BATCH_RESULT_BYTES } from "./constants.js";
 import { protocolErrorSchema } from "./core.js";
-import { addUploadTotalIssue, uploadParamsSchema } from "./browser.js";
 import { targetSelectorSchema } from "./target.js";
 
 export interface BatchRegistryLookup {
@@ -10,17 +9,7 @@ export interface BatchRegistryLookup {
   readonly isBatchable: (command: string) => boolean;
   readonly paramsFor: (command: string) => z.ZodType | undefined;
   readonly resultFor: (command: string) => z.ZodType | undefined;
-  readonly paramsWithDefaultTarget: (command: string, params: unknown) => BatchDefaultTargetParams;
 }
-
-type BatchDefaultTargetParams =
-  | {
-      readonly found: true;
-      readonly params: unknown;
-    }
-  | {
-      readonly found: false;
-    };
 
 export function createBatchSchemas(registry: BatchRegistryLookup) {
   const batchStepSchema = z
@@ -59,16 +48,14 @@ export function createBatchSchemas(registry: BatchRegistryLookup) {
       }
 
       const params = paramsSchema.safeParse(step.params);
-      const paramsWithDefaultTarget = registry.paramsWithDefaultTarget(step.command, step.params);
-      const fallbackParams = params.success || !paramsWithDefaultTarget.found ? params : paramsSchema.safeParse(paramsWithDefaultTarget.params);
-      if (!fallbackParams.success) {
+      if (!params.success) {
         context.addIssue({
           code: "custom",
           message: "Batch step params are invalid.",
           path: ["params"],
           params: {
             command: step.command,
-            issues: fallbackParams.error.issues,
+            issues: params.error.issues,
           },
         });
       }

@@ -1,19 +1,10 @@
-import {
-  batchParamsSchema,
-  commandAcceptsProtocolBatchDefaultTarget,
-  isBatchableCommandId,
-  MAX_UPLOAD_TOTAL_BYTES,
-  type BatchParams,
-  type BatchStep,
-  type CommandId,
-  type RequestEnvelope,
-} from "@firefox-cli/protocol";
+import { type BatchParams, type BatchStep, batchParamsSchema, isBatchableCommandId, MAX_UPLOAD_TOTAL_BYTES, type RequestEnvelope } from "@firefox-cli/protocol";
 import { parseCliRouteArgsForRoute } from "../argv-contracts.js";
 import { readProcessStdin } from "../default-dependencies.js";
 import { getOptionValue, hasOption, isRecord, optionalTarget, parsePositiveIntegerValue, parseTargetOptions } from "../parse.js";
 import { createValidatedRequest } from "../protocol-validation.js";
+import { type CliDependencies, type CliRequestBuildContext, CliUsageError, InvalidBatchArgvCommandError } from "../types.js";
 import { createUploadBudget, parseUploadArguments, statUploadFiles, uploadTotalTooLarge } from "../upload.js";
-import { CliUsageError, InvalidBatchArgvCommandError, type CliDependencies, type CliRequestBuildContext } from "../types.js";
 
 interface ParsedBatchArguments {
   readonly optionArgs: readonly string[];
@@ -183,40 +174,10 @@ async function batchStepFromArgv(argv: readonly string[], index: number, depende
 
   return {
     command: request.command,
-    params: stripImplicitBatchTarget(request.command, request.params, argv),
+    params: request.params,
   };
 }
 
 function batchArgvReadsStdin(argv: readonly string[]): boolean {
   return argv[0] === "eval" && argv.includes("--stdin");
-}
-
-function stripImplicitBatchTarget(command: CommandId, params: unknown, argv: readonly string[]): unknown {
-  if (!isImplicitBatchDefaultTargetCommand(command) || !isRecord(params)) {
-    return params;
-  }
-
-  if (hasExplicitTargetInBatchArgv(command, argv)) {
-    return params;
-  }
-
-  return Object.fromEntries(Object.entries(params).filter(([key]) => key !== "target"));
-}
-
-function isImplicitBatchDefaultTargetCommand(command: CommandId): boolean {
-  return commandAcceptsProtocolBatchDefaultTarget(command);
-}
-
-function hasExplicitTargetInBatchArgv(command: CommandId, argv: readonly string[]): boolean {
-  if (command === "tab.select" || command === "tab.close") {
-    const positionals = parseCliRouteArgsForRoute(command, argv.slice(1)).positionals;
-    return positionals[1] !== undefined || hasOption(argv, "--tab") || hasOption(argv, "--window");
-  }
-
-  if (command === "window.select" || command === "window.close") {
-    const positionals = parseCliRouteArgsForRoute(command, argv.slice(1)).positionals;
-    return positionals[1] !== undefined || hasOption(argv, "--window");
-  }
-
-  return false;
 }

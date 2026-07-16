@@ -51,7 +51,7 @@ Then use the command-specific help for the next operation instead of relying on 
 
 ## Targeting
 
-By default, commands target Firefox's active tab/window at command resolution time.
+Omitted selectors are accepted only when the required window or tab is unique. If several windows or tabs exist, pass an ID or explicitly pass `active`.
 
 Use only the `--window` and `--tab` flags advertised by each command. Values are `active`, an index from `firefox-cli tab` or `firefox-cli window`, or `id:<id>`.
 
@@ -63,7 +63,7 @@ firefox-cli open --window id:<window-id> https://example.com
 firefox-cli snapshot --window id:<window-id> -i
 ```
 
-`window select` changes Firefox focus only; it does not establish a durable CLI target. Screenshots may activate their selected tab/window.
+`tab select` and `window select` bring the chosen surface forward to the user. They do not establish durable CLI target state or absolve you from passing `--window`/`--tab` explicitly to later target-dependent commands. Screenshots may activate their selected tab/window.
 
 ## Setup State
 ```bash

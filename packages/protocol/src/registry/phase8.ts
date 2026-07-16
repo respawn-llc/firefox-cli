@@ -324,7 +324,7 @@ export const phase8CommandEntries = defineCommandEntries({
     action: false,
     timeout: "none",
     batch: { allowed: true, extensionDefaultTarget: true },
-    cliRoutes: [{ id: "set.viewport", path: ["set", "viewport"], batch: true, selectorDimensions: "both" }],
+    cliRoutes: [{ id: "set.viewport", path: ["set", "viewport"], batch: true, selectorDimensions: "window" }],
   },
   diff: {
     params: diffParamsSchema,

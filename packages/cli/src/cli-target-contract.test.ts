@@ -1,8 +1,8 @@
 import { createErrorResponse, getCliRouteEntries, type RequestEnvelope } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { parseCliRouteArgsForRoute } from "./argv-contracts.js";
-import { runCli } from "./index.js";
 import { baseDependencies } from "./cli-test-support.js";
+import { runCli } from "./index.js";
 
 describe("CLI route target contracts", () => {
   it("accepts selector dimensions declared by each protocol route", () => {
@@ -21,9 +21,11 @@ describe("CLI route target contracts", () => {
   });
 
   it.each([
+    ["tab list", ["tab", "--tab", "id:42"]],
     ["tab new", ["tab", "new", "--tab", "id:42"]],
     ["window select", ["window", "select", "--tab", "id:42"]],
     ["window close", ["window", "close", "--tab", "id:42"]],
+    ["set viewport", ["set", "viewport", "1200", "800", "--tab", "id:42"]],
     ["targetless capabilities window", ["capabilities", "--window", "id:7"]],
     ["targetless capabilities tab", ["capabilities", "--tab", "id:42"]],
   ] as const)("rejects unsupported selectors before transport for %s", async (_name, argv) => {

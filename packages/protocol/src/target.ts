@@ -67,7 +67,7 @@ export type WindowSummary = z.infer<typeof windowSummarySchema>;
 
 export const tabsListParamsSchema = z
   .object({
-    target: targetSelectorSchema.optional(),
+    target: windowTargetSelectorSchema.optional(),
   })
   .strict();
 export const tabsListResultSchema = z.object({
@@ -83,7 +83,7 @@ export const tabNewParamsSchema = z
   .strict();
 export const tabTargetParamsSchema = z
   .object({
-    target: targetSelectorSchema,
+    target: targetSelectorSchema.optional(),
   })
   .strict();
 export const tabNewResultSchema = z.object({
@@ -105,7 +105,7 @@ export const windowNewParamsSchema = z
   .strict();
 export const windowTargetParamsSchema = z
   .object({
-    target: windowTargetSelectorSchema,
+    target: windowTargetSelectorSchema.optional(),
   })
   .strict();
 export const windowNewResultSchema = z.object({

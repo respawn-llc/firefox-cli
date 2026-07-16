@@ -211,17 +211,20 @@ Startup handshake:
 
 Target resolution is owned by the extension.
 
-- `active` means Firefox's active tab in the active/focused normal window at command resolution time.
+- `active` is an explicit selector. `--window active` chooses Firefox's focused normal window; `--tab active` chooses the active tab within the selected window.
 - Window and tab IDs use Firefox IDs in JSON output.
 - Human-facing indexes are derived from deterministic `browser.windows.getAll({ populate: true })` ordering: focused window first, then remaining windows by Firefox window ID; tabs by index within each window.
 - Private windows are reported but commands return `UNSUPPORTED_CAPABILITY` unless the extension has private browsing permission and the command is explicitly allowed there.
 - Container tab metadata should be included when Firefox exposes it, but no persistent container/session model is added.
 - Each command snapshots its resolved target before execution to avoid active-tab races.
 - Selector values are `active`, a non-negative listing index, or `id:<non-negative Firefox ID>`. A route supports neither selector, `--window` only, `--tab` only, or both as advertised by its CLI help; unsupported selector flags fail before dispatch.
-- Page-targeted routes support both dimensions. `tab new`, `window select`, and `window close` support `--window` only. Targetless routes support neither.
-- `window select` changes Firefox focus only. It does not establish a durable CLI target; use an explicit selector on each isolated follow-up command.
+- An omitted window selector is accepted only when exactly one normal window exists. A globally unique `--tab id:<id>` also identifies its owning window. Other tab selectors remain window-relative.
+- A tab-dependent command accepts an omitted tab selector only when the selected window has exactly one tab. Pass `--tab active` explicitly to choose Firefox's active tab when several tabs exist.
+- Ambiguous omission returns `INVALID_TARGET` with `Ambiguous window` or `Ambiguous tab` guidance before browser side effects.
+- Page-targeted routes support both dimensions. `tab`, `tab new`, `window select`, `window close`, and `set viewport` are window-scoped. `open --new-tab` resolves only a window. Targetless routes support neither.
+- `tab select` and `window select` bring a browser surface forward to the user. They do not establish durable CLI target state or remove the requirement to pass selectors explicitly to later target-dependent commands.
 
-`open <url>` navigates the resolved active tab to match `agent-browser`. Use `tab new [url]` or `open --new-tab <url>` to create a new tab.
+`open <url>` navigates the resolved target tab to match `agent-browser`. Use `tab new [url]` or `open --new-tab <url>` to create a new tab.
 
 ## Snapshot And Ref Model
 
@@ -292,7 +295,7 @@ Start with visible-tab screenshots.
 `batch` executes a serialized command transaction.
 
 - Input is a JSON array of argv arrays or command objects.
-- Default target is resolved once at batch start unless a step overrides it.
+- The required default window and/or tab is resolved once at batch start unless a step overrides it. Window-only batches do not require or inject a tab selector.
 - Steps share ref registry entries created earlier in the batch.
 - `--bail` stops at the first failed step.
 - Output is an ordered result array with per-step success/error, diagnostics, and final exit status.
@@ -414,12 +417,12 @@ Unsupported unless Firefox provides an equivalent:
 
 ## MVP Command Contracts
 
-Every MVP command returns `{ target, diagnostics }` in JSON output. `target` includes resolved window ID, tab ID, URL when available, and title when available. Text output may omit fields that are not useful for agents.
+Target-dependent MVP command results include resolved window/tab metadata where their result schema exposes it. Text output may omit fields that are not useful for agents.
 
 Navigation:
 
-- `open <url> [--new-tab]`: params are normalized URL and new-tab flag. Result is final target, URL, navigation status, and load state when known. Errors include invalid URL, no active tab, permission denied, navigation timeout, and unsupported restricted page.
-- `back`, `forward`, `reload`: params are empty except target and timeout. Result is final URL and load state when known. Errors include no history entry, no active tab, navigation timeout, and restricted page.
+- `open <url> [--new-tab]`: params are normalized URL and new-tab flag. Result is final target, URL, navigation status, and load state when known. Errors include invalid URL, ambiguous or missing target, permission denied, navigation timeout, and unsupported restricted page.
+- `back`, `forward`, `reload`: params are empty except target and timeout. Result is final URL and load state when known. Errors include no history entry, ambiguous or missing target, navigation timeout, and restricted page.
 
 Snapshot:
 
@@ -456,14 +459,14 @@ Waits:
 
 Tabs and windows:
 
-- `tab`: lists tabs for the resolved or active window. Result includes ID, index, active flag, title, URL when permitted, window ID, private flag, and container metadata when available.
+- `tab`: lists tabs for the selected or only window. Result includes ID, index, active flag, title, URL when permitted, window ID, private flag, and container metadata when available.
 - `tab new [url]`: creates a new tab. Result is created tab target and URL when provided.
 - `tab close [id|index|active]`: closes a tab. Result is closed tab ID and next active tab when known.
-- `tab select <id|index>`: activates a tab. Result is selected target.
+- `tab select [id|index|active]`: brings a tab forward to the user. Result is the selected target; later target-dependent commands still require explicit selectors when their target is ambiguous.
 - `window`: lists normal windows and their active tabs. Result includes Firefox window IDs, focus/active flags, bounds when available, and tab count.
 - `window new [url]`: creates a new window. Result is created window ID and active tab ID.
 - `window close <id|active>`: closes a window. Result is closed window ID.
-- `window select <id|index>`: focuses a window. Result includes refreshed focus metadata and its active tab; it does not set a durable default target.
+- `window select [id|index|active]`: brings a window forward to the user. Result includes refreshed focus metadata and its active tab; later target-dependent commands still require explicit selectors when their target is ambiguous.
 
 Screenshots:
 

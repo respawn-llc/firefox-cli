@@ -18,19 +18,21 @@ interface HelpGroup {
 const routeHelpSpecs = {
   capabilities: helpSpec("List supported command families and browser capability metadata."),
   connect: helpSpec("Request Firefox control approval through a dedicated approval page."),
-  "tab.list": helpSpec("List tabs with indexes, ids, active state, titles, and URLs.", [
-    "Use listed indexes with `--tab <index>` and ids with `--tab id:<id>`.",
-  ]),
+  "tab.list": helpSpec("List tabs for the selected or only Firefox window.", ["Use window indexes with `--window <index>` and ids with `--window id:<id>`."]),
   "tab.new": helpSpec("Open a new tab, optionally at a URL."),
-  "tab.select": helpSpec("Activate a tab by index, id, or URL substring."),
+  "tab.select": helpSpec("Bring a tab forward to the user by index, id, or URL substring.", [
+    "This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.",
+  ]),
   "tab.close": helpSpec("Close a tab by index, id, or URL substring."),
   "window.list": helpSpec("List Firefox windows with indexes, ids, focus state, and tab counts.", [
     "Use listed indexes with `--window <index>` and ids with `--window id:<id>`.",
   ]),
   "window.new": helpSpec("Open a new Firefox window, optionally at a URL."),
-  "window.select": helpSpec("Focus a Firefox window by index or id; it does not establish a durable CLI target."),
+  "window.select": helpSpec("Bring a window forward to the user by index or id.", [
+    "This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.",
+  ]),
   "window.close": helpSpec("Close a Firefox window by index or id."),
-  open: helpSpec("Navigate the active tab or create a new tab for a URL.", ["Use `--new-tab` when navigation must not replace the active page."]),
+  open: helpSpec("Navigate a selected tab or create a new tab for a URL.", ["Use `--new-tab` when navigation must not replace an existing page."]),
   back: helpSpec("Go back in the target tab history."),
   forward: helpSpec("Go forward in the target tab history."),
   reload: helpSpec("Reload the target tab."),
@@ -278,6 +280,7 @@ export function renderHelp(): string {
     "  Use `--json` when another program or agent consumes results.",
     "  Use `firefox-cli snapshot -i` before element actions to get stable `@ref` handles.",
     "  Use only the `--tab` and `--window` options advertised by each command; values are active, index, or id:<id>.",
+    "  Omitted selectors are accepted only when the required window or tab is unique; pass `active` explicitly to choose Firefox's focused/active surface.",
     "  Use `firefox-cli <command> -h` for contextual command help.",
     "",
   ].join("\n");
@@ -308,7 +311,8 @@ function renderGroupHelp(group: HelpGroup): string {
     "",
     "Guidance:",
     "  Add `--json` for machine-readable output.",
-    "  Use only the selector options advertised by each command when the active target is not enough.",
+    "  Omitted selectors are accepted only when the required window or tab is unique.",
+    "  Pass `active`, an index, or `id:<id>` through only the selector options advertised by each command.",
     "",
   ].join("\n");
 }

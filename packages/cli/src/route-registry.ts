@@ -38,7 +38,7 @@ import { buildPdfRequest, buildSetViewportRequest } from "./commands/phase8.js";
 import { buildScreenshotRequest } from "./commands/screenshot.js";
 import { buildTabsRequest, buildWindowsRequest } from "./commands/tabs-windows.js";
 import { buildWaitRequest } from "./commands/wait.js";
-import { cliResponseFormatters, formatApprovalRequest } from "./format.js";
+import { cliResponseFormatters, formatApprovalRequest, formatTabSelect, formatWindowSelect } from "./format.js";
 import { getPositionals } from "./parse.js";
 import type { CliRequestBuilder, CliResponseFormatter, CliResponseFormatterKind, CliRouteBinding, CliRouteParserSpec } from "./types.js";
 
@@ -60,11 +60,11 @@ const routeFormatterSpecs = {
   capabilities: routeFormatter("capabilities", "capabilities", cliResponseFormatters.capabilities),
   "tab.list": routeFormatter("tabs.list", "tab-list", cliResponseFormatters["tab-list"]),
   "tab.new": routeFormatter("tab.new", "tab-target", cliResponseFormatters["tab-target"]),
-  "tab.select": routeFormatter("tab.select", "tab-target", cliResponseFormatters["tab-target"]),
+  "tab.select": routeFormatter("tab.select", "tab-target", formatTabSelect),
   "tab.close": routeFormatter("tab.close", "tab-close", cliResponseFormatters["tab-close"]),
   "window.list": routeFormatter("windows.list", "window-list", cliResponseFormatters["window-list"]),
   "window.new": routeFormatter("window.new", "window-target", cliResponseFormatters["window-target"]),
-  "window.select": routeFormatter("window.select", "window-target", cliResponseFormatters["window-target"]),
+  "window.select": routeFormatter("window.select", "window-target", formatWindowSelect),
   "window.close": routeFormatter("window.close", "window-close", cliResponseFormatters["window-close"]),
   open: routeFormatter("open", "tab-target", cliResponseFormatters["tab-target"]),
   back: routeFormatter("back", "tab-target", cliResponseFormatters["tab-target"]),

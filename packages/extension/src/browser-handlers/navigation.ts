@@ -8,7 +8,7 @@ type NavigationCommand = "open" | "back" | "forward" | "reload";
 export const navigationHandlers: BrowserHandlerMap<NavigationCommand> = {
   open: async (request, adapter, context) => {
     if (request.params.newTab) {
-      const window = await context.targetContext.resolveWindow(request.params.target?.window);
+      const window = await context.targetContext.resolveTargetWindow(request.params.target);
       assertMutableWindow(window);
       const tab = await adapter.createTab({ url: request.params.url, windowId: window.id });
       context.targetContext.invalidate();

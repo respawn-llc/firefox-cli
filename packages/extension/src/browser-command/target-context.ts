@@ -1,7 +1,7 @@
-import { withBrowserCommandDeadline } from "./deadline.js";
-import { findWindowById, resolveTarget, resolveWindow, toOrderedWindows } from "./targets.js";
-import type { BackgroundBrowserAdapter, OrderedWindow, ResolvedBrowserTarget } from "./types.js";
 import type { ResolvedTarget, TargetSelector } from "@firefox-cli/protocol";
+import { withBrowserCommandDeadline } from "./deadline.js";
+import { findWindowById, resolveTarget, resolveTargetWindow, resolveWindow, toOrderedWindows } from "./targets.js";
+import type { BackgroundBrowserAdapter, OrderedWindow, ResolvedBrowserTarget } from "./types.js";
 
 interface DeadlineOptions {
   readonly deadlineMs?: number;
@@ -15,6 +15,7 @@ type ResolveOptions = DeadlineOptions & {
 export interface BrowserTargetContext {
   getWindows(options?: DeadlineOptions): Promise<readonly OrderedWindow[]>;
   resolveTarget(selector: TargetSelector | undefined, options?: ResolveOptions): Promise<ResolvedBrowserTarget>;
+  resolveTargetWindow(selector: TargetSelector | undefined, options?: DeadlineOptions): Promise<OrderedWindow>;
   resolveWindow(selector: TargetSelector["window"] | undefined, options?: DeadlineOptions): Promise<OrderedWindow>;
   resolveFreshTarget(selector: TargetSelector, options?: ResolveOptions): Promise<ResolvedTarget>;
   findWindowById(windowId: number, options?: DeadlineOptions): Promise<OrderedWindow | undefined>;
@@ -40,6 +41,7 @@ export function createBrowserTargetContext(adapter: BackgroundBrowserAdapter): B
   return {
     getWindows,
     resolveTarget: async (selector, options = {}) => resolveTarget(await getWindows(options), selector, resolveTargetOptions(options)),
+    resolveTargetWindow: async (selector, options = {}) => resolveTargetWindow(await getWindows(options), selector),
     resolveWindow: async (selector, options = {}) => resolveWindow(await getWindows(options), selector),
     resolveFreshTarget: async (selector, options = {}) => {
       windows = undefined;

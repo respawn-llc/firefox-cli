@@ -1,9 +1,8 @@
-import { PROTOCOL_VERSION, commandSchemas, createRequest, isCommandId } from "@firefox-cli/protocol";
+import { commandSchemas, createRequest, isCommandId, PROTOCOL_VERSION } from "@firefox-cli/protocol";
 import { expect } from "vitest";
 import { handleBrowserRequest } from "./browser-commands.js";
-import { FakeBrowserAdapter, parseTestBrowserRequest, tabSummary, windowSnapshot } from "./browser-commands-test-utils.js";
-
 import { browserSmokeRequests } from "./browser-commands-test-smoke.js";
+import { FakeBrowserAdapter, parseTestBrowserRequest, tabSummary, windowSnapshot } from "./browser-commands-test-utils.js";
 
 export async function runCase01() {
   const expectedCommands = Object.keys(commandSchemas)
@@ -76,16 +75,11 @@ export async function runCase02() {
 export async function runCase03() {
   const adapter = new FakeBrowserAdapter([windowSnapshot(20, false, [tabSummary(201, 0, true, 20)]), windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
-  const response = await handleBrowserRequest(createRequest("tabs.list", {}, "request-1"), adapter);
+  const response = await handleBrowserRequest(createRequest("tabs.list", { target: { window: { kind: "active" } } }, "request-1"), adapter);
 
   expect(response).toMatchObject({
     ok: true,
     result: {
-      target: {
-        windowId: 10,
-        windowIndex: 0,
-        tabId: 101,
-      },
       tabs: [{ id: 101 }],
     },
   });

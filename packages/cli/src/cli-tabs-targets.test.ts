@@ -1,10 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createTempDir } from "@firefox-cli/test-support";
 import { createErrorResponse, createOkResponse } from "@firefox-cli/protocol";
+import { createTempDir } from "@firefox-cli/test-support";
 import { describe, expect, it } from "vitest";
-import { runCli } from "./index.js";
 import { actionElement, baseDependencies, targetSummary } from "./cli-test-support.js";
+import { runCli } from "./index.js";
 import { findCliRouteBindingForArgv } from "./route-registry.js";
 
 describe("runCli tabs and targets", () => {
@@ -146,7 +146,8 @@ describe("runCli tabs and targets", () => {
 
     expect(output).toEqual({
       exitCode: 0,
-      stdout: "w7 t42 [0] Example https://example.com/\n",
+      stdout:
+        "w7 t42 [0] Example https://example.com/\nBrought this tab forward to the user. This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.\n",
       stderr: "",
     });
   });

@@ -23,7 +23,7 @@ describe("CLI help", () => {
     expect(output.exitCode).toBe(0);
     expect(output.stdout).toContain("Tabs, windows, and navigation");
     expect(output.stdout).toContain("firefox-cli tab [--json]");
-    expect(output.stdout).toContain("List tabs with indexes");
+    expect(output.stdout).toContain("List tabs for the selected or only Firefox window");
     expect(output.stdout).toContain("firefox-cli open [--new-tab] <url> [--json]");
   });
 
@@ -35,6 +35,18 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("Read the target page as a compact text/JSON structure");
     expect(output.stdout).toContain("`-i` includes stable element refs");
     expect(output.stdout).toContain("firefox-cli snapshot -i");
+  });
+
+  it.each([
+    ["tab", "tab", "firefox-cli tab select"],
+    ["window", "window", "firefox-cli window select"],
+  ] as const)("explains that %s selection only brings the surface forward to the user", async (command, surface, usage) => {
+    const output = await runCli([command, "select", "--help"], baseDependencies());
+
+    expect(output.exitCode).toBe(0);
+    expect(output.stdout).toContain(usage);
+    expect(output.stdout).toContain(`Bring a ${surface} forward to the user`);
+    expect(output.stdout).toContain("This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.");
   });
 
   it("renders wait examples accepted by the wait parser", async () => {

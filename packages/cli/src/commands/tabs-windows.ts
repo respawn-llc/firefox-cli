@@ -23,13 +23,15 @@ export function buildTabsRequest(argv: readonly string[]): RequestEnvelope {
     });
   }
   if (subcommand === "select") {
+    const selectedTarget = mergeTarget(target, parseOptionalTabTarget(positional[1]));
     return createValidatedRequest("tab.select", {
-      target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
+      ...optionalTarget(selectedTarget),
     });
   }
   if (subcommand === "close") {
+    const selectedTarget = mergeTarget(target, parseOptionalTabTarget(positional[1]));
     return createValidatedRequest("tab.close", {
-      target: mergeTarget(target, parseOptionalTabTarget(positional[1], target)),
+      ...optionalTarget(selectedTarget),
     });
   }
   return createValidatedRequest("tabs.list", {
@@ -48,13 +50,15 @@ export function buildWindowsRequest(argv: readonly string[]): RequestEnvelope {
     });
   }
   if (subcommand === "select") {
+    const selectedTarget = mergeTarget(target, parseOptionalWindowTarget(positional[1]));
     return createValidatedRequest("window.select", {
-      target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
+      ...optionalTarget(selectedTarget),
     });
   }
   if (subcommand === "close") {
+    const selectedTarget = mergeTarget(target, parseOptionalWindowTarget(positional[1]));
     return createValidatedRequest("window.close", {
-      target: mergeTarget(target, parseOptionalWindowTarget(positional[1], target)),
+      ...optionalTarget(selectedTarget),
     });
   }
   return createValidatedRequest("windows.list", {});

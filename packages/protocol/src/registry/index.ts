@@ -1,8 +1,6 @@
 import type { z } from "zod";
-
-import { createBatchSchemas } from "../batch.js";
-import { targetSelectorSchema } from "../target.js";
 import type { ActionKind } from "../actions.js";
+import { createBatchSchemas } from "../batch.js";
 import type {
   CliRouteEntry,
   CliRouteMetadata,
@@ -17,7 +15,7 @@ import { actionsCommandEntries } from "./actions.js";
 import { browsingCommandEntries } from "./browsing.js";
 import { contentCommandEntries } from "./content.js";
 import { coreCommandEntries } from "./core.js";
-import { assembleCommandRegistry, defineCommandEntries } from "./define.js";
+import { assembleCommandRegistry, defineCommandEntries, targetSelectorDimensionsAcceptedByCommand } from "./define.js";
 import { pairingCommandEntries } from "./pairing.js";
 import { phase8CommandEntries } from "./phase8.js";
 
@@ -39,7 +37,6 @@ const batchSchemas = createBatchSchemas({
   isBatchable: (command) => isNonBatchCommandId(command) && nonBatchCommandSchemas[command].batch.allowed,
   paramsFor: (command) => (isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].params : undefined),
   resultFor: (command) => (isNonBatchCommandId(command) ? nonBatchCommandSchemas[command].result : undefined),
-  paramsWithDefaultTarget: (command, params) => batchStepParamsWithDefaultTarget(command, params),
 });
 
 export const batchStepSchema = batchSchemas.batchStepSchema;
@@ -110,16 +107,12 @@ export function getCliRouteEntries(): readonly CliRouteEntry[] {
   );
 }
 
-export function isBatchableCommandId(command: string): command is CommandId {
-  return isCommandId(command) && commandSchemas[command].batch.allowed;
+export function getCommandTargetSelectorDimensions(command: CommandId): CliRouteMetadata["selectorDimensions"] {
+  return targetSelectorDimensionsAcceptedByCommand(commandSchemas[command]);
 }
 
-export function commandAcceptsProtocolBatchDefaultTarget(command: string): command is CommandId {
-  if (!isCommandId(command)) {
-    return false;
-  }
-  const batch: CommandBatchMetadata = commandSchemas[command].batch;
-  return batch.protocolDefaultTarget === true;
+export function isBatchableCommandId(command: string): command is CommandId {
+  return isCommandId(command) && commandSchemas[command].batch.allowed;
 }
 
 export function commandAcceptsExtensionBatchDefaultTarget(command: string): command is CommandId {
@@ -237,30 +230,6 @@ function valueAtPath(value: unknown, path: readonly string[]): unknown {
     }
     return current[key];
   }, value);
-}
-
-function batchStepParamsWithDefaultTarget(
-  command: string,
-  params: unknown,
-): { readonly found: true; readonly params: Record<string, unknown> & { readonly target: unknown } } | { readonly found: false } {
-  if (!commandAcceptsProtocolBatchDefaultTarget(command) || !isRecord(params)) {
-    return { found: false };
-  }
-
-  if (params.target !== undefined) {
-    return { found: false };
-  }
-
-  return {
-    found: true,
-    params: {
-      ...params,
-      target: targetSelectorSchema.parse({
-        window: { kind: "active" },
-        tab: { kind: "active" },
-      }),
-    },
-  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -34,7 +34,7 @@ function assertCliRouteSelectorDimensions(registry: Readonly<Record<string, Comm
   for (const [command, schema] of Object.entries(registry)) {
     for (const route of schema.cliRoutes) {
       const selectorDimensions: CliRouteSelectorDimensions = route.selectorDimensions;
-      const paramsSelectorDimensions = selectorDimensionsAcceptedByCommand(schema);
+      const paramsSelectorDimensions = targetSelectorDimensionsAcceptedByCommand(schema);
       if (selectorDimensions !== paramsSelectorDimensions) {
         throw new Error(
           `CLI route selector dimensions disagree with command params: ${command} (${route.id}) declares ${selectorDimensions}, params accept ${paramsSelectorDimensions}.`,
@@ -44,7 +44,7 @@ function assertCliRouteSelectorDimensions(registry: Readonly<Record<string, Comm
   }
 }
 
-function selectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRouteSelectorDimensions {
+export function targetSelectorDimensionsAcceptedByCommand(schema: CommandSchemaEntry): CliRouteSelectorDimensions {
   if (!(schema.params instanceof z.ZodObject)) {
     return "neither";
   }

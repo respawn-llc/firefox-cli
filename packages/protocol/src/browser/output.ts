@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { waitElementSummarySchema } from "../content.js";
-import { resolvedTargetSchema, targetSelectorSchema, windowSummarySchema } from "../target.js";
+import { resolvedTargetSchema, targetSelectorSchema, windowSummarySchema, windowTargetSelectorSchema } from "../target.js";
 import { phase8ElementTargetParamsSchema } from "./interactions.js";
 
 export const logActions = ["list", "clear"] as const;
@@ -77,7 +77,7 @@ export const pdfResultSchema = z.object({ path: z.string().min(1) }).strict();
 
 export const setViewportParamsSchema = z
   .object({
-    target: targetSelectorSchema.optional(),
+    target: windowTargetSelectorSchema.optional(),
     width: z.number().int().positive().max(10_000),
     height: z.number().int().positive().max(10_000),
   })

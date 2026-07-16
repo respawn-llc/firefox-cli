@@ -40,10 +40,10 @@ Create `UPLOAD_FILE` with any small text payload. Capture IDs from JSON output w
 - [ ] Run `$CLI connect`; expect an already-approved rejection that identifies the extension instance.
 - [ ] Run `$CLI window new "$BASE" --json`; save `WINDOW` and `TAB`.
 - [ ] Run `$CLI window --json`; expect `WINDOW` in the window list.
-- [ ] Run `$CLI window select "id:$WINDOW" --json`; expect `WINDOW` to be selected.
+- [ ] Run `$CLI window select "id:$WINDOW" --json`; expect `WINDOW` to be brought forward without establishing a durable target.
 - [ ] Run `$CLI tab --window "id:$WINDOW" --json`; expect `TAB` in the tab list.
 - [ ] Run `$CLI tab new "${BASE}?tab2" --window "id:$WINDOW" --json`; save `TAB2`.
-- [ ] Run `$CLI tab select "id:$TAB2" --json`; expect `TAB2` to be active.
+- [ ] Run `$CLI tab select "id:$TAB2" --json`; expect `TAB2` to be brought forward without establishing a durable target.
 - [ ] Run `$CLI open "${BASE}?open" --tab "id:$TAB2" --json`; expect `TAB2` to navigate.
 - [ ] Run `$CLI open --new-tab "${BASE}?tab3" --window "id:$WINDOW" --json`; save `TAB3`.
 - [ ] Run `$CLI back --tab "id:$TAB2" --json`; expect navigation success.
@@ -132,12 +132,12 @@ Create `UPLOAD_FILE` with any small text payload. Capture IDs from JSON output w
 - [ ] Run `$CLI errors clear --tab "id:$TAB2" --json`; expect success.
 - [ ] Run `$CLI errors list --tab "id:$TAB2" --json`; expect an error-list result.
 - [ ] Run `$CLI highlight "#highlight-target" --tab "id:$TAB2" --json`; expect success.
-- [ ] Run `$CLI set viewport 1000 700 --tab "id:$TAB2" --json`; expect window dimensions in the response.
+- [ ] Run `$CLI set viewport 1000 700 --window "id:$WINDOW" --json`; expect window dimensions in the response.
 - [ ] Run `$CLI diff title "firefox-cli disposable E2E" --tab "id:$TAB2" --json`; expect `"matches": true`.
 - [ ] Run `$CLI diff url "${BASE}?open" --tab "id:$TAB2" --json`; expect `"matches": true`.
 - [ ] Run `$CLI batch '[["fill","#email","batch@example.test"],["click","#submit"],["wait","--text","Submitted batch@example.test","--timeout","5000"],["get","text","#status"]]' --tab "id:$TAB2" --json`; expect all batch steps to pass.
 - [ ] Run `printf '[["get","title"]]' | $CLI batch --stdin --tab "id:$TAB2" --json`; expect the stdin batch step to pass.
-- [ ] Run `$CLI pdf "$PDF" --tab "id:$TAB2" --json`; expect `UNSUPPORTED_CAPABILITY`.
+- [ ] Run `$CLI pdf "$PDF" --json`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI close`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI quit`; expect `UNSUPPORTED_CAPABILITY`.
 - [ ] Run `$CLI exit`; expect `UNSUPPORTED_CAPABILITY`.
