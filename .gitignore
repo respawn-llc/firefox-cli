@@ -1,4 +1,4 @@
-.builder/plans
+.kent/plans
 node_modules/
 dist/
 coverage/
