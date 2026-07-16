@@ -146,7 +146,7 @@ export function applyBatchStepDefaults(
 
 async function resolveBatchDefaultSelector(command: RequestEnvelope<"batch">, targetContext: BrowserTargetContext): Promise<TargetSelector | undefined> {
   const resolution = command.params.steps.reduce<TargetResolution>(
-    (highest, step) => (isCommandId(step.command) ? highestTargetResolution(highest, requestTargetResolution(step.command, step.params)) : highest),
+    (highest, step) => (isCommandId(step.command) ? highestTargetResolution(highest, requestDefaultTargetResolution(step.command, step.params)) : highest),
     "none",
   );
   if (resolution === "none") {
@@ -165,6 +165,13 @@ async function resolveBatchDefaultSelector(command: RequestEnvelope<"batch">, ta
 }
 
 type TargetResolution = "none" | "window" | "tab";
+
+function requestDefaultTargetResolution(command: CommandId, params: unknown): TargetResolution {
+  if (!commandAcceptsExtensionBatchDefaultTarget(command) || !isRecord(params) || params.target !== undefined) {
+    return "none";
+  }
+  return requestTargetResolution(command, params);
+}
 
 function requestTargetResolution(command: CommandId, params: unknown): TargetResolution {
   const selectorDimensions = getCommandTargetSelectorDimensions(command);
@@ -208,11 +215,11 @@ function defaultTargetOverride(
   params: Record<string, unknown>,
   defaultTarget: TargetSelector | undefined,
 ): { readonly target?: TargetSelector } {
-  if (!commandAcceptsExtensionBatchDefaultTarget(command) || params.target !== undefined || defaultTarget === undefined || !isCommandId(command)) {
+  if (defaultTarget === undefined || !isCommandId(command)) {
     return {};
   }
 
-  const resolution = requestTargetResolution(command, params);
+  const resolution = requestDefaultTargetResolution(command, params);
   if (resolution === "none") {
     return {};
   }
