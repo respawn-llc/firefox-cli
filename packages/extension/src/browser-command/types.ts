@@ -15,10 +15,10 @@ export interface BrowserWindowSnapshot {
 export interface BackgroundBrowserAdapter {
   hasRequiredHostAccess(): Promise<boolean>;
   listWindows(): Promise<readonly BrowserWindowSnapshot[]>;
-  createTab(options: { readonly url?: string; readonly windowId?: number }): Promise<TabSummary>;
+  createTab(options: { readonly active: boolean; readonly url?: string; readonly windowId?: number }): Promise<TabSummary>;
   selectTab(tabId: number): Promise<TabSummary>;
   closeTab(tabId: number): Promise<void>;
-  createWindow(options: { readonly url?: string }): Promise<BrowserWindowSnapshot>;
+  createWindow(options: { readonly focused: boolean; readonly url?: string }): Promise<BrowserWindowSnapshot>;
   focusWindow(windowId: number): Promise<BrowserWindowSnapshot>;
   closeWindow(windowId: number): Promise<void>;
   navigateTab(tabId: number, url: string): Promise<TabSummary>;

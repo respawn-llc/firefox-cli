@@ -11,6 +11,7 @@ import { DEFAULT_SCREENSHOT_TIMEOUT_MS } from "../browser-command/constants.js";
 import { BrowserCommandError } from "../browser-command/errors.js";
 import { parseImageDataUrl } from "../browser-command/screenshot.js";
 import type { BackgroundBrowserAdapter, ResolvedBrowserTarget } from "../browser-command/types.js";
+import { activateBrowserTarget } from "./activation.js";
 import type { BrowserHandlerContext, BrowserHandlerMap } from "./types.js";
 
 export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
@@ -22,8 +23,7 @@ export const screenshotHandlers: BrowserHandlerMap<"screenshot"> = {
       });
     }
     const resolved = await context.targetContext.resolveTarget(request.params.target);
-    const activation = await activateScreenshotTarget(adapter, context, resolved);
-    const target = await resolveScreenshotTarget(context, resolved, activation);
+    const { activation, target } = await activateScreenshotTarget(adapter, context, resolved, request.params.focus === true);
     const dataUrl = await captureVisibleTab(adapter, request, target);
 
     const image = parseImageDataUrl(dataUrl, request.params.format, request.params.maxImageBytes ?? MAX_SCREENSHOT_BYTES);
@@ -45,38 +45,18 @@ async function activateScreenshotTarget(
   adapter: BackgroundBrowserAdapter,
   context: BrowserHandlerContext,
   resolved: ResolvedBrowserTarget,
-): Promise<{ readonly tabActivated: boolean; readonly windowFocused: boolean }> {
-  const activation = {
-    tabActivated: !resolved.tab.active,
-    windowFocused: !resolved.window.focused,
-  };
+  requestWindowFocus: boolean,
+): Promise<{
+  readonly activation: { readonly tabActivated: boolean; readonly windowFocused: boolean };
+  readonly target: ResolvedTarget;
+}> {
   try {
-    if (activation.tabActivated) {
-      await adapter.selectTab(resolved.tab.id);
-    }
-    if (activation.windowFocused) {
-      await adapter.focusWindow(resolved.window.id);
-    }
-    if (activation.tabActivated || activation.windowFocused) {
-      context.targetContext.invalidate();
-    }
+    const { tabActivated, windowFocused, target } = await activateBrowserTarget(adapter, context, resolved, requestWindowFocus);
+    return { activation: { tabActivated, windowFocused }, target };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new BrowserCommandError("CAPTURE_FAILED", `Failed to activate screenshot target: ${message}`);
   }
-  return activation;
-}
-
-async function resolveScreenshotTarget(
-  context: BrowserHandlerContext,
-  resolved: ResolvedBrowserTarget,
-  activation: { readonly tabActivated: boolean; readonly windowFocused: boolean },
-): Promise<ResolvedTarget> {
-  return activation.tabActivated || activation.windowFocused
-    ? context.targetContext.resolveFreshTarget({
-        tab: { kind: "id", id: resolved.tab.id },
-      })
-    : resolved.target;
 }
 
 async function captureVisibleTab(adapter: BackgroundBrowserAdapter, request: RequestEnvelope<"screenshot">, target: ResolvedTarget): Promise<string> {

@@ -17,6 +17,7 @@ export function buildOpenRequest(argv: readonly string[]): RequestEnvelope {
   return createValidatedRequest("open", {
     url,
     newTab: args.includes("--new-tab"),
+    ...(args.includes("--focus") ? { focus: true } : {}),
     ...optionalTarget(parseTargetOptions(args)),
   });
 }

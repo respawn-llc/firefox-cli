@@ -201,7 +201,7 @@ describe("native host runtime", () => {
         component: "extension",
         productName: "firefox-cli",
         productVersion: "0.0.0",
-        protocolMin: 1,
+        protocolMin: PROTOCOL_VERSION,
         protocolMax: PROTOCOL_VERSION,
         features: [],
       },
@@ -305,12 +305,12 @@ describe("native host runtime", () => {
         component: "extension",
         productName: "firefox-cli",
         productVersion: "2.0.0",
-        protocolMin: PROTOCOL_VERSION + 1,
-        protocolMax: PROTOCOL_VERSION + 1,
+        protocolMin: PROTOCOL_VERSION - 1,
+        protocolMax: PROTOCOL_VERSION - 1,
         features: [],
       },
       "hello-no-overlap",
-      3,
+      PROTOCOL_VERSION - 1,
     );
     const helloResponse = extensionReader.read();
     extensionInput.write(encodeNativeMessageFrame(hello));
@@ -339,7 +339,7 @@ async function sendExtensionHello(
       component: "extension",
       productName: "firefox-cli",
       productVersion: "0.0.0",
-      protocolMin: 1,
+      protocolMin: PROTOCOL_VERSION,
       protocolMax: PROTOCOL_VERSION,
       features: [],
       ...(options.pairToken === undefined ? {} : { pairToken: options.pairToken }),

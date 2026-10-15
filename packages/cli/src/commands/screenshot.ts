@@ -23,6 +23,7 @@ export function buildScreenshotRequest(argv: readonly string[], dependencies: Cl
   return createValidatedRequest("screenshot", {
     path: outputPath,
     format: parsedArgs.format,
+    ...(parsedArgs.optionArgs.includes("--focus") ? { focus: true } : {}),
     ...(parsedArgs.fullPage ? { fullPage: true } : {}),
     ...(parsedArgs.quality === undefined ? {} : { quality: parsePositiveIntegerValue(parsedArgs.quality, "quality") }),
     ...(parsedArgs.timeout === undefined ? {} : { timeoutMs: parsePositiveIntegerValue(parsedArgs.timeout, "timeout") }),

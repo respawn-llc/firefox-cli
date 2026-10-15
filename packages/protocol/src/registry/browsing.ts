@@ -5,6 +5,7 @@ import {
   tabCloseResultSchema,
   tabNewParamsSchema,
   tabNewResultSchema,
+  tabSelectParamsSchema,
   tabsListParamsSchema,
   tabsListResultSchema,
   tabTargetParamsSchema,
@@ -44,7 +45,7 @@ export const browsingCommandEntries = defineCommandEntries({
     cliRoutes: [{ id: "tab.new", path: ["tab", "new"], batch: true, selectorDimensions: "window" }],
   },
   "tab.select": {
-    params: tabTargetParamsSchema,
+    params: tabSelectParamsSchema,
     result: tabNewResultSchema,
     status: "mvp",
     owner: "extension",

@@ -60,6 +60,7 @@ export const screenshotParamsSchema = z
     target: targetSelectorSchema.optional(),
     path: z.string().min(1),
     format: screenshotFormatSchema,
+    focus: z.boolean().optional(),
     fullPage: z.boolean().optional(),
     quality: z.number().int().min(1).max(100).optional(),
     timeoutMs: z.number().int().positive().max(600_000).optional(),

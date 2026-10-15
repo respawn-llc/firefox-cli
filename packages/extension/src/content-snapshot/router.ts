@@ -138,8 +138,8 @@ const directContentHandlers: CommandHandlerMap<DirectContentCommand, [ContentScr
         ...(request.params.value === undefined ? {} : { value: request.params.value }),
       }),
     ),
-  console: (request) => createOkResponse(request, createConsoleResult(request.params.action, request.protocolVersion)),
-  errors: (request) => createOkResponse(request, createErrorsResult(request.params.action, request.protocolVersion)),
+  console: (request) => createOkResponse(request, createConsoleResult(request.params.action)),
+  errors: (request) => createOkResponse(request, createErrorsResult(request.params.action)),
   highlight: (request, options) => {
     try {
       const params = request.params;

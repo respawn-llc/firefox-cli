@@ -212,6 +212,44 @@ describe("parseBoundaryRequest", () => {
     expect(requests.map((request) => parseBoundaryRequest("host-to-extension", request))).toEqual(requests.map((request) => ({ ok: true, value: request })));
   });
 
+  it("accepts explicit false focus values for approved commands only", () => {
+    const focusRequests: readonly {
+      readonly command: "open" | "tab.new" | "tab.select" | "window.new" | "screenshot";
+      readonly params: Readonly<Record<string, unknown>>;
+    }[] = [
+      { command: "open", params: { url: "https://example.com/", focus: false } },
+      { command: "tab.new", params: { focus: false } },
+      { command: "tab.select", params: { focus: false } },
+      { command: "window.new", params: { focus: false } },
+      { command: "screenshot", params: { path: "/tmp/page.png", format: "png", focus: false } },
+    ];
+
+    for (const [index, request] of focusRequests.entries()) {
+      expect(
+        parseBoundaryRequest("host-to-extension", {
+          protocolVersion: PROTOCOL_VERSION,
+          id: `focus-${String(index)}`,
+          ...request,
+        }),
+      ).toMatchObject({
+        ok: true,
+        value: {
+          command: request.command,
+          params: { focus: false },
+        },
+      });
+    }
+
+    expect(
+      parseBoundaryRequest("host-to-extension", {
+        protocolVersion: PROTOCOL_VERSION,
+        id: "tab-close-focus",
+        command: "tab.close",
+        params: { focus: false },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_ENVELOPE" } });
+  });
+
   it("rejects tab selectors for window-only browsing commands at direct and batch boundaries", () => {
     const invalidRequests: readonly unknown[] = [
       {

@@ -86,7 +86,10 @@ export async function runCase03() {
 }
 
 export async function runCase04() {
-  const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]), windowSnapshot(20, false, [tabSummary(201, 0, true, 20)])]);
+  const adapter = new FakeBrowserAdapter([
+    windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+    windowSnapshot(20, false, [tabSummary(201, 0, false, 20), tabSummary(202, 1, true, 20)]),
+  ]);
 
   const response = await handleBrowserRequest(createRequest("tab.select", { target: { tab: { kind: "id", id: 201 } } }, "request-1"), adapter);
 

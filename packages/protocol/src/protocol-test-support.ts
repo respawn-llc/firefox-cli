@@ -1,4 +1,12 @@
-import { type Boundary, type CliRouteSelectorDimensions, type CommandId, type ComponentIdentity, commandSchemas } from "./index.js";
+import {
+  PROTOCOL_MAX_VERSION,
+  PROTOCOL_MIN_VERSION,
+  type Boundary,
+  type CliRouteSelectorDimensions,
+  type CommandId,
+  type ComponentIdentity,
+  commandSchemas,
+} from "./index.js";
 
 export const boundaries: readonly Boundary[] = ["cli-to-host", "host-to-extension", "extension-to-content-script"];
 export const inheritedCommandNames = ["toString", "constructor", "__proto__"] as const;
@@ -7,8 +15,8 @@ export const cliIdentity: ComponentIdentity = {
   component: "cli",
   productName: "firefox-cli",
   productVersion: "0.0.0",
-  protocolMin: 1,
-  protocolMax: 1,
+  protocolMin: PROTOCOL_MIN_VERSION,
+  protocolMax: PROTOCOL_MAX_VERSION,
   features: [],
 };
 

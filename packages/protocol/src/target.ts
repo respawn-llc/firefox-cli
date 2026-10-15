@@ -78,6 +78,7 @@ export const tabsListResultSchema = z.object({
 export const tabNewParamsSchema = z
   .object({
     url: z.string().min(1).optional(),
+    focus: z.boolean().optional(),
     target: windowTargetSelectorSchema.optional(),
   })
   .strict();
@@ -86,6 +87,9 @@ export const tabTargetParamsSchema = z
     target: targetSelectorSchema.optional(),
   })
   .strict();
+export const tabSelectParamsSchema = tabTargetParamsSchema.extend({
+  focus: z.boolean().optional(),
+});
 export const tabNewResultSchema = z.object({
   target: resolvedTargetSchema,
 });
@@ -101,6 +105,7 @@ export const windowsListResultSchema = z.object({
 export const windowNewParamsSchema = z
   .object({
     url: z.string().min(1).optional(),
+    focus: z.boolean().optional(),
   })
   .strict();
 export const windowTargetParamsSchema = z
@@ -124,6 +129,7 @@ export const openParamsSchema = z
   .object({
     url: z.string().min(1),
     newTab: z.boolean().default(false),
+    focus: z.boolean().optional(),
     target: targetSelectorSchema.optional(),
   })
   .strict();

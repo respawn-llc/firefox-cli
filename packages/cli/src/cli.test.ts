@@ -7,12 +7,15 @@ describe("runCli", () => {
   it("rejects unsupported route options before sending requests", async () => {
     const cases: readonly { readonly argv: readonly string[]; readonly stderr: string }[] = [
       { argv: ["tab", "--bogus"], stderr: "Unsupported tab option: --bogus\n" },
+      { argv: ["tab", "close", "id:42", "--focus"], stderr: "Unsupported tab option: --focus\n" },
       { argv: ["open", "example.com", "--bogus"], stderr: "Unsupported open option: --bogus\n" },
+      { argv: ["back", "--focus"], stderr: "Unsupported back option: --focus\n" },
       { argv: ["snapshot", "--bogus"], stderr: "Unsupported snapshot option: --bogus\n" },
       { argv: ["get", "title", "--bogus"], stderr: "Unsupported get option: --bogus\n" },
       { argv: ["wait", "--bogus"], stderr: "Unsupported wait option: --bogus\n" },
       { argv: ["eval", "--bogus", "1"], stderr: "Unsupported eval option: --bogus\n" },
       { argv: ["screenshot", "--bogus"], stderr: "Unsupported screenshot option: --bogus\n" },
+      { argv: ["window", "select", "0", "--focus"], stderr: "Unsupported window option: --focus\n" },
       { argv: ["find", "text", "Ready", "--bogus"], stderr: "Unsupported find option: --bogus\n" },
       { argv: ["frame", "--frame", "0"], stderr: "Unsupported frame option: --frame\n" },
       { argv: ["upload", "--bogus"], stderr: "Unsupported upload option: --bogus\n" },

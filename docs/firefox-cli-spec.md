@@ -1,10 +1,10 @@
-## Product Goal
+## Product goal
 
 `firefox-cli` gives AI agents and terminal users an `agent-browser`-style control surface for the user's real Firefox session. It controls already-running Firefox windows and tabs through a manually installed Firefox extension, not through a separate automation browser profile.
 
 The CLI supports full browser control where Firefox WebExtensions allow it: navigation, tab/window selection, compact page snapshots with element refs, clicking, typing, filling, hovering, scrolling, swipe aliases, screenshots, waits, page queries, JavaScript evaluation, batch execution, and diagnostic output.
 
-## Non-Goals
+## Non-goals
 
 - Do not launch a dedicated automation-only Firefox profile for normal commands.
 - Do not create persistent browser profiles, synthetic sessions, saved auth states, auth vaults, or cookie/storage snapshots in the MVP.
@@ -13,9 +13,9 @@ The CLI supports full browser control where Firefox WebExtensions allow it: navi
 - Do not add domain allowlists, action policy files, or per-action confirmations in the MVP.
 - Do not implement Chrome CDP/debugger-only capabilities unless Firefox provides an equivalent.
 - Do not add OS-level input emulation unless content-script actions fail concrete target-site tests.
-- Do not provide top-level `close`, `quit`, or `exit` commands in the MVP; require explicit `tab close` or `window close` because this controls the user's existing browser.
+- Do not provide top-level `close`, `quit`, or `exit` commands in the MVP. Require explicit `tab close` or `window close` because this controls the user's existing browser.
 
-## User Experience
+## User experience
 
 The happy path:
 
@@ -37,7 +37,7 @@ firefox-cli screenshot page.png
 
 CLI output defaults to compact, LLM-readable text. `--json` returns typed protocol-shaped JSON for scripts and tests.
 
-## Repository And Stack
+## Repository and stack
 
 Use Bun workspaces with TypeScript, strict typechecking, and ESM-first packages.
 
@@ -64,7 +64,7 @@ The system has four layers:
 
 Use the same executable for CLI mode and native-host mode. Firefox launches the binary from the native messaging manifest. Native-host mode detection must be deterministic: expected native messaging argv shape, manifest path/name, extension ID, and native framing on stdin/stdout. Normal user invocations run CLI mode only when those native-host signals are absent. Host mode must reserve stdout for native messaging frames and write logs to stderr or files.
 
-Default command target is the active tab in the active Firefox window. Commands that choose a tab or window use Firefox's real active state instead of hidden CLI sessions.
+The default command target is the active tab in the active Firefox window. Target selection uses Firefox's active state without hidden CLI sessions.
 
 ## Transport
 
@@ -85,10 +85,10 @@ Broker behavior:
 - Extension background calls `runtime.connectNative()` in the unpaired state to discover host identity, and in the paired state to maintain the command channel.
 - The native host stays alive while the extension's native messaging port is connected.
 - The host exposes a per-user local IPC endpoint for `firefox-cli` invocations.
-- CLI commands fail with actionable setup text when the extension is missing, not approved, disconnected, or unable to connect to the native host.
-- Native messaging messages from native app to extension must stay small; large payloads should flow from extension to native host or through files because Firefox limits app-to-extension messages to 1 MB.
+- CLI commands return actionable setup errors for a missing extension, pending approval, a disconnected extension, or a native-host connection failure.
+- Native messaging messages from native app to extension must stay small. Large payloads should flow from extension to native host or through files because Firefox limits app-to-extension messages to 1 MB.
 
-## Pairing, Approval, And Local IPC
+## Pairing, approval, and local IPC
 
 MVP security posture is pairing-gated and command-permissive.
 
@@ -108,11 +108,11 @@ Local IPC rules:
 - On Unix-like systems, use filesystem permissions and peer-credential checks where available.
 - On Windows, use named-pipe ACLs restricted to the current user.
 - Protect CLI-to-host requests with a generated pair token stored in user-local app state. Rotate it on `firefox-cli unpair`, extension reset, or pair-state mismatch.
-- `firefox-cli unpair` clears host-side pair state; the popup reset action clears extension-side pair state.
+- `firefox-cli unpair` clears host-side pair state. The popup reset action clears extension-side pair state.
 
 Store pair state only in OS user-local application storage and extension-local storage. Do not store pair tokens, native-host paths, or approval state in the project repository, npm package directory, extension source tree, or generated native manifest. Pair state should include enough metadata to detect stale approvals, such as extension ID, host name, host executable identity, protocol range, and token generation. Rotate the token whenever either side resets approval, the host identity changes unexpectedly, or the extension/native-host pair cannot prove it is the same approved pair.
 
-## MV3 Lifecycle Prototype Gate
+## MV3 lifecycle prototype gate
 
 Target Manifest V3 unless a prototype proves MV3 unusable for the required control channel. MV2 is only an escape hatch.
 
@@ -161,7 +161,7 @@ Command behavior:
 
 All CLI-extension messages go through `packages/protocol`.
 
-Use a discriminated schema registry instead of stringly typed command routing:
+Use a discriminated schema registry for typed command routing:
 
 ```ts
 type CommandSchema =
@@ -199,7 +199,7 @@ Protocol rules:
 - Include a protocol version in every message.
 - Return structured errors with stable codes such as `EXTENSION_NOT_CONNECTED`, `NOT_APPROVED`, `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`, `NO_ACTIVE_TAB`, `REF_NOT_FOUND`, `NAVIGATION_TIMEOUT`, `SCRIPT_INJECTION_BLOCKED`, and `VERSION_MISMATCH`.
 - Include capability metadata so `firefox-cli capabilities` reports implemented and unsupported command groups.
-- Keep command requests under the native app-to-extension message limit. Eval scripts support stdin/base64 but still enforce a documented max request size.
+- Keep command requests under the native app-to-extension message limit. Eval scripts accept stdin/base64 and obey the documented maximum request size.
 
 Startup handshake:
 
@@ -211,22 +211,22 @@ Startup handshake:
 
 Target resolution is owned by the extension.
 
-- `active` is an explicit selector. `--window active` chooses Firefox's focused normal window; `--tab active` chooses the active tab within the selected window.
+- `active` is an explicit selector. `--window active` chooses Firefox's focused normal window. `--tab active` chooses the active tab within the selected window.
 - Window and tab IDs use Firefox IDs in JSON output.
-- Human-facing indexes are derived from deterministic `browser.windows.getAll({ populate: true })` ordering: focused window first, then remaining windows by Firefox window ID; tabs by index within each window.
+- Human-facing indexes use deterministic `browser.windows.getAll({ populate: true })` ordering. The focused window comes first, followed by remaining windows ordered by Firefox window ID. Tabs are ordered by index within each window.
 - Private windows are reported but commands return `UNSUPPORTED_CAPABILITY` unless the extension has private browsing permission and the command is explicitly allowed there.
 - Container tab metadata should be included when Firefox exposes it, but no persistent container/session model is added.
 - Each command snapshots its resolved target before execution to avoid active-tab races.
-- Selector values are `active`, a non-negative listing index, or `id:<non-negative Firefox ID>`. A route supports neither selector, `--window` only, `--tab` only, or both as advertised by its CLI help; unsupported selector flags fail before dispatch.
-- An omitted window selector is accepted only when exactly one normal window exists. A globally unique `--tab id:<id>` also identifies its owning window. Other tab selectors remain window-relative.
+- Selector values are `active`, a non-negative listing index, or `id:<non-negative Firefox ID>`. A route supports neither selector, `--window` only, `--tab` only, or both as advertised by its CLI help. Unsupported selector flags fail before dispatch.
+- An omitted window selector is accepted only when exactly one normal window exists. A globally unique `--tab id:<id>` also identifies its owning window. Other tab selectors resolve within the selected window.
 - A tab-dependent command accepts an omitted tab selector only when the selected window has exactly one tab. Pass `--tab active` explicitly to choose Firefox's active tab when several tabs exist.
 - Ambiguous omission returns `INVALID_TARGET` with `Ambiguous window` or `Ambiguous tab` guidance before browser side effects.
 - Page-targeted routes support both dimensions. `tab`, `tab new`, `window select`, `window close`, and `set viewport` are window-scoped. `open --new-tab` resolves only a window. Targetless routes support neither.
-- `tab select` and `window select` bring a browser surface forward to the user. They do not establish durable CLI target state or remove the requirement to pass selectors explicitly to later target-dependent commands.
+- `tab select` selects a tab within its window. `--focus` also requests window foregrounding. `window select` brings its window forward. Neither command establishes durable CLI target state, so pass selectors explicitly when a later command needs an unambiguous target.
 
-`open <url>` navigates the resolved target tab to match `agent-browser`. Use `tab new [url]` or `open --new-tab <url>` to create a new tab.
+`open <url>` navigates the resolved target tab without changing tab selection. `tab new [url]` and `open --new-tab <url>` create an unselected tab. These commands accept `--focus` to select the target tab and request window foregrounding. `window new [url]` requests foregrounding only with `--focus`.
 
-## Snapshot And Ref Model
+## Snapshot and ref model
 
 `snapshot` is the core LLM-efficient output format. It must not dump raw HTML by default.
 
@@ -248,7 +248,7 @@ Ref registry:
 - `batch` shares refs created earlier in the same batch transaction.
 - Stale refs return `REF_NOT_FOUND` with "run `firefox-cli snapshot -i` again" guidance.
 - Refs are actionable only in the main frame.
-- Iframe output is diagnostic/read-only in `snapshot` and `frame`; iframe-targeted commands and interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
+- Iframe output is diagnostic/read-only in `snapshot` and `frame`. Iframe-targeted commands and interactions against iframe refs return `UNSUPPORTED_CAPABILITY`.
 
 Implementation approach:
 
@@ -256,7 +256,7 @@ Implementation approach:
 - Start with main-frame content-script snapshots.
 - Restricted frames may produce partial output with diagnostics.
 
-## Action Backend
+## Action backend
 
 MVP starts with WebExtension/content-script actions:
 
@@ -264,42 +264,42 @@ MVP starts with WebExtension/content-script actions:
 - Text entry uses value-setting plus input/change events for form controls, and keyboard/input event simulation for editable content where feasible.
 - Click, hover, press, keyboard, fill, type, drag, upload, direct mouse commands, and raw key events are available for normal main-frame web controls with target-site limitations recorded in `docs/target-site-qa.md`.
 
-Generated DOM events are not trusted user input. Sites that check `event.isTrusted`, require browser user activation, use complex editors, or implement anti-abuse controls may reject content-script actions. Track concrete failures; add OS-level input emulation only if these failures block the product.
+Generated DOM events are not trusted user input. Sites that check `event.isTrusted`, require browser user activation, use complex editors, or implement anti-abuse controls may reject content-script actions. Track concrete failures. Add OS-level input emulation only if these failures block the product.
 
-## Eval Semantics
+## Eval semantics
 
 `eval` is included in MVP but must be explicitly specified and tested.
 
 - Support `eval <js>`, `eval --stdin`, and `eval -b <base64>`.
 - Execution target is the resolved tab's main frame.
 - Frame-targeted eval returns `UNSUPPORTED_CAPABILITY`.
-- Execute in the page/main world when Firefox supports it; otherwise return `UNSUPPORTED_CAPABILITY` for operations that require page-world access.
-- Results must be structured-cloneable or JSON-serializable; unsupported values return a structured serialization error.
+- Execute in the page/main world when Firefox supports it. Return `UNSUPPORTED_CAPABILITY` for operations that require page-world access when Firefox lacks that support.
+- Results must be structured-cloneable or JSON-serializable. Unsupported values return a structured serialization error.
 - Capture thrown errors with name, message, stack when available, and frame context.
 - Enforce command timeout, script size limit, and result size limit.
 - Restricted pages return `SCRIPT_INJECTION_BLOCKED`.
 
-## Screenshot Semantics
+## Screenshot semantics
 
 Start with visible-tab screenshots.
 
-- `screenshot [path]` captures the active visible tab of the target window.
-- If the requested target is not active or focused, the command activates its tab and/or focuses its window before capture and reports those side effects in diagnostics. Invalid target resolution happens before activation.
-- If activation is impossible or would require unsupported user activation, return `UNSUPPORTED_CAPABILITY`.
-- Write image bytes through the native host to the requested path; JSON output should include path, format, dimensions when known, and diagnostics.
+- `screenshot [path]` captures the requested visible tab and selects it within its window.
+- Use `--focus` to request window foregrounding for human inspection or focus-dependent rendering. Invalid target resolution happens before activation.
+- Activation or image-capture failures return `CAPTURE_FAILED` with diagnostic detail. Capture deadlines return `TIMEOUT`.
+- Write image bytes through the native host to the requested path. JSON output should include path, format, dimensions when known, and diagnostics.
 - Support visible-tab PNG and JPEG captures with JPEG quality.
 - `--full` returns `UNSUPPORTED_CAPABILITY` because Firefox WebExtensions expose visible-tab capture APIs rather than a full-page file API.
 
-## Batch And Concurrency
+## Batch and concurrency
 
-`batch` executes a serialized command transaction.
+`batch` executes commands serially.
 
 - Input is a JSON array of argv arrays or command objects.
 - The required default window and/or tab is resolved once at batch start unless a step overrides it. Window-only batches do not require or inject a tab selector.
 - Steps share ref registry entries created earlier in the batch.
 - `--bail` stops at the first failed step.
 - Output is an ordered result array with per-step success/error, diagnostics, and final exit status.
-- Batch timeout is the outer deadline; each step may also have a timeout.
+- The batch timeout is the outer deadline. Each step may also have a timeout.
 
 Concurrency rules:
 
@@ -307,7 +307,7 @@ Concurrency rules:
 - Allow independent read-only commands only when they do not mutate shared ref or wait state.
 - Queue concurrent CLI invocations through the native host and return deterministic timeout/cancellation errors.
 
-## CLI Surface And Capability Matrix
+## CLI surface and capability matrix
 
 Keep command names close to `agent-browser` unless Firefox capability differences require a different command or explicit unsupported error.
 
@@ -316,17 +316,17 @@ Agent-browser family compatibility summary:
 | Agent-browser family | `firefox-cli` status |
 | --- | --- |
 | Navigation: `open`, `back`, `forward`, `reload` | MVP |
-| Browser/session close: `close`, `quit`, `exit`, `close --all` | Unsupported; use explicit `tab close` or `window close` |
-| Snapshot/refs: `snapshot`, `frame` | MVP for main-frame refs and iframe diagnostics; actionable iframe refs unsupported |
-| Core actions: `click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`, `swipe` | MVP for normal main-frame controls; target-site QA covers representative public click/fill/type/scroll actions and records x.com unauthenticated-headless limits |
+| Browser/session close: `close`, `quit`, `exit`, `close --all` | Unsupported. Use explicit `tab close` or `window close`. |
+| Snapshot/refs: `snapshot`, `frame` | MVP for main-frame refs and iframe diagnostics. Actionable iframe refs are unsupported. |
+| Core actions: `click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`, `focus`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`, `swipe` | MVP for normal main-frame controls. Target-site QA covers representative public click/fill/type/scroll actions and records x.com unauthenticated-headless limits. |
 | Advanced input: `drag`, `upload`, direct `mouse`, `keydown`, `keyup` | MVP with content-script event fidelity |
 | Semantic locators: `find ...` | MVP |
 | Read/check/wait: `get`, `is`, selector/text/URL/function/load/networkidle/download waits | MVP |
 | Tabs/windows: `tab`, `window` | MVP |
-| Capture: `screenshot` | MVP for visible-tab PNG/JPEG; full-page/PDF/video unsupported or deferred |
+| Capture: `screenshot` | MVP for visible-tab PNG/JPEG. Full-page/PDF/video are unsupported or deferred. |
 | Eval and batch: `eval`, `batch` | MVP |
-| Dialogs, downloads, clipboard, cookies, storage, network list/clear | MVP with Firefox/WebExtension limits; HAR unsupported |
-| Debug/repro: console/errors, `highlight`, diff, trace/profiler, vitals | MVP for listed commands; deferred as listed below |
+| Dialogs, downloads, clipboard, cookies, storage, network list/clear | MVP with Firefox/WebExtension limits. HAR is unsupported. |
+| Debug/repro: console/errors, `highlight`, diff, trace/profiler, vitals | MVP for listed commands. Other items are deferred as listed below. |
 | Auth/state/session/profile/security gates/content boundaries | Deferred or unsupported in MVP because this controls the existing Firefox session after pairing |
 | Chrome/CDP/provider/browser-install features: CDP attach, `get cdp-url`, `inspect`, `--extension`, external providers, iOS, Chrome profile import, browser install/upgrade | Unsupported unless Firefox provides an equivalent |
 
@@ -335,7 +335,7 @@ Global options:
 - `--json`: emit machine-readable JSON.
 - `--timeout <ms>`: override command timeout.
 - `--max-output <chars>`: cap text output.
-- `--window <target>` and `--tab <target>`: route-specific target selectors; use only flags advertised by that route's help.
+- `--window <target>` and `--tab <target>`: route-specific target selectors. Use only flags advertised by that route's help.
 - `--debug`: include transport/protocol diagnostics.
 
 Setup and diagnostics:
@@ -353,7 +353,7 @@ MVP:
 - Snapshot: `snapshot`, `snapshot -i`, `snapshot -c`, `snapshot -d <depth>`, `snapshot -s <selector>`.
 - Stable interactions: `click`, `dblclick`, `focus`, `fill`, `type`, `press`, `keyboard type`, `keyboard inserttext`, `hover`, `check`, `uncheck`, `select`, `scroll`, `scrollintoview`.
 - Swipe aliases: `swipe up|down|left|right [px]`, mapped to scrolling/pointer behavior where desktop Firefox supports it.
-- Optional tap alias: `tap <selector|ref>` may alias `click` only if it does not imply mobile-device emulation.
+- Optional tap alias: `tap <selector|ref>` may alias `click` with desktop semantics.
 - Information: `get text`, `get html`, `get value`, `get attr`, `get title`, `get url`, `get count`, `get box`, `get styles`.
 - State checks: `is visible`, `is enabled`, `is checked`.
 - Waits: `wait <selector|ref|ms>`, `wait --text`, `wait --url`, `wait --fn`, `wait --state hidden`, `wait --load domcontentloaded|complete`.
@@ -379,7 +379,7 @@ Implemented with Firefox/WebExtension limits:
 - `wait --load networkidle`.
 - Console/error capture after injected instrumentation.
 - `highlight`.
-- PDF export returns `UNSUPPORTED_CAPABILITY` because Firefox saves PDFs through a browser dialog instead of writing a requested CLI path.
+- PDF export returns `UNSUPPORTED_CAPABILITY` because Firefox saves PDFs through a browser dialog.
 - Viewport/window sizing commands.
 - Diff snapshot/screenshot/url.
 
@@ -406,7 +406,7 @@ Defer:
 
 Unsupported unless Firefox provides an equivalent:
 
-- Top-level `close`, `quit`, `exit`, and `close --all`; use explicit `tab close` and `window close`.
+- Top-level `close`, `quit`, `exit`, and `close --all` are unsupported. Use explicit `tab close` and `window close`.
 - `confirm` and `deny`, because MVP has no per-action confirmation queue.
 - Chrome `debugger`/CDP-specific commands.
 - CDP attach by port/URL and `get cdp-url`.
@@ -415,7 +415,7 @@ Unsupported unless Firefox provides an equivalent:
 - External browser providers and iOS provider.
 - Commands that require controlling pages where Firefox blocks extension injection.
 
-## MVP Command Contracts
+## MVP command contracts
 
 Target-dependent MVP command results include resolved window/tab metadata where their result schema exposes it. Text output may omit fields that are not useful for agents.
 
@@ -460,17 +460,17 @@ Waits:
 Tabs and windows:
 
 - `tab`: lists tabs for the selected or only window. Result includes ID, index, active flag, title, URL when permitted, window ID, private flag, and container metadata when available.
-- `tab new [url]`: creates a new tab. Result is created tab target and URL when provided.
+- `tab new [url] [--focus]`: creates an unselected tab by default. `--focus` selects the new tab and requests window foregrounding. Result is created tab target and URL when provided.
 - `tab close [id|index|active]`: closes a tab. Result is closed tab ID and next active tab when known.
-- `tab select [id|index|active]`: brings a tab forward to the user. Result is the selected target; later target-dependent commands still require explicit selectors when their target is ambiguous.
+- `tab select [id|index|active] [--focus]`: selects a tab within its window. `--focus` also requests window foregrounding. Result is the selected target. Target-dependent follow-up commands need explicit selectors when the target is ambiguous.
 - `window`: lists normal windows and their active tabs. Result includes Firefox window IDs, focus/active flags, bounds when available, and tab count.
-- `window new [url]`: creates a new window. Result is created window ID and active tab ID.
+- `window new [url] [--focus]`: creates a new window. `--focus` requests foregrounding. Result is created window ID and active tab ID.
 - `window close <id|active>`: closes a window. Result is closed window ID.
-- `window select [id|index|active]`: brings a window forward to the user. Result includes refreshed focus metadata and its active tab; later target-dependent commands still require explicit selectors when their target is ambiguous.
+- `window select [id|index|active]`: brings a window forward to the user. Result includes refreshed focus metadata and its active tab. Target-dependent follow-up commands need explicit selectors when the target is ambiguous.
 
 Screenshots:
 
-- `screenshot [path]`: params are output path, format, target, and timeout. Result is file path, format, dimensions when known, and activation side-effect diagnostics. Errors include no active tab, permission denied, capture blocked, unsupported non-active capture, and write failure.
+- `screenshot [path] [--focus]`: params are output path, format, target, focus request, and timeout. Result is file path, format, dimensions when known, and activation side-effect diagnostics. Errors include no active tab, permission denied, `CAPTURE_FAILED` for activation or image-capture failures, `TIMEOUT` for capture deadlines, and write failure.
 
 Eval:
 
@@ -480,7 +480,7 @@ Batch:
 
 - `batch [--bail]`: params are ordered command steps, bail flag, default target, and timeout. Result is ordered step results, first failed index when any, and final exit status. Errors include invalid step, batch timeout, and concurrent target lock timeout.
 
-## Error And Output UX
+## Error and output UX
 
 Errors should be concise and actionable:
 
@@ -514,7 +514,7 @@ Required feasibility gates:
 - Pairing, unpairing, token mismatch, and component reinstall behavior.
 - Permission revocation and missing host permission errors.
 - Restricted pages and restricted iframes.
-- Active-tab screenshot side effects and failures.
+- Screenshot selection, foregrounding, activation/capture failures, and deadlines.
 - Cross-origin iframe partial snapshots.
 - Native-host registration on macOS, Linux, and Windows.
 - Clean npm install, package binary path, native manifest repair after upgrade, and release package verification.
@@ -522,7 +522,7 @@ Required feasibility gates:
 
 CI should run lint, typecheck, unit tests, extension lint, extension build, CLI build, and package verification on every change. Native host registration and IPC tests should run on macOS, Linux, and Windows in the release matrix.
 
-## Development Commands
+## Development commands
 
 Expose root scripts with these roles once package manifests exist:
 
@@ -540,7 +540,7 @@ Expose root scripts with these roles once package manifests exist:
 
 Do not put exact command strings in AGENTS.md or docs until the scripts exist in tracked manifests.
 
-## Packaging And Distribution
+## Packaging and distribution
 
 Publish an npm package named `firefox-cli` with one user-facing binary: `firefox-cli`.
 
@@ -559,7 +559,7 @@ Package requirements:
 - Host-mode stdout is reserved for native messaging frames.
 - Release-candidate verification requires a signed `dist/extension-artifacts/firefox-cli-<version>.xpi` artifact and matching provenance.
 
-Manual extension install is in scope; Mozilla store/public listing automation is out of scope.
+Manual extension install is in scope. Mozilla store/public listing automation is out of scope.
 
 Install paths:
 
@@ -577,7 +577,7 @@ MVP user-delivery docs are CLI help and setup/doctor output. Repository/release-
 
 Do not ship packaged `skills get` docs until the command surface is stable.
 
-## Reference Sources
+## Reference sources
 
 - Firefox native messaging: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging
 - Firefox native manifests: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_manifests

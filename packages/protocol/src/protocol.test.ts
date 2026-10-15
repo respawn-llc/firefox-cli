@@ -21,10 +21,37 @@ describe("protocol negotiation", () => {
       protocolMin: PROTOCOL_MIN_VERSION,
       protocolMax: PROTOCOL_MAX_VERSION,
     });
+    expect(PROTOCOL_MIN_VERSION).toBe(5);
+    expect(PROTOCOL_MAX_VERSION).toBe(5);
     expect(createLocalComponentIdentity("cli", "0.0.0")).toMatchObject({
       component: "cli",
       protocolMin: PROTOCOL_MIN_VERSION,
       protocolMax: PROTOCOL_MAX_VERSION,
+    });
+  });
+
+  it("rejects a version-4 component during hello negotiation", () => {
+    const request = createRequest(
+      "hello",
+      {
+        ...cliIdentity,
+        protocolMin: 4,
+        protocolMax: 4,
+      },
+      "hello-v4",
+      4,
+    );
+
+    expect(
+      parseBoundaryRequest("cli-to-host", request, {
+        hello: {
+          local: localProtocolVersionRange,
+          expectedPeerComponent: "cli",
+        },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "VERSION_MISMATCH" },
     });
   });
 

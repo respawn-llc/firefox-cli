@@ -209,7 +209,6 @@ describe("local IPC", () => {
         extensionId: FIREFOX_CLI_EXTENSION_ID,
         generateId: () => "host-1",
       }),
-      protocolRange: { protocolMin: 1, protocolMax: 1 },
     });
     broker.connectExtension({
       approved: true,
@@ -227,10 +226,8 @@ describe("local IPC", () => {
     servers.push(server);
     await server.start();
 
-    const request = createRequest("capabilities", {}, "request-1", 2);
-    const response = await sendNegotiatedLocalIpcRequest(endpoint, request, {
-      protocolRange: { protocolMin: 1, protocolMax: 2 },
-    });
+    const request = createRequest("capabilities", {}, "request-1", PROTOCOL_VERSION);
+    const response = await sendNegotiatedLocalIpcRequest(endpoint, request);
 
     expect(forwardedRequest).toMatchObject({
       id: request.id,
@@ -238,7 +235,7 @@ describe("local IPC", () => {
       command: "capabilities",
     });
     expect(response).toEqual({
-      protocolVersion: 1,
+      protocolVersion: PROTOCOL_VERSION,
       id: request.id,
       ok: true,
       result: { capabilities: [...kernelCapabilities] },

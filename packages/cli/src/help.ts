@@ -19,20 +19,22 @@ const routeHelpSpecs = {
   capabilities: helpSpec("List supported command families and browser capability metadata."),
   connect: helpSpec("Request Firefox control approval through a dedicated approval page."),
   "tab.list": helpSpec("List tabs for the selected or only Firefox window.", ["Use window indexes with `--window <index>` and ids with `--window id:<id>`."]),
-  "tab.new": helpSpec("Open a new tab, optionally at a URL."),
-  "tab.select": helpSpec("Bring a tab forward to the user by index, id, or URL substring.", [
-    "This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.",
+  "tab.new": helpSpec("Open a new tab in the background, or use `--focus` to select it and bring its window forward."),
+  "tab.select": helpSpec("Select a tab within its window by index, id, or URL substring.", [
+    "Use `--focus` to bring its window forward.",
+    "Pass `--window`/`--tab` explicitly to later target-dependent commands.",
   ]),
   "tab.close": helpSpec("Close a tab by index, id, or URL substring."),
   "window.list": helpSpec("List Firefox windows with indexes, ids, focus state, and tab counts.", [
     "Use listed indexes with `--window <index>` and ids with `--window id:<id>`.",
   ]),
-  "window.new": helpSpec("Open a new Firefox window, optionally at a URL."),
-  "window.select": helpSpec("Bring a window forward to the user by index or id.", [
-    "This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.",
-  ]),
+  "window.new": helpSpec("Open a new Firefox window, optionally at a URL.", ["Without `--focus`, the command makes no foreground request."]),
+  "window.select": helpSpec("Bring a window forward to the user by index or id.", ["Pass `--window`/`--tab` explicitly to later target-dependent commands."]),
   "window.close": helpSpec("Close a Firefox window by index or id."),
-  open: helpSpec("Navigate a selected tab or create a new tab for a URL.", ["Use `--new-tab` when navigation must not replace an existing page."]),
+  open: helpSpec("Navigate a tab or create a new tab for a URL.", [
+    "Navigation leaves tab selection unchanged by default. `--focus` selects the target tab and brings its window forward.",
+    "`--new-tab` creates an unselected tab unless `--focus` is set.",
+  ]),
   back: helpSpec("Go back in the target tab history."),
   forward: helpSpec("Go forward in the target tab history."),
   reload: helpSpec("Reload the target tab."),
@@ -51,7 +53,9 @@ const routeHelpSpecs = {
   eval: helpSpec("Evaluate JavaScript in the target page and return a serialized result.", [
     "Use `--stdin` or `-b base64` for multi-line or shell-sensitive scripts.",
   ]),
-  screenshot: helpSpec("Capture the visible target tab to a PNG/JPEG file or default path."),
+  screenshot: helpSpec("Capture the target tab to a PNG/JPEG file or default path.", [
+    "The target tab is selected for capture. Use `--focus` to bring its window forward for human inspection or focus-dependent rendering.",
+  ]),
   drag: helpSpec("Drag from one selector/ref to another."),
   upload: helpSpec("Attach one or more local files to a file input."),
   mouse: helpSpec("Send low-level mouse move/down/up/wheel events."),
@@ -203,9 +207,11 @@ const builtinHelpSpecs = new Map<string, HelpSpec>([
 const commandExamples: Partial<Record<RouteBindingId, readonly string[]>> = {
   "tab.list": ["firefox-cli tab --json"],
   connect: ["firefox-cli connect"],
-  "tab.new": ["firefox-cli tab new https://example.com"],
-  "tab.select": ["firefox-cli tab select 1", "firefox-cli tab select id:42"],
-  open: ["firefox-cli open https://example.com", "firefox-cli open --new-tab https://example.com"],
+  "tab.new": ["firefox-cli tab new https://example.com", "firefox-cli tab new --focus https://example.com"],
+  "tab.select": ["firefox-cli tab select 1", "firefox-cli tab select --focus id:42"],
+  "window.new": ["firefox-cli window new --focus https://example.com"],
+  open: ["firefox-cli open https://example.com", "firefox-cli open --new-tab --focus https://example.com"],
+  screenshot: ["firefox-cli screenshot page.png", "firefox-cli screenshot --focus page.png"],
   snapshot: ["firefox-cli snapshot -i", "firefox-cli snapshot -s main -d 3 --json"],
   get: ["firefox-cli get title", "firefox-cli get text '#content' --json"],
   wait: ["firefox-cli wait --url '*dashboard*'", "firefox-cli wait '#ready'"],

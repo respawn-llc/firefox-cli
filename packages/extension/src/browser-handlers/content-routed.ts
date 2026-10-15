@@ -1,12 +1,9 @@
 import {
-  LOG_RESULT_METADATA_PROTOCOL_VERSION,
   createErrorResponseForRequest,
   createOkResponse,
   type ActionKind,
   type ActionResult,
-  type ConsoleResult,
   type DiffResult,
-  type ErrorsResult,
   type FindResult,
   type FrameResult,
   type GetResult,
@@ -169,38 +166,7 @@ async function handleLogCommand(command: RequestEnvelope<"console" | "errors">, 
   if (!logResponse.ok) {
     return createErrorResponseForRequest(command, logResponse.error);
   }
-  return createOkResponse(command, logResultForProtocolVersion(logResponse.result, command.protocolVersion));
-}
-
-function logResultForProtocolVersion(result: ConsoleResult, protocolVersion: number): ConsoleResult;
-function logResultForProtocolVersion(result: ErrorsResult, protocolVersion: number): ErrorsResult;
-function logResultForProtocolVersion(result: ConsoleResult | ErrorsResult, protocolVersion: number): ConsoleResult | ErrorsResult {
-  if (protocolVersion >= LOG_RESULT_METADATA_PROTOCOL_VERSION) {
-    return result;
-  }
-  return withoutLogMetadata(result);
-}
-
-function withoutLogMetadata(result: ConsoleResult): ConsoleResult;
-function withoutLogMetadata(result: ErrorsResult): ErrorsResult;
-function withoutLogMetadata(result: ConsoleResult | ErrorsResult): ConsoleResult | ErrorsResult {
-  return "errors" in result ? legacyErrorsResult(result) : legacyConsoleResult(result);
-}
-
-function legacyConsoleResult(result: ConsoleResult): ConsoleResult {
-  return {
-    action: result.action,
-    ok: result.ok,
-    ...(result.entries === undefined ? {} : { entries: result.entries }),
-  };
-}
-
-function legacyErrorsResult(result: ErrorsResult): ErrorsResult {
-  return {
-    action: result.action,
-    ok: result.ok,
-    ...(result.errors === undefined ? {} : { errors: result.errors }),
-  };
+  return createOkResponse(command, logResponse.result);
 }
 
 async function snapshotTextForDiff(adapter: BackgroundBrowserAdapter, tabId: number, command: RequestEnvelope<"diff">): Promise<string> {

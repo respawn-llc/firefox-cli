@@ -54,7 +54,7 @@ describe("browser command handling", () => {
     ]);
     expect(adapter.captureRequests).toEqual([{ windowId: 20, options: { format: "png" } }]);
     expect(adapter.selectedTabs).toEqual([]);
-    expect(adapter.focusedWindows).toEqual([20]);
+    expect(adapter.focusedWindows).toEqual([]);
     expect(adapter.navigations.some((navigation) => navigation.tabId === 101)).toBe(false);
     expect(adapter.contentRequests.some((request) => request.tabId === 101)).toBe(false);
   });

@@ -1,5 +1,5 @@
-import { LOG_RESULT_METADATA_PROTOCOL_VERSION, PROTOCOL_VERSION, type ConsoleResult, type ErrorsResult } from "@firefox-cli/protocol";
-import { BoundedLogBuffer, type LogBufferSnapshot, type LogEntryStore } from "./log-buffer.js";
+import type { ConsoleResult, ErrorsResult } from "@firefox-cli/protocol";
+import { BoundedLogBuffer, type LogEntryStore } from "./log-buffer.js";
 
 interface LogCaptureState {
   installed: boolean;
@@ -39,8 +39,8 @@ export interface LogCaptureHandle {
 export interface ContentLogCaptureService {
   installGlobal(): LogCaptureHandle;
   installWindow(view: Window | null): LogCaptureHandle;
-  createConsoleResult(action: ConsoleResult["action"], protocolVersion?: number): ConsoleResult;
-  createErrorsResult(action: ErrorsResult["action"], protocolVersion?: number): ErrorsResult;
+  createConsoleResult(action: ConsoleResult["action"]): ConsoleResult;
+  createErrorsResult(action: ErrorsResult["action"]): ErrorsResult;
 }
 
 function getLogCaptureState(): LogCaptureState {
@@ -211,7 +211,7 @@ function createScopedHandle(dispose: () => void): LogCaptureHandle {
   };
 }
 
-export function createConsoleResult(action: ConsoleResult["action"], protocolVersion: number = PROTOCOL_VERSION): ConsoleResult {
+export function createConsoleResult(action: ConsoleResult["action"]): ConsoleResult {
   const { consoleEntries } = getLogCaptureState();
   if (action === "clear") {
     consoleEntries.clear();
@@ -222,11 +222,12 @@ export function createConsoleResult(action: ConsoleResult["action"], protocolVer
     action,
     ok: true,
     entries: [...snapshot.entries],
-    ...metadataForProtocolVersion(snapshot, protocolVersion),
+    truncated: snapshot.truncated,
+    droppedEntries: snapshot.droppedEntries,
   };
 }
 
-export function createErrorsResult(action: ErrorsResult["action"], protocolVersion: number = PROTOCOL_VERSION): ErrorsResult {
+export function createErrorsResult(action: ErrorsResult["action"]): ErrorsResult {
   const { errorEntries } = getLogCaptureState();
   if (action === "clear") {
     errorEntries.clear();
@@ -237,15 +238,7 @@ export function createErrorsResult(action: ErrorsResult["action"], protocolVersi
     action,
     ok: true,
     errors: [...snapshot.entries],
-    ...metadataForProtocolVersion(snapshot, protocolVersion),
+    truncated: snapshot.truncated,
+    droppedEntries: snapshot.droppedEntries,
   };
-}
-
-function metadataForProtocolVersion(snapshot: LogBufferSnapshot, protocolVersion: number): Pick<ConsoleResult, "truncated" | "droppedEntries"> {
-  return protocolVersion >= LOG_RESULT_METADATA_PROTOCOL_VERSION
-    ? {
-        truncated: snapshot.truncated,
-        droppedEntries: snapshot.droppedEntries,
-      }
-    : {};
 }

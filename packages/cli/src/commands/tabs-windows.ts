@@ -19,12 +19,14 @@ export function buildTabsRequest(argv: readonly string[]): RequestEnvelope {
   if (subcommand === "new") {
     return createValidatedRequest("tab.new", {
       ...optionalUrl(normalizeOptionalUrl(positional[1])),
+      ...(args.includes("--focus") ? { focus: true } : {}),
       ...optionalTarget(target),
     });
   }
   if (subcommand === "select") {
     const selectedTarget = mergeTarget(target, parseOptionalTabTarget(positional[1]));
     return createValidatedRequest("tab.select", {
+      ...(args.includes("--focus") ? { focus: true } : {}),
       ...optionalTarget(selectedTarget),
     });
   }
@@ -47,6 +49,7 @@ export function buildWindowsRequest(argv: readonly string[]): RequestEnvelope {
   if (subcommand === "new") {
     return createValidatedRequest("window.new", {
       ...optionalUrl(normalizeOptionalUrl(positional[1])),
+      ...(args.includes("--focus") ? { focus: true } : {}),
     });
   }
   if (subcommand === "select") {

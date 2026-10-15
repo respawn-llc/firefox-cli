@@ -35,22 +35,19 @@ export function createBackgroundBrowserAdapter(options: {
     createTab: async (tabOptions) =>
       toTabSummary(
         await options.browser.tabs.create({
-          active: true,
+          active: tabOptions.active,
           ...(tabOptions.url === undefined ? {} : { url: tabOptions.url }),
           ...(tabOptions.windowId === undefined ? {} : { windowId: tabOptions.windowId }),
         }),
       ),
-    selectTab: async (tabId) => {
-      const tab = toTabSummary(await options.browser.tabs.update(tabId, { active: true }));
-      await options.browser.windows.update(tab.windowId, { focused: true });
-      return tab;
-    },
+    selectTab: async (tabId) => toTabSummary(await options.browser.tabs.update(tabId, { active: true })),
     closeTab: async (tabId) => {
       await options.browser.tabs.remove(tabId);
     },
     createWindow: async (windowOptions) =>
       toWindowSnapshot(
         await options.browser.windows.create({
+          focused: windowOptions.focused,
           ...(windowOptions.url === undefined ? {} : { url: windowOptions.url }),
         }),
       ),
@@ -58,7 +55,7 @@ export function createBackgroundBrowserAdapter(options: {
     closeWindow: async (windowId) => {
       await options.browser.windows.remove(windowId);
     },
-    navigateTab: async (tabId, url) => toTabSummary(await options.browser.tabs.update(tabId, { active: true, url })),
+    navigateTab: async (tabId, url) => toTabSummary(await options.browser.tabs.update(tabId, { url })),
     goBack: async (tabId) => {
       await options.browser.tabs.goBack(tabId);
       return toTabSummary(await options.browser.tabs.get(tabId));

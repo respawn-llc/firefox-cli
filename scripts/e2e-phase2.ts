@@ -1,23 +1,23 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createOkResponse, createRequest, parseBoundaryRequest } from "@firefox-cli/protocol";
-import { z } from "zod";
 import {
-  FIREFOX_CLI_EXTENSION_ID,
-  NativeMessagingFrameReader,
   encodeNativeMessageFrame,
+  FIREFOX_CLI_EXTENSION_ID,
   getBinaryName,
   getPlatformKey,
   type LocalIpcEndpoint,
+  NativeMessagingFrameReader,
 } from "@firefox-cli/native-host";
+import { createOkResponse, createRequest, PROTOCOL_VERSION, parseBoundaryRequest } from "@firefox-cli/protocol";
 import { createTempDir } from "@firefox-cli/test-support";
+import { z } from "zod";
 import { planPhase2E2e } from "./e2e-phase2-plan.js";
 import { parseJsonWithSchema } from "./manifest-validation.js";
 import { raceWithProcessFailure, runProcess, startManagedProcess } from "./process-runner.js";
 import { pollUntil, sleep, withTimeout } from "./script-timing.js";
 
 const binaryPath = resolve("dist/bin", getPlatformKey(), getBinaryName());
-const simulatedExtensionProtocolVersion = 1;
+const simulatedExtensionProtocolVersion = PROTOCOL_VERSION;
 await access(binaryPath);
 
 const homeDir = await createTempDir("firefox-cli-e2e-home");

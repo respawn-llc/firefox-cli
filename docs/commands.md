@@ -1,5 +1,3 @@
-# Commands
-
 All commands use the paired Firefox session. Add `--json` for structured output where supported.
 
 ## Targets
@@ -15,15 +13,15 @@ Commands advertise their supported selectors in `-h`. Selector values are:
 --window id:456
 ```
 
-Bare numeric targets are indexes printed by `firefox-cli tab` and `firefox-cli window`; `id:` targets use Firefox tab or window IDs.
+Bare numeric targets are indexes printed by `firefox-cli tab` and `firefox-cli window`. `id:` targets use Firefox tab or window IDs.
 
-Omitted selectors are accepted only when the required browser surface is unique. Multiple windows require `--window id:<id>` or explicit `--window active`; multiple tabs in a selected window require `--tab id:<id>` or explicit `--tab active`. A globally unique tab ID also identifies its owning window.
+Omitted selectors are accepted only when the required browser surface is unique. Multiple windows require `--window id:<id>` or explicit `--window active`. Multiple tabs in a selected window require `--tab id:<id>` or explicit `--tab active`. A globally unique tab ID also identifies its owning window.
 
-Page-targeted commands accept both selectors. `tab`, `tab new`, `window select`, `window close`, and `set viewport` accept `--window` only. `open --new-tab` resolves only a window. Targetless commands accept neither. Unsupported selector flags fail before a request is sent.
+Page-targeted commands accept both selectors. `tab`, `tab new`, `window select`, `window close`, and `set viewport` accept `--window` only. `open --new-tab` resolves only a window. Targetless commands accept neither selector. Unsupported selector flags fail before a request is sent.
 
 Private windows are listed and readable. Mutating commands against private windows return `UNSUPPORTED_CAPABILITY`.
 
-## Setup And Diagnostics
+## Setup and diagnostics
 
 | Command | Behavior |
 | --- | --- |
@@ -34,31 +32,31 @@ Private windows are listed and readable. Mutating commands against private windo
 | `firefox-cli unpair` | Clear CLI/native-host pair state. |
 | `firefox-cli capabilities [--json]` | List supported and gated protocol capabilities. |
 
-## Tabs, Windows, And Navigation
+## Tabs, windows, and navigation
 
 | Command | Behavior |
 | --- | --- |
 | `firefox-cli tab [--window target] [--json]` | List tabs in the selected or only window. |
-| `firefox-cli tab new [url] [--window target] [--json]` | Open a new tab in the selected window. |
-| `firefox-cli tab select [target] [--json]` | Bring a tab forward to the user; later commands still require explicit selectors when ambiguous. |
+| `firefox-cli tab new [url] [--focus] [--window target] [--json]` | Open an unselected tab, or use `--focus` to select it and request window foregrounding. |
+| `firefox-cli tab select [target] [--focus] [--json]` | Select a tab within its window. `--focus` also requests window foregrounding. |
 | `firefox-cli tab close [target] [--json]` | Close a tab. |
 | `firefox-cli window [--json]` | List windows. |
-| `firefox-cli window new [url] [--json]` | Open a new window. |
-| `firefox-cli window select [target] [--window target] [--json]` | Bring a window forward to the user; later commands still require explicit selectors when ambiguous. |
+| `firefox-cli window new [url] [--focus] [--json]` | Open a new window without a foreground request by default. `--focus` requests foregrounding. |
+| `firefox-cli window select [target] [--window target] [--json]` | Bring a window forward to the user. Pass explicit selectors to later commands when the target is ambiguous. |
 | `firefox-cli window close [target] [--window target] [--json]` | Close a selected window. |
-| `firefox-cli open [--new-tab] <url> [--json]` | Navigate the target tab or open a URL in a new tab. |
+| `firefox-cli open [--new-tab] [--focus] <url> [--json]` | Navigate without changing tab selection, or open an unselected new tab. `--focus` selects the target tab and requests window foregrounding. |
 | `firefox-cli back|forward|reload [--json]` | Run browser navigation in the target tab. |
 
 URLs without a scheme are normalized to `https://`.
 
-## Snapshots And Refs
+## Snapshots and refs
 
 ```sh
 firefox-cli snapshot [-i] [-c] [-d depth] [-s selector] [--max-output bytes] [--json]
 firefox-cli ref <@ref> [--generation id] [--json]
 ```
 
-`snapshot` returns a text representation of the main-frame DOM and assigns element refs such as `@e1`. Refs are scoped to the reported generation ID; use `--generation` when consuming a ref after another snapshot has run. Iframe entries are diagnostic/read-only; iframe refs and frame-targeted commands are unsupported.
+`snapshot` returns a text representation of the main-frame DOM and assigns element refs such as `@e1`. Refs are scoped to the reported generation ID. Use `--generation` when consuming a ref after another snapshot has run. Iframe entries are diagnostic/read-only. Iframe refs and frame-targeted commands are unsupported.
 
 Options:
 
@@ -71,7 +69,7 @@ Options:
 | `-s`, `--selector` | Snapshot a subtree. |
 | `--max-output` | Bound output bytes. |
 
-## Getters And State
+## Getters and state
 
 | Command | Behavior |
 | --- | --- |
@@ -119,25 +117,25 @@ Waits accept `--timeout ms` and `--interval ms`.
 | `firefox-cli scroll|swipe up|down|left|right [px] [selector\|@ref] [--json]` | Scroll page or element. |
 | `firefox-cli scrollintoview <selector\|@ref> [--json]` | Scroll an element into view. |
 | `firefox-cli drag <source-selector\|@ref> <target-selector\|@ref> [--json]` | Dispatch a drag/drop sequence. |
-| `firefox-cli upload <selector\|@ref> <file...> [--json]` | Set files on a file input and dispatch change events. Each file is limited to 512,000 bytes; upload bytes are limited to 640,000 per command or across all upload steps in a batch. |
+| `firefox-cli upload <selector\|@ref> <file...> [--json]` | Set files on a file input and dispatch change events. Each file is limited to 512,000 bytes. Upload bytes are limited to 640,000 per command or across all upload steps in a batch. |
 | `firefox-cli mouse move|down|up|wheel [selector\|@ref] [--json]` | Dispatch mouse or wheel events. |
 | `firefox-cli keydown|keyup <key> [selector\|@ref] [--json]` | Dispatch key events. |
 
 Element interactions accept `--generation id` for refs. They use WebExtension/content-script events, not OS-level input emulation.
 
-## Eval, Screenshot, And Batch
+## Eval, screenshot, and batch
 
 ```sh
 firefox-cli eval <js> [--timeout ms] [--max-output bytes] [--json]
 firefox-cli eval --stdin [--json]
 firefox-cli eval --base64 <base64-js> [--json]
-firefox-cli screenshot [path] [--format png|jpeg] [--screenshot-quality 1-100] [--timeout ms] [--max-output bytes] [--json]
+firefox-cli screenshot [path] [--focus] [--format png|jpeg] [--screenshot-quality 1-100] [--timeout ms] [--max-output bytes] [--json]
 firefox-cli batch <json> | --stdin [--bail] [--timeout ms] [--max-output bytes] [--json]
 ```
 
-`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output captures the visible tab as PNG or JPEG and may activate the selected tab/window; `--full` returns `UNSUPPORTED_CAPABILITY`.
+`eval` runs in the page main world and returns JSON-serializable values or `undefined`. Screenshot output captures the requested tab as PNG or JPEG and selects it within its window. Use `--focus` to request foregrounding for human inspection or focus-dependent rendering. Activation or image-capture failures return `CAPTURE_FAILED`. Capture deadlines return `TIMEOUT`. `--full` returns `UNSUPPORTED_CAPABILITY`.
 
-`batch` accepts an array of protocol command objects or CLI argv arrays. Steps run serially against a once-resolved default target; window-only batches do not require a tab. With `--bail`, execution stops after the first failed step; without it, later steps continue and the batch result reports failures.
+`batch` accepts an array of protocol command objects or CLI argv arrays. Steps run serially against a once-resolved default target. Window-only batches do not require a tab. With `--bail`, execution stops after the first failed step. Without it, later steps continue and the batch result reports failures.
 
 Example:
 
@@ -149,7 +147,7 @@ Example:
 ]
 ```
 
-## Page And Browser Utilities
+## Page and browser utilities
 
 | Command | Behavior |
 | --- | --- |
@@ -166,10 +164,10 @@ Example:
 | `firefox-cli notify [--id id] <title> [message...] [--json]` | Show a native Firefox notification. |
 | `firefox-cli set viewport <width> <height> [--window target] [--json]` | Request a target browser window resize and report Firefox's observed window dimensions. Tiling/window-manager rules can prevent the requested size from taking effect. |
 | `firefox-cli diff url|title|snapshot <expected> [--json]` | Compare URL, title, or snapshot text with an expected value. |
-| `firefox-cli pdf <path> [--json]` | Returns `UNSUPPORTED_CAPABILITY`; Firefox saves PDFs through a browser dialog rather than a requested CLI path. |
+| `firefox-cli pdf <path> [--json]` | Returns `UNSUPPORTED_CAPABILITY` because Firefox saves PDFs through a browser dialog. |
 
 Network route/mock/block and HAR export are unsupported.
 
-## Unsupported Families
+## Unsupported families
 
 The CLI returns `UNSUPPORTED_CAPABILITY` for unsupported command families and options, including `screenshot --full`, `pdf`, `inspect`, top-level `close`, `quit`, and `exit`.

@@ -34,7 +34,7 @@ describe("browser screenshot command handling", () => {
     expect(adapter.contentRequests).toEqual([]);
   });
 
-  it("activates and focuses non-visible screenshot targets with diagnostics", async () => {
+  it("selects non-visible screenshot targets without focusing their window by default", async () => {
     const adapter = new FakeBrowserAdapter([
       windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
       windowSnapshot(20, false, [tabSummary(201, 0, false, 20), tabSummary(202, 1, true, 20)]),
@@ -50,7 +50,7 @@ describe("browser screenshot command handling", () => {
       result: {
         activation: {
           tabActivated: true,
-          windowFocused: true,
+          windowFocused: false,
         },
         target: {
           windowId: 20,
@@ -59,8 +59,32 @@ describe("browser screenshot command handling", () => {
       },
     });
     expect(adapter.selectedTabs).toEqual([201]);
-    expect(adapter.focusedWindows).toEqual([20]);
+    expect(adapter.focusedWindows).toEqual([]);
     expect(adapter.captureRequests).toEqual([{ windowId: 20, options: { format: "png" } }]);
+  });
+
+  it("focuses screenshot targets only on request and avoids repeated activation", async () => {
+    const adapter = new FakeBrowserAdapter([
+      windowSnapshot(10, true, [tabSummary(101, 0, true, 10)]),
+      windowSnapshot(20, false, [tabSummary(201, 0, false, 20), tabSummary(202, 1, true, 20)]),
+    ]);
+    const request = createRequest(
+      "screenshot",
+      { path: "/tmp/page.png", format: "png", focus: true, target: { tab: { kind: "id", id: 201 } } },
+      "screenshot-focus",
+    );
+
+    const first = await handleBrowserRequest(request, adapter);
+    const second = await handleBrowserRequest(createRequest("screenshot", request.params, "screenshot-focus-repeat"), adapter);
+
+    expect(first).toMatchObject({ ok: true, result: { activation: { tabActivated: true, windowFocused: true } } });
+    expect(second).toMatchObject({ ok: true, result: { activation: { tabActivated: false, windowFocused: false } } });
+    expect(adapter.selectedTabs).toEqual([201]);
+    expect(adapter.focusedWindows).toEqual([20]);
+    expect(adapter.captureRequests).toEqual([
+      { windowId: 20, options: { format: "png" } },
+      { windowId: 20, options: { format: "png" } },
+    ]);
   });
 
   it("rejects private-window screenshots before capture or activation", async () => {

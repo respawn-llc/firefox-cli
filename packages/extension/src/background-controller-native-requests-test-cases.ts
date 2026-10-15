@@ -1,4 +1,4 @@
-import { createOkResponse, createRequest, isPrivilegeSensitiveRequest } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, isPrivilegeSensitiveRequest, PROTOCOL_VERSION } from "@firefox-cli/protocol";
 import { expect } from "vitest";
 import { FirefoxCliBackgroundController } from "./background-controller.js";
 
@@ -221,13 +221,13 @@ export async function runCase06() {
   port.emitMessage(
     createOkResponse(hello, {
       accepted: true,
-      negotiatedProtocolVersion: 1,
+      negotiatedProtocolVersion: PROTOCOL_VERSION,
       peer: {
         component: "native-host",
         productName: "firefox-cli",
         productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: 1,
+        protocolMin: PROTOCOL_VERSION,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
       },
       pairing: {

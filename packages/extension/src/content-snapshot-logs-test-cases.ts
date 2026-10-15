@@ -30,8 +30,8 @@ export async function runCase01() {
       registrationOrder.push("installWindow");
       return realLogCapture.installWindow(view);
     },
-    createConsoleResult: (action, protocolVersion) => realLogCapture.createConsoleResult(action, protocolVersion),
-    createErrorsResult: (action, protocolVersion) => realLogCapture.createErrorsResult(action, protocolVersion),
+    createConsoleResult: (action) => realLogCapture.createConsoleResult(action),
+    createErrorsResult: (action) => realLogCapture.createErrorsResult(action),
   } satisfies ContentLogCaptureService;
   restoreLogCapture();
   createConsoleResult("clear");

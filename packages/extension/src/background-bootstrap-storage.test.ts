@@ -1,4 +1,4 @@
-import { createOkResponse, parseBoundaryRequest, type RequestEnvelope } from "@firefox-cli/protocol";
+import { createOkResponse, parseBoundaryRequest, PROTOCOL_VERSION, type RequestEnvelope } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { type BackgroundBrowserApi, startBackground } from "./background-bootstrap.js";
 import type { NativePortLike } from "./background-controller.js";
@@ -54,7 +54,7 @@ describe("background bootstrap storage", () => {
 
     expect(
       port.messages.some((message) => {
-        const parsed = parseBoundaryRequest("host-to-extension", message, { protocolVersion: 1 });
+        const parsed = parseBoundaryRequest("host-to-extension", message, { protocolVersion: PROTOCOL_VERSION });
         return parsed.ok && parsed.value.command === "hello" && parsed.value.params.pairToken === "stored-token";
       }),
     ).toBe(true);
@@ -150,13 +150,13 @@ async function completeNativeHello(port: FakeNativePort): Promise<void> {
   port.emitMessage(
     createOkResponse(hello, {
       accepted: true,
-      negotiatedProtocolVersion: 1,
+      negotiatedProtocolVersion: PROTOCOL_VERSION,
       peer: {
         component: "native-host",
         productName: "firefox-cli",
         productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: 1,
+        protocolMin: PROTOCOL_VERSION,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
       },
     }),
@@ -169,7 +169,7 @@ function latestHostRequest(port: FakeNativePort): RequestEnvelope {
   if (raw === undefined) {
     throw new Error("Expected native-host request.");
   }
-  const parsed = parseBoundaryRequest("host-to-extension", raw, { protocolVersion: 1 });
+  const parsed = parseBoundaryRequest("host-to-extension", raw, { protocolVersion: PROTOCOL_VERSION });
   if (!parsed.ok) {
     throw new Error(parsed.error.message);
   }

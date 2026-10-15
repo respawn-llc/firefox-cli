@@ -27,19 +27,18 @@ describe("NativeHostBroker", () => {
         component: "cli",
         productName: "firefox-cli",
         productVersion: "1.2.3",
-        protocolMin: 1,
-        protocolMax: 1,
+        protocolMin: PROTOCOL_VERSION,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
       },
       "hello-1",
-      1,
     );
 
     await expect(broker.handleCliRequest(hello)).resolves.toMatchObject({
       id: "hello-1",
       ok: true,
       result: {
-        negotiatedProtocolVersion: 1,
+        negotiatedProtocolVersion: PROTOCOL_VERSION,
         peer: {
           component: "native-host",
           productVersion: "1.2.3",
@@ -61,8 +60,8 @@ describe("NativeHostBroker", () => {
         component: "extension",
         productName: "firefox-cli",
         productVersion: "0.0.0",
-        protocolMin: 1,
-        protocolMax: 1,
+        protocolMin: PROTOCOL_VERSION,
+        protocolMax: PROTOCOL_VERSION,
         features: [],
       },
       "hello-wrong-peer",

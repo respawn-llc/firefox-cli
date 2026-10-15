@@ -16,7 +16,7 @@ Print the extension download URL and native-host setup guidance:
 firefox-cli setup
 ```
 
-Install the extension from the URL shown by `firefox-cli setup`; open it in Firefox and accept the install prompt. The URL is selected from the update manifest for the matching CLI version.
+Install the extension from the URL shown by `firefox-cli setup`. Open it in Firefox and accept the install prompt. The URL is selected from the update manifest for the matching CLI version.
 
 Register the native messaging host:
 
@@ -34,7 +34,7 @@ firefox-cli doctor
 
 `doctor` reports the native-host manifest state, extension connection state, approval state, and the next action when setup is incomplete.
 
-## Agent Skill
+## Agent skill
 
 Install the agent skill so coding agents know when `firefox-cli` is available and how to use it.
 
@@ -65,17 +65,17 @@ Install the skill from the public GitHub path:
 $skill-installer install https://github.com/respawn-llc/firefox-cli/tree/main/skills/firefox-cli
 ```
 
-## Security Warning
+## Security warning
 
 Approving the `firefox-cli` extension grants the paired `firefox-cli` user **full control over the Firefox browser** session, including using & manipulating the signed-in sites, **authentication, cookies, sensitive data** & monitoring all activity. Do not approve the pairing unless you accept responsibility for every actor that can run `firefox-cli` on the machine.
 
-## Limitations 
+## Limitations
 
 Not everything that Chrome/CDP / `agent-browser` tools support is supported by Firefox:
 
 - Private windows are readable, but mutating commands are rejected.
-- Page snapshots and element references target the main frame; cross-origin iframes are diagnostic only.
-- Screenshots capture the visible tab and may activate the target tab or window.
+- Page snapshots and element references target the main frame. Cross-origin iframes provide diagnostics only.
+- Screenshots select the requested tab. Use `--focus` to request foregrounding its window.
 - Browser-internal and privileged Firefox pages can block extension scripting.
 
 See `docs/setup.md` for platform paths and troubleshooting, and `docs/commands.md` for command syntax.

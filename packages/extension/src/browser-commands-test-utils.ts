@@ -24,6 +24,7 @@ export function parseTestBrowserRequest(raw: {
 export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
   readonly selectedTabs: number[] = [];
   readonly focusedWindows: number[] = [];
+  readonly createdWindows: { readonly focused: boolean; readonly url?: string }[] = [];
   readonly navigations: { readonly tabId: number; readonly url: string }[] = [];
   readonly contentRequests: { readonly tabId: number; readonly command: string }[] = [];
   readonly contentRequestVersions: number[] = [];
@@ -80,12 +81,12 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     return this.#windows;
   }
 
-  async createTab(options: { readonly url?: string; readonly windowId?: number }): Promise<BrowserWindowSnapshot["tabs"][number]> {
+  async createTab(options: { readonly active: boolean; readonly url?: string; readonly windowId?: number }): Promise<BrowserWindowSnapshot["tabs"][number]> {
     const window = this.#windows.find((candidate) => candidate.id === options.windowId);
     if (window === undefined) {
       throw new Error("window not found");
     }
-    const tab = tabSummary(this.#nextTabId, window.tabs.length, true, window.id, {
+    const tab = tabSummary(this.#nextTabId, window.tabs.length, options.active, window.id, {
       ...(options.url === undefined ? {} : { url: options.url }),
     });
     this.#nextTabId += 1;
@@ -93,7 +94,7 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
       candidate.id === window.id
         ? {
             ...candidate,
-            tabs: [...candidate.tabs.map((existing) => ({ ...existing, active: false })), tab],
+            tabs: [...(options.active ? candidate.tabs.map((existing) => ({ ...existing, active: false })) : candidate.tabs), tab],
           }
         : candidate,
     );
@@ -109,11 +110,14 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     if (match === undefined) {
       throw new Error("tab not found");
     }
-    this.#windows = this.#windows.map((window) => ({
-      ...window,
-      focused: window.id === match.window.id,
-      tabs: window.tabs.map((tab) => ({ ...tab, active: tab.id === tabId })),
-    }));
+    this.#windows = this.#windows.map((window) =>
+      window.id === match.window.id
+        ? {
+            ...window,
+            tabs: window.tabs.map((tab) => ({ ...tab, active: tab.id === tabId })),
+          }
+        : window,
+    );
     return { ...match.tab, active: true };
   }
 
@@ -124,8 +128,21 @@ export class FakeBrowserAdapter implements BackgroundBrowserAdapter {
     }));
   }
 
-  async createWindow(): Promise<BrowserWindowSnapshot> {
-    throw new Error("not implemented");
+  async createWindow(options: { readonly focused: boolean; readonly url?: string }): Promise<BrowserWindowSnapshot> {
+    const windowId = Math.max(0, ...this.#windows.map((window) => window.id)) + 1;
+    const tab = tabSummary(windowId * 100, 0, true, windowId, {
+      ...(options.url === undefined ? {} : { url: options.url }),
+    });
+    const createdWindow = windowSnapshot(windowId, options.focused, [tab]);
+    this.createdWindows.push(options);
+    this.#windows = [
+      ...this.#windows.map((window) => ({
+        ...window,
+        focused: options.focused ? false : window.focused,
+      })),
+      createdWindow,
+    ];
+    return createdWindow;
   }
 
   async focusWindow(windowId: number): Promise<BrowserWindowSnapshot> {

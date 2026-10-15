@@ -1,69 +1,20 @@
-import { actionKinds, createErrorResponse, createRequest, PROTOCOL_VERSION } from "@firefox-cli/protocol";
+import { actionKinds, createErrorResponse, createRequest, PROTOCOL_MIN_VERSION, PROTOCOL_VERSION } from "@firefox-cli/protocol";
 import { expect } from "vitest";
 import { handleBrowserRequest } from "./browser-commands.js";
 import { actionParamsFor, FakeBrowserAdapter, parseTestBrowserRequest, tabSummary, windowSnapshot } from "./browser-commands-test-utils.js";
 import { ContentScriptDeliveryError } from "./content-script-delivery.js";
 
-export async function runCase01() {
-  const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-
-  for (const protocolVersion of [1, 2]) {
-    const consoleResponse = await handleBrowserRequest(
-      createRequest("console", { action: "list" }, `console-v${String(protocolVersion)}`, protocolVersion),
-      adapter,
-    );
-    const errorsResponse = await handleBrowserRequest(
-      createRequest("errors", { action: "list" }, `errors-v${String(protocolVersion)}`, protocolVersion),
-      adapter,
-    );
-    const batchResponse = await handleBrowserRequest(
-      createRequest(
-        "batch",
-        {
-          steps: [
-            { command: "console", params: { action: "list" } },
-            { command: "errors", params: { action: "list" } },
-          ],
-        },
-        `batch-v${String(protocolVersion)}`,
-        protocolVersion,
-      ),
-      adapter,
-    );
-
-    expect(consoleResponse).toMatchObject({ ok: true, protocolVersion });
-    expect(errorsResponse).toMatchObject({ ok: true, protocolVersion });
-    expect(batchResponse).toMatchObject({ ok: true, protocolVersion });
-    if (consoleResponse.ok) {
-      expect("truncated" in consoleResponse.result).toBe(false);
-      expect("droppedEntries" in consoleResponse.result).toBe(false);
-    }
-    if (errorsResponse.ok) {
-      expect("truncated" in errorsResponse.result).toBe(false);
-      expect("droppedEntries" in errorsResponse.result).toBe(false);
-    }
-    if (batchResponse.ok) {
-      expect(batchResponse.result).toMatchObject({
-        steps: [
-          { ok: true, result: { entries: [] } },
-          { ok: true, result: { errors: [] } },
-        ],
-      });
-    }
-  }
-}
-
 export async function runCase02() {
   const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
 
-  const consoleResponse = await handleBrowserRequest(createRequest("console", { action: "list" }, "console-v3"), adapter);
+  const consoleResponse = await handleBrowserRequest(createRequest("console", { action: "list" }, "console-current"), adapter);
   const batchResponse = await handleBrowserRequest(
     createRequest(
       "batch",
       {
         steps: [{ command: "console", params: { action: "list" } }],
       },
-      "batch-v3",
+      "batch-current",
     ),
     adapter,
   );
@@ -171,10 +122,10 @@ export async function runCase07() {
   const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
   adapter.contentFailure = new Error("Missing host permission for the tab");
 
-  const response = await handleBrowserRequest(createRequest("snapshot", { interactiveOnly: true }, "snapshot-1", 1), adapter);
+  const response = await handleBrowserRequest(createRequest("snapshot", { interactiveOnly: true }, "snapshot-1"), adapter);
 
   expect(response).toMatchObject({
-    protocolVersion: 1,
+    protocolVersion: PROTOCOL_VERSION,
     ok: false,
     error: {
       code: "SCRIPT_INJECTION_FAILED",
@@ -193,10 +144,10 @@ export async function runCase08() {
     retried: false,
   });
 
-  const response = await handleBrowserRequest(createRequest("snapshot", { interactiveOnly: true }, "snapshot-delivery-1", 1), adapter);
+  const response = await handleBrowserRequest(createRequest("snapshot", { interactiveOnly: true }, "snapshot-delivery-1"), adapter);
 
   expect(response).toMatchObject({
-    protocolVersion: 1,
+    protocolVersion: PROTOCOL_VERSION,
     ok: false,
     error: {
       code: "SCRIPT_INJECTION_FAILED",
@@ -212,14 +163,14 @@ export async function runCase08() {
 
 export async function runCase09() {
   const adapter = new FakeBrowserAdapter([windowSnapshot(10, true, [tabSummary(101, 0, true, 10)])]);
-  const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1", 1);
+  const request = createRequest("snapshot", { interactiveOnly: true }, "snapshot-1");
   const reloadMessageMatcher: unknown = expect.stringContaining("Reload the tab");
   adapter.contentResponse = createErrorResponse(
     "snapshot-1",
     {
       code: "VERSION_MISMATCH",
       message: "Protocol version is not supported.",
-      details: { supported: 1, actual: 2 },
+      details: { supported: PROTOCOL_MIN_VERSION - 1, actual: PROTOCOL_VERSION },
     },
     PROTOCOL_VERSION,
   );
@@ -227,7 +178,7 @@ export async function runCase09() {
   const response = await handleBrowserRequest(request, adapter);
 
   expect(response).toMatchObject({
-    protocolVersion: 1,
+    protocolVersion: PROTOCOL_VERSION,
     ok: false,
     error: {
       code: "VERSION_MISMATCH",

@@ -24,7 +24,7 @@ describe("CLI help", () => {
     expect(output.stdout).toContain("Tabs, windows, and navigation");
     expect(output.stdout).toContain("firefox-cli tab [--json]");
     expect(output.stdout).toContain("List tabs for the selected or only Firefox window");
-    expect(output.stdout).toContain("firefox-cli open [--new-tab] <url> [--json]");
+    expect(output.stdout).toContain("firefox-cli open [--new-tab] [--focus] <url> [--json]");
   });
 
   it("renders command-specific contextual help", async () => {
@@ -38,15 +38,55 @@ describe("CLI help", () => {
   });
 
   it.each([
-    ["tab", "tab", "firefox-cli tab select"],
-    ["window", "window", "firefox-cli window select"],
-  ] as const)("explains that %s selection only brings the surface forward to the user", async (command, surface, usage) => {
-    const output = await runCli([command, "select", "--help"], baseDependencies());
+    [["tab", "new"], "firefox-cli tab new [url] [--focus] [--json] [--window <target>]"],
+    [["tab", "select"], "firefox-cli tab select [target-or-url] [--focus] [--json] [--window <target>] [--tab <target>]"],
+    [["window", "new"], "firefox-cli window new [url] [--focus] [--json]"],
+    [["open"], "firefox-cli open [--new-tab] [--focus] <url> [--json] [--window <target>] [--tab <target>]"],
+    [["screenshot"], "firefox-cli screenshot [path] [--focus] [--json] [--window <target>] [--tab <target>]"],
+  ] as const)("advertises --focus for approved route %s", async (command, usage) => {
+    const output = await runCli([...command, "--help"], baseDependencies());
 
     expect(output.exitCode).toBe(0);
     expect(output.stdout).toContain(usage);
-    expect(output.stdout).toContain(`Bring a ${surface} forward to the user`);
-    expect(output.stdout).toContain("This does not absolve you from passing `--window`/`--tab` explicitly to every later target-dependent command.");
+  });
+
+  it("explains tab selection and window focus as separate actions", async () => {
+    const tabOutput = await runCli(["tab", "select", "--help"], baseDependencies());
+    const windowOutput = await runCli(["window", "select", "--help"], baseDependencies());
+    const screenshotOutput = await runCli(["screenshot", "--help"], baseDependencies());
+    const newWindowOutput = await runCli(["window", "new", "--help"], baseDependencies());
+
+    expect(tabOutput.exitCode).toBe(0);
+    expect(tabOutput.stdout).toContain("Select a tab within its window");
+    expect(tabOutput.stdout).toContain("Use `--focus` to bring its window forward.");
+    expect(tabOutput.stdout).toContain("Pass `--window`/`--tab` explicitly to later target-dependent commands.");
+    expect(windowOutput.exitCode).toBe(0);
+    expect(windowOutput.stdout).toContain("Bring a window forward to the user");
+    expect(windowOutput.stdout).toContain("Pass `--window`/`--tab` explicitly to later target-dependent commands.");
+    expect(screenshotOutput.exitCode).toBe(0);
+    expect(screenshotOutput.stdout).toContain("focus-dependent rendering");
+    expect(newWindowOutput.exitCode).toBe(0);
+    expect(newWindowOutput.stdout).toContain("makes no foreground request");
+  });
+
+  it("documents omitted-focus behavior for navigation and new windows", async () => {
+    const openOutput = await runCli(["open", "--help"], baseDependencies());
+    const windowOutput = await runCli(["window", "new", "--help"], baseDependencies());
+
+    expect(openOutput.exitCode).toBe(0);
+    expect(openOutput.stdout).toContain("Navigation leaves tab selection unchanged by default");
+    expect(openOutput.stdout).toContain("creates an unselected tab unless `--focus` is set");
+    expect(windowOutput.exitCode).toBe(0);
+    expect(windowOutput.stdout).toContain("makes no foreground request");
+  });
+
+  it("does not advertise --focus on unapproved routes", async () => {
+    for (const command of [["tab", "close"], ["window", "select"], ["snapshot"]] as const) {
+      const output = await runCli([...command, "--help"], baseDependencies());
+
+      expect(output.exitCode, command.join(" ")).toBe(0);
+      expect(output.stdout, command.join(" ")).not.toContain("--focus");
+    }
   });
 
   it("renders wait examples accepted by the wait parser", async () => {

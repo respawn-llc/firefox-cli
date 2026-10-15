@@ -157,7 +157,7 @@ export async function completeNativeHello(port: FakeNativePort): Promise<void> {
           component: "native-host",
           productName: "firefox-cli",
           productVersion: "0.0.0",
-          protocolMin: 1,
+          protocolMin: PROTOCOL_VERSION,
           protocolMax: negotiatedProtocolVersion,
           features: [],
         },

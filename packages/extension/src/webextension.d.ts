@@ -41,7 +41,7 @@ declare const browser: {
   };
   readonly windows: {
     getAll(options: { readonly populate: boolean }): Promise<readonly BrowserWindow[]>;
-    create(options: { readonly url?: string }): Promise<BrowserWindow>;
+    create(options: { readonly focused?: boolean; readonly url?: string }): Promise<BrowserWindow>;
     update(windowId: number, options: { readonly focused?: boolean; readonly width?: number; readonly height?: number }): Promise<BrowserWindow>;
     remove(windowId: number): Promise<void>;
   };

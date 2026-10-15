@@ -1,6 +1,7 @@
 import { createOkResponse } from "@firefox-cli/protocol";
 import { BrowserCommandError } from "../browser-command/errors.js";
 import { assertMutableWindow, toOrderedWindows, toResolvedTarget, toWindowSummary } from "../browser-command/targets.js";
+import { activateBrowserTarget } from "./activation.js";
 import type { BrowserHandlerMap } from "./types.js";
 
 type TabsWindowsCommand = "tabs.list" | "windows.list" | "tab.new" | "tab.select" | "tab.close" | "window.new" | "window.select" | "window.close";
@@ -22,22 +23,21 @@ export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
     const window = await context.targetContext.resolveWindow(request.params.target?.window);
     assertMutableWindow(window);
     const tab = await adapter.createTab({
+      active: request.params.focus === true,
       ...(request.params.url === undefined ? {} : { url: request.params.url }),
       windowId: window.id,
     });
     context.targetContext.invalidate();
+    const created = await context.targetContext.resolveTarget({ tab: { kind: "id", id: tab.id } });
+    const target = request.params.focus === true ? (await activateBrowserTarget(adapter, context, created, true)).target : created.target;
     return createOkResponse(request, {
-      target: await context.targetContext.resolveFreshTarget({ tab: { kind: "id", id: tab.id } }),
+      target,
     });
   },
   "tab.select": async (request, adapter, context) => {
     const resolved = await context.targetContext.resolveTarget(request.params.target);
-    await adapter.selectTab(resolved.tab.id);
-    context.targetContext.invalidate();
     return createOkResponse(request, {
-      target: await context.targetContext.resolveFreshTarget({
-        tab: { kind: "id", id: resolved.tab.id },
-      }),
+      target: (await activateBrowserTarget(adapter, context, resolved, request.params.focus === true)).target,
     });
   },
   "tab.close": async (request, adapter, context) => {
@@ -52,6 +52,7 @@ export const tabsWindowsHandlers: BrowserHandlerMap<TabsWindowsCommand> = {
   },
   "window.new": async (request, adapter, context) => {
     const createdWindow = await adapter.createWindow({
+      focused: request.params.focus === true,
       ...(request.params.url === undefined ? {} : { url: request.params.url }),
     });
     context.targetContext.invalidate();

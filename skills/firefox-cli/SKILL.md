@@ -5,7 +5,7 @@ description: Control the user's Firefox from a terminal. Use when your task need
 
 `firefox-cli` gives agents terminal access to the user's real authenticated Firefox session through the installed Firefox extension.
 
-## Command Discovery
+## Command discovery
 
 The CLI help is the source of truth for commands, syntax, examples, and usage guidance.
 
@@ -26,7 +26,7 @@ firefox-cli wait -h
 
 Use `--json` when another program or agent consumes the output.
 
-## Startup Pattern
+## Startup pattern
 
 For a page-reading task:
 
@@ -47,7 +47,7 @@ For action planning:
 firefox-cli snapshot -i --json
 ```
 
-Then use the command-specific help for the next operation instead of relying on memory.
+Use command-specific help as the reference for each next operation.
 
 ## Targeting
 
@@ -63,17 +63,17 @@ firefox-cli open --window id:<window-id> https://example.com
 firefox-cli snapshot --window id:<window-id> -i
 ```
 
-`tab select` and `window select` bring the chosen surface forward to the user. They do not establish durable CLI target state or absolve you from passing `--window`/`--tab` explicitly to later target-dependent commands. Screenshots may activate their selected tab/window.
+`tab select` selects the tab within its window. `--focus` also requests window foregrounding. `window select` brings its window forward. For `open`, `tab new`, `window new`, and `screenshot`, `--focus` requests window foregrounding. Without it, navigation keeps tab selection unchanged, new tabs are unselected, new windows receive no foreground request, and screenshots select the target tab without raising its window. Use `--focus` when human inspection or focus-dependent rendering needs the browser in front. Pass `--window`/`--tab` explicitly to later target-dependent commands.
 
-## Setup State
+## Setup state
 ```bash
 firefox-cli setup -h
 firefox-cli doctor -h
 ```
 
-## Usage Rules
+## Usage rules
 
 - Element refs from `snapshot -i` are useful handles for follow-up actions, but page navigation or reload can make them stale.
 - Be careful with the user's data: the Firefox instance you're using contains real cookies, auth credentials, logins, tabs, and PII. Under no circumstances should you perform actions that may harm the user or exfiltrate their data. Under no circumstances should you perform payments, cash transfers, other dangerous, destructive, or irreversible operations, or leak PII without asking for the user's explicit approval before each such action.
-- If you need to work with Firefox, but you see interference, such as tabs changing or real user tabs being open, or the user is unhappy, prefer opening a new Firefox window for yourself. Every action you take is visibly reflected in the browser window and can disrupt the user's work. The upside is that you can demonstrate something to the user in their real browser, such as running demos, opening pages, or showing your work.
+- If you need to work with Firefox and encounter interference, such as tabs changing or real user tabs being open, open a new Firefox window for yourself. Browser actions can change tab selection or bring a window forward. Use `--focus` when the browser needs to be visible to the user.
 - If the CLI denies requests with approval and asks you to run `firefox-cli connect`, invoke that **once** to show the user a permission prompt. The command will exit once approval is granted. Do not attempt to circumvent denials in any way.

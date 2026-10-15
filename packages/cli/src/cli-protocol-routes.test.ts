@@ -1,4 +1,4 @@
-import { createOkResponse, type RequestEnvelope } from "@firefox-cli/protocol";
+import { createErrorResponse, createOkResponse, type RequestEnvelope } from "@firefox-cli/protocol";
 import { describe, expect, it } from "vitest";
 import { runCli } from "./index.js";
 import { actionElement, baseDependencies } from "./cli-test-support.js";
@@ -68,6 +68,97 @@ describe("runCli protocol route parity", () => {
       stdout: "",
       stderr: "Only PNG and JPEG screenshots are supported.\n",
     });
+  });
+
+  it("passes focus requests through each approved CLI route", async () => {
+    const cases: readonly {
+      readonly argv: readonly string[];
+      readonly command: string;
+      readonly focus: boolean;
+      readonly params: Readonly<Record<string, unknown>>;
+    }[] = [
+      { argv: ["open", "example.com"], command: "open", focus: false, params: { url: "https://example.com" } },
+      { argv: ["open", "--focus", "example.com"], command: "open", focus: true, params: { url: "https://example.com", focus: true } },
+      {
+        argv: ["open", "--new-tab", "example.com"],
+        command: "open",
+        focus: false,
+        params: { url: "https://example.com", newTab: true },
+      },
+      {
+        argv: ["open", "--new-tab", "--focus", "example.com"],
+        command: "open",
+        focus: true,
+        params: { url: "https://example.com", newTab: true, focus: true },
+      },
+      { argv: ["tab", "new", "example.com"], command: "tab.new", focus: false, params: { url: "https://example.com" } },
+      {
+        argv: ["tab", "new", "example.com", "--focus"],
+        command: "tab.new",
+        focus: true,
+        params: { url: "https://example.com", focus: true },
+      },
+      { argv: ["tab", "select", "id:42"], command: "tab.select", focus: false, params: { target: { tab: { kind: "id", id: 42 } } } },
+      {
+        argv: ["tab", "select", "id:42", "--focus"],
+        command: "tab.select",
+        focus: true,
+        params: { target: { tab: { kind: "id", id: 42 } }, focus: true },
+      },
+      { argv: ["window", "new", "example.com"], command: "window.new", focus: false, params: { url: "https://example.com" } },
+      {
+        argv: ["window", "new", "example.com", "--focus"],
+        command: "window.new",
+        focus: true,
+        params: { url: "https://example.com", focus: true },
+      },
+    ];
+
+    for (const testCase of cases) {
+      let sentRequest = false;
+      await runCli(testCase.argv, {
+        ...baseDependencies(),
+        sendRequest: async (request) => {
+          expect(request).toMatchObject({ command: testCase.command, params: testCase.params });
+          expect(Object.hasOwn(request.params, "focus")).toBe(testCase.focus);
+          sentRequest = true;
+          return createErrorResponse(request.id, { code: "NATIVE_HOST_UNAVAILABLE", message: "Stop after checking the request." });
+        },
+      });
+      expect(sentRequest, testCase.argv.join(" ")).toBe(true);
+    }
+  });
+
+  it("passes focus options from batch argv steps through command builders", async () => {
+    const steps = [
+      ["open", "--focus", "example.com"],
+      ["open", "--new-tab", "--focus", "example.com"],
+      ["tab", "new", "--focus", "example.com"],
+      ["tab", "select", "id:42", "--focus"],
+      ["window", "new", "--focus", "example.com"],
+      ["screenshot", "--focus", "page.png"],
+    ];
+    const output = await runCli(["batch", JSON.stringify(steps)], {
+      ...baseDependencies(),
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "batch",
+          params: {
+            steps: [
+              { command: "open", params: { focus: true } },
+              { command: "open", params: { focus: true } },
+              { command: "tab.new", params: { focus: true } },
+              { command: "tab.select", params: { focus: true } },
+              { command: "window.new", params: { focus: true } },
+              { command: "screenshot", params: { focus: true } },
+            ],
+          },
+        });
+        return createErrorResponse(request.id, { code: "NATIVE_HOST_UNAVAILABLE", message: "Stop after checking the request." });
+      },
+    });
+
+    expect(output.exitCode).toBe(1);
   });
 
   it("rejects protocol schema overflow values before direct requests are sent", async () => {

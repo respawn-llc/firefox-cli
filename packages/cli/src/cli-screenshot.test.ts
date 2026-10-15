@@ -111,4 +111,31 @@ describe("runCli screenshot", () => {
       stderr: "",
     });
   });
+
+  it("sends an explicit focus request for screenshots", async () => {
+    const output = await runCli(["screenshot", "page.png", "--focus"], {
+      ...baseDependencies(),
+      cwd: "/work",
+      sendRequest: async (request) => {
+        expect(request).toMatchObject({
+          command: "screenshot",
+          params: {
+            path: "/work/page.png",
+            focus: true,
+          },
+        });
+        return createOkResponse(request, {
+          path: "/work/page.png",
+          format: "png",
+          bytes: 68,
+          activation: {
+            tabActivated: false,
+            windowFocused: false,
+          },
+        });
+      },
+    });
+
+    expect(output.exitCode).toBe(0);
+  });
 });
