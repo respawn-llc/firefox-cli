@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { classifySourceFile, evaluateSourceSizes, runSourceSizeCheck, sourceSizePolicy, type SourceFileSize } from "../source-size-check.js";
+import { classifySourceFile, evaluateSourceSizes, runSourceSizeCheck, type SourceFileSize, sourceSizePolicy } from "../source-size-check.js";
 
 describe("source size check", () => {
-  it("classifies runtime, tests, disposable E2E, and generated paths", () => {
+  it("classifies runtime, tests, and generated paths", () => {
     expect(classifySourceFile("packages/cli/src/index.ts")).toBe("production");
     expect(classifySourceFile("packages/cli/src/cli.test.ts")).toBe("test-support");
     expect(classifySourceFile("scripts/test/package-check.test.ts")).toBe("test-support");
-    expect(classifySourceFile("scripts/e2e-disposable-workflow.ts")).toBe("test-support");
+    expect(classifySourceFile("scripts/package.ts")).toBe("production");
     expect(classifySourceFile("packages/test-support/src/index.ts")).toBe("test-support");
     expect(classifySourceFile("packages/cli/dist/index.ts")).toBe("ignored");
     expect(classifySourceFile("packages/protocol/src/index.d.ts")).toBe("ignored");

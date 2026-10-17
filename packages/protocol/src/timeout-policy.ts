@@ -7,10 +7,6 @@ export type PollingTimeoutPolicy = TimeoutPolicy & {
   readonly intervalMs: number;
 };
 
-export type ByteBoundTimeoutPolicy = TimeoutPolicy & {
-  readonly maxBytes: number;
-};
-
 export interface ProcessStopTimeoutPolicy {
   readonly name: string;
   readonly interruptGraceMs: number;
@@ -56,20 +52,6 @@ export const timeoutPolicies = {
     name: "browser-screenshot",
     timeoutMs: 30_000,
   },
-  marionettePortDiscovery: {
-    name: "marionette-port-discovery",
-    timeoutMs: 20_000,
-    intervalMs: 100,
-  },
-  marionetteCommand: {
-    name: "marionette-command",
-    timeoutMs: 10_000,
-  },
-  marionetteFrame: {
-    name: "marionette-frame",
-    timeoutMs: 10_000,
-    maxBytes: 16 * 1024 * 1024,
-  },
   processStop: {
     name: "process-stop",
     interruptGraceMs: 5_000,
@@ -86,8 +68,5 @@ export const timeoutPolicies = {
   readonly browserWait: PollingTimeoutPolicy;
   readonly browserEval: TimeoutPolicy;
   readonly browserScreenshot: TimeoutPolicy;
-  readonly marionettePortDiscovery: PollingTimeoutPolicy;
-  readonly marionetteCommand: TimeoutPolicy;
-  readonly marionetteFrame: ByteBoundTimeoutPolicy;
   readonly processStop: ProcessStopTimeoutPolicy;
 };

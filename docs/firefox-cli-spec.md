@@ -496,7 +496,7 @@ Default text output is for agents. JSON output is for programmatic scripts.
 
 ## Testing
 
-Use Vitest for unit tests and Firefox-backed integration tests where needed.
+Use Vitest for unit and boundary tests. Use the [manual command QA checklist](all-commands-qa.md) for full browser interaction checks.
 
 Required test layers:
 
@@ -506,7 +506,7 @@ Required test layers:
 - Native messaging framing tests, including app-to-extension size-limit handling.
 - Extension background command-routing tests with mocked browser APIs.
 - Content-script tests for snapshot generation, ref lifecycle, interactions, waits, eval, and restricted-page errors.
-- End-to-end tests that launch Firefox with the extension in a disposable profile, connect a native-host fixture, serve local test pages, and run real `firefox-cli` commands.
+- Manual Firefox QA that runs real `firefox-cli` commands against a designated test page.
 
 Required feasibility gates:
 
@@ -530,7 +530,6 @@ Expose root scripts with these roles once package manifests exist:
 - `typecheck`: typecheck all TypeScript.
 - `lint`: run code lint plus extension lint.
 - `test`: run unit tests.
-- `test:e2e`: run Firefox extension/native-host integration tests.
 - `extension:run`: load the extension into Firefox for development.
 - `extension:build`: produce the extension package.
 - `extension:sign`: sign the built extension through Mozilla Add-ons credentials.

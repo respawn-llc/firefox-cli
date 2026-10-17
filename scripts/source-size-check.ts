@@ -80,12 +80,7 @@ export function classifySourceFile(path: string): SourceFileKind {
   if (normalized.includes("/dist/") || normalized.includes("/node_modules/") || normalized.includes("/.git/")) {
     return "ignored";
   }
-  if (
-    normalized.endsWith(".test.ts") ||
-    normalized.includes("/test/") ||
-    normalized.startsWith("packages/test-support/") ||
-    normalized.startsWith("scripts/e2e-")
-  ) {
+  if (normalized.endsWith(".test.ts") || normalized.includes("/test/") || normalized.startsWith("packages/test-support/")) {
     return "test-support";
   }
   return "production";

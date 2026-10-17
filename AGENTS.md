@@ -11,7 +11,6 @@ Use the root Bun workspace scripts as the source of truth. CI runs the same chec
 - Run `bun run check` for the root quality gate. It runs format checking, version sync checking, dependency and TypeScript policy gates, Biome, ESLint, source-size checks, typecheck, unit tests, build, extension lint, and package layout checks.
 - Run `bun run typecheck` after cross-package type or protocol changes when a full check is not needed yet.
 - Run `bun run test` for unit and policy tests.
-- Run `bun run test:e2e` for native-host/package smoke coverage. Disposable Firefox E2E launches only when `FIREFOX_CLI_E2E_DISPOSABLE=1` is set.
 - Run `bun run extension:build` to create the loadable development extension in `dist/extension`.
 - Run `bun run package:check` after packaging or install-layout changes.
 - Run `bun run release:check`, `bun run release:check:local`, or `bun run release:check:signed` for release-package verification depending on whether a signed XPI is required.
@@ -25,7 +24,7 @@ Write or update tests with behavior changes in protocol schemas, CLI command par
 
 Test typed request/response contracts and stable error mapping rather than duplicating implementation details. Keep browser-facing behavior testable without a live Firefox profile by isolating WebExtension APIs behind small adapters and mocks.
 
-Add integration or smoke coverage for CLI-to-extension transport, native messaging setup, local IPC, pairing state, install layout, binary output paths, and packaging changes. These paths cross process and browser boundaries and are not protected by TypeScript alone.
+Keep CLI-to-extension request contracts, native messaging, local IPC, pairing state, install layout, binary output paths, and packaging behavior covered by focused automated tests. Use manual Firefox QA for end-to-end browser behavior.
 
 Use Vitest for workspace TypeScript tests and Node's built-in test runner for policy tests under `scripts/check-*.test.mjs`. Keep security-sensitive native-host behavior covered by targeted tests.
 
@@ -38,7 +37,7 @@ Use package boundaries that assign ownership to the CLI, native host, extension,
 - `packages/native-host`: Firefox native messaging stdio handling, per-user local IPC, IPC auth, native-host manifest registration primitives, pairing state, platform binary resolution, file writes for binary outputs, and extension connection brokering.
 - `packages/protocol`: command names, request/response schemas, runtime validation, protocol versioning, and compatibility helpers shared by the CLI and extension.
 - `packages/test-support`: fixtures, fake transports, browser API mocks, and cross-package test helpers.
-- `scripts`: repository automation for package assembly, extension bundling/signing, native-messaging manifest checks, release verification, dependency policy, and E2E smoke workflows.
+- `scripts`: repository automation for package assembly, extension bundling/signing, native-messaging manifest checks, release verification, and dependency policy.
 - `docs`: user-facing setup, command reference, development, architecture, and capability notes.
 
 Import workspace packages through their public package exports. Do not deep-import another package's `src` internals.
