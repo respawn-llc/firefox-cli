@@ -421,7 +421,7 @@ Target-dependent MVP command results include resolved window/tab metadata where 
 
 Navigation:
 
-- `open <url> [--new-tab]`: params are normalized URL and new-tab flag. Result is final target, URL, navigation status, and load state when known. Errors include invalid URL, ambiguous or missing target, permission denied, navigation timeout, and unsupported restricted page.
+- `open <url> [--new-tab] [--focus]`: params are normalized URL, new-tab flag, and focus request. Navigation leaves tab selection unchanged by default. `--new-tab` creates an unselected tab unless `--focus` is set. With `--focus`, navigation selects the target tab and requests window foregrounding. Result is final target, URL, navigation status, and load state when known. Errors include invalid URL, ambiguous or missing target, permission denied, navigation timeout, and unsupported restricted page.
 - `back`, `forward`, `reload`: params are empty except target and timeout. Result is final URL and load state when known. Errors include no history entry, ambiguous or missing target, navigation timeout, and restricted page.
 
 Snapshot:
