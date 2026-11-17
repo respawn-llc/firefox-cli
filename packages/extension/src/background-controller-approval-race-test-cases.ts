@@ -1,4 +1,4 @@
-import { createOkResponse, createRequest } from "@firefox-cli/protocol";
+import { createOkResponse, createRequest, PROTOCOL_VERSION, type RequestEnvelope } from "@firefox-cli/protocol";
 import { expect } from "vitest";
 import { FirefoxCliBackgroundController } from "./background-controller.js";
 import {
@@ -6,6 +6,7 @@ import {
   createTestBrowserAdapter,
   FakeNativePort,
   flushPromises,
+  latestHelloRequest,
   latestPairApproveRequest,
 } from "./background-controller-test-support.js";
 
@@ -163,4 +164,62 @@ export async function runCase12() {
   await expect(controller.handleRuntimeMessage({ type: "firefox-cli:get-status" })).resolves.toMatchObject({
     approved: false,
   });
+}
+
+export async function runCase13() {
+  let resolveStoredToken: ((token: string | null) => void) | undefined;
+  const storedTokens: (string | null)[] = [];
+  const port = new FakeNativePort();
+  const controller = new FirefoxCliBackgroundController({
+    connectNative: () => port,
+    productVersion: "0.0.0",
+    storageAdapter: {
+      getPairToken: async () =>
+        new Promise<string | null>((resolve) => {
+          resolveStoredToken = resolve;
+        }),
+      setPairToken: async (token) => {
+        storedTokens.push(token);
+      },
+    },
+  });
+  controller.start();
+  const tokenlessHello = latestHelloRequest(port);
+  expect(tokenlessHello.params.pairToken).toBeUndefined();
+
+  resolveStoredToken?.("stored-token");
+  await flushPromises();
+  const tokenHello = latestHelloRequest(port);
+  expect(tokenHello.params.pairToken).toBe("stored-token");
+
+  respondToHello(port, tokenlessHello, false);
+  await flushPromises();
+  respondToHello(port, tokenHello, true);
+  await flushPromises();
+
+  expect(storedTokens).toEqual([]);
+  expect(controller.getStatus()).toMatchObject({ approved: true });
+}
+
+function respondToHello(port: FakeNativePort, hello: RequestEnvelope<"hello">, approved: boolean): void {
+  port.emitMessage(
+    createOkResponse(hello, {
+      accepted: true,
+      negotiatedProtocolVersion: PROTOCOL_VERSION,
+      peer: {
+        component: "native-host",
+        productName: "firefox-cli",
+        productVersion: "0.0.0",
+        protocolMin: PROTOCOL_VERSION,
+        protocolMax: PROTOCOL_VERSION,
+        features: [],
+      },
+      pairing: {
+        hostId: "host-1",
+        extensionId: "ff-cli-bridge@respawn.pro",
+        approved,
+        status: approved ? "approved" : "not-approved",
+      },
+    }),
+  );
 }

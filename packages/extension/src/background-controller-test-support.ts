@@ -236,6 +236,7 @@ function parseRawHelloRequest(raw: unknown): RequestEnvelope<"hello"> | undefine
       protocolMin: params.protocolMin,
       protocolMax: params.protocolMax,
       features,
+      ...(typeof params.pairToken === "string" ? { pairToken: params.pairToken } : {}),
     },
     raw.id,
     raw.protocolVersion,
@@ -249,6 +250,7 @@ function isExtensionHelloParams(value: unknown): value is {
   readonly protocolMin: number;
   readonly protocolMax: number;
   readonly features: readonly unknown[];
+  readonly pairToken?: unknown;
 } {
   return (
     isRecord(value) &&
