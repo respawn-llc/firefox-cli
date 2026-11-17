@@ -8,6 +8,7 @@ export class PairingStateService {
   #pairToken: string | null = null;
   #approved = false;
   #revision = 0;
+  #latestHelloRequestId: string | undefined;
 
   constructor(storageAdapter: BackgroundStorageAdapter) {
     this.#storageAdapter = storageAdapter;
@@ -55,8 +56,14 @@ export class PairingStateService {
     await this.#storageAdapter.setPairToken(null);
   }
 
-  async applyHelloPairing(pairing: HelloPairing): Promise<string | undefined> {
-    if (pairing === undefined) {
+  recordHello(requestId: string): void {
+    this.#latestHelloRequestId = requestId;
+  }
+
+  // On startup the first hello can leave before the stored pair token loads, and the bridge sends another hello
+  // with the token once it loads. Only the latest hello reports the pair state of the token the bridge holds.
+  async applyHelloPairing(requestId: string, pairing: HelloPairing): Promise<string | undefined> {
+    if (pairing === undefined || requestId !== this.#latestHelloRequestId) {
       return undefined;
     }
     this.#approved = pairing.approved;

@@ -75,7 +75,6 @@ export class FirefoxCliBackgroundController {
         }),
       events: {
         onConnect: () => {
-          this.#nativeSession.beginNegotiation();
           this.#lastError = undefined;
           this.#postHello();
         },
@@ -258,6 +257,7 @@ export class FirefoxCliBackgroundController {
       localProtocolVersionRange.protocolMin,
     );
     this.#nativeSession.beginNegotiation();
+    this.#pairing.recordHello(request.id);
     this.#sendNativeRequest(request)
       .then((response) => {
         if (!response.ok) {
@@ -341,7 +341,7 @@ export class FirefoxCliBackgroundController {
     if (command === "hello" && isHelloResponse(command, response.value)) {
       this.#nativeSession.applyHelloResponse(response.value);
       if (response.value.ok) {
-        helloPairingError = await this.#pairing.applyHelloPairing(response.value.result.pairing);
+        helloPairingError = await this.#pairing.applyHelloPairing(message.id, response.value.result.pairing);
       }
     }
     this.#pendingCommands.settle(message.id, response.value);
